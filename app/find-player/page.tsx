@@ -41,7 +41,6 @@ type Listing = {
 }
 
 export default function FindPlayerPage() {
-  const supabase = createClient()
   const [activeTab, setActiveTab] = useState<'players' | 'listings'>('players')
   const [players, setPlayers] = useState<Player[]>([])
   const [listings, setListings] = useState<Listing[]>([])
@@ -71,6 +70,7 @@ export default function FindPlayerPage() {
     setLoading(true)
     setError('')
     try {
+      const supabase = createClient()
       const { data: { user }, error: authError } = await supabase.auth.getUser()
       if (authError) throw authError
 
@@ -120,7 +120,7 @@ export default function FindPlayerPage() {
     } finally {
       setLoading(false)
     }
-  }, [activeTab, searchTerm, filterRegion, filterLevel, filterEloMin, filterEloMax, listingRegion, listingLevel, supabase])
+  }, [activeTab, searchTerm, filterRegion, filterLevel, filterEloMin, filterEloMax, listingRegion, listingLevel])
 
   useEffect(() => {
     void fetchUserAndData()
@@ -128,6 +128,7 @@ export default function FindPlayerPage() {
 
   useEffect(() => {
     if (activeTab !== 'listings') return
+    const supabase = createClient()
     const channel = supabase
       .channel('player-requests-route-refresh')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'player_requests' }, () => {
@@ -135,7 +136,7 @@ export default function FindPlayerPage() {
       })
       .subscribe()
     return () => { void supabase.removeChannel(channel) }
-  }, [activeTab, fetchUserAndData, supabase])
+  }, [activeTab, fetchUserAndData])
 
   function changeRequestType(value: string) {
     const nextCount = REQUEST_TYPES.find((type) => type.value === value)?.existingPlayers ?? 1
@@ -155,7 +156,7 @@ export default function FindPlayerPage() {
       setError(`Vyplň mená všetkých ${participantFieldCount} zúčastnených hráčov.`)
       return
     }
-    const { error: insertError } = await supabase.from('player_requests').insert({
+    const { error: insertError } = await createClient().from('player_requests').insert({
       user_id: currentUserId,
       request_type: requestType,
       region,
@@ -184,7 +185,7 @@ export default function FindPlayerPage() {
     event.preventDefault()
     if (!selectedListing || !currentUserId) return
 
-    const { error: insertError } = await supabase.from('messages').insert({
+    const { error: insertError } = await createClient().from('messages').insert({
       sender_id: currentUserId,
       receiver_id: selectedListing.user_id,
       content: messageContent.trim(),
