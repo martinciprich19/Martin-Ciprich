@@ -16,7 +16,10 @@ export default function SignUpPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const router = useRouter()
-  const supabase = createClient()
+  
+  // ❌ 1. ODSTRÁNENÉ: const supabase = createClient() odtiaľto zhora, 
+  // pretože sa spúšťalo hneď pri štarte a zhodilo build na Verceli.
+
   const { data: arenas = [], error: arenasError } = useSWR('arenas', fetchArenas)
 
   async function submit(event: FormEvent) {
@@ -33,6 +36,10 @@ export default function SignUpPage() {
     }
 
     setLoading(true)
+
+    // ✅ 2. PRIDANÉ SEM: Vytvoríme klienta až priamo pri odoslaní formulára,
+    // kedy už aplikácia beží v prehliadači a má prístup k premenným.
+    const supabase = createClient()
 
     try {
       const displayName = form.name.trim()
