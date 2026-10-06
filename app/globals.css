@@ -1,0 +1,23 @@
+@import 'tailwindcss';
+
+:root { --lime: #a8e63c; --ink: #061016; --panel: #0b1b22; }
+* { box-sizing: border-box; }
+html { scroll-behavior: auto; }
+html, body { overscroll-behavior: none; }
+.ios-scroll { overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+form.overflow-y-auto { max-height: 90dvh; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+body { margin: 0; background: var(--ink); color: #f5f7f6; font-family: var(--font-inter), system-ui, sans-serif; font-weight: 400; line-height: 1.5; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+body, input, button, select, textarea { font-family: inherit; font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+@layer base { h1, h2, h3, h4 { font-weight: 700; letter-spacing: -0.02em; } }
+/* Heaviest weights capped at 700 for a cleaner look. */
+.font-black, .font-extrabold { font-weight: 700; }
+/* Key numbers (ELO, scores) use .font-mono in components; render them in Inter, bold. */
+.font-mono, .num-key { font-family: var(--font-inter), system-ui, sans-serif; font-variant-numeric: tabular-nums; font-weight: 700; letter-spacing: -0.01em; }
+button, a { -webkit-tap-highlight-color: transparent; }
+::selection { background: var(--lime); color: #061016; }
+.hero-noise { background-image: radial-gradient(circle at 20% 10%, rgba(255,255,255,.04) 0 1px, transparent 1px); background-size: 5px 5px; }
+
+@keyframes spl-screen-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
