@@ -90,7 +90,7 @@ export function PairChallengeView({ userId, arenas, initialArena, onOpenPairs, i
     <div className="mx-auto max-w-[1120px]">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#ccff00]">SPL /</p>
+          <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#ccff00]">RIVA /</p>
           <h1 className="mt-2 text-3xl font-black text-balance">{t('Vyzvať dvojicu')}</h1>
           <p className="mt-2 text-sm leading-relaxed text-white/45 text-pretty">{t('Vyber súperiacu dvojicu vo svojom okolí a navrhni termín zápasu.')}</p>
         </div>

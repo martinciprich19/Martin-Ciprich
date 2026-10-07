@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { Menu, X } from 'lucide-react'
-import { SplLogo } from '@/components/spl-logo'
+import { RivaLogo } from '@/components/riva-logo'
 
 const navItems = [
   { label: 'Ako to funguje', href: '/how-it-works' },
@@ -19,7 +19,7 @@ export function PublicShell({ children }: { children: React.ReactNode }) {
       <div className="fixed inset-0 -z-20 bg-[url('/padel-hero.png')] bg-cover bg-[position:68%_center] opacity-35" />
       <div className="fixed inset-0 -z-10 bg-[linear-gradient(90deg,#061016_0%,rgba(6,16,22,.85)_40%,rgba(6,16,22,.6)_100%)]" />
       <header className="mx-auto flex w-full max-w-[1260px] items-center justify-between gap-3 px-4 py-6 sm:px-6 lg:px-10 lg:py-8">
-        <Link href="/" aria-label="SPL domov"><SplLogo size="header" /></Link>
+        <Link href="/" aria-label="RIVA Padel domov"><RivaLogo size="header" /></Link>
         <nav className="hidden items-center gap-7 lg:flex" aria-label="Hlavná navigácia">
           {navItems.map((item) => <Link key={item.label} href={item.href} className="text-[11px] font-medium text-white/70 transition hover:text-[#a8e63c]">{item.label}</Link>)}
         </nav>

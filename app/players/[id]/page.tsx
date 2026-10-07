@@ -123,7 +123,7 @@ export default function PublicPlayerProfilePage() {
           <>
             <header className="mt-8 border-b border-white/10 pb-7">
               {player.avatar_url ? <button type="button" onClick={() => setAvatarOpen(true)} aria-label={t('Zväčšiť profilovú fotografiu', 'Enlarge profile photo')} className="mb-5 block cursor-zoom-in rounded-full"><img src={player.avatar_url} alt={t('Profilová fotografia', 'Profile photo')} className="h-20 w-20 rounded-full object-cover ring-2 ring-white/10" /></button> : null}
-              <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#ccff00]">SPL / {t('Profil hráča', 'PLAYER PROFILE')}</p>
+              <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#ccff00]">RIVA / {t('Profil hráča', 'PLAYER PROFILE')}</p>
               <h1 className="mt-3 text-3xl font-black md:text-4xl">{player.full_name}</h1>
               <p className="mt-3 flex items-center gap-2 text-sm text-white/50"><MapPin size={15} aria-hidden="true" /> {player.region || t('Kraj neuvedený', 'Region not specified')} · {player.level || t('Úroveň neuvedená', 'Level not specified')}</p>
               {currentProfileId !== null && currentProfileId !== player.id ? friendshipStatus === 'accepted' ? <button type="button" disabled={friendshipLoading || friendshipRemoving} onClick={() => void removeFriend()} className="mt-4 inline-flex items-center gap-2 rounded-lg border border-red-400/30 px-3 py-2 text-xs font-bold text-red-200 hover:bg-red-400/10 disabled:cursor-not-allowed disabled:opacity-50">

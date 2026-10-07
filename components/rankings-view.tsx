@@ -138,7 +138,7 @@ export function RankingsView({ onChallenge, onMessage, publicView = false }: {
   return (
     <div id="rankings" className="mx-auto max-w-[1120px]">
       <header>
-        <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#ccff00]">SPL / REBRÍČKY</p>
+        <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#ccff00]">RIVA / REBRÍČKY</p>
         <h1 className="mt-3 text-3xl font-black tracking-tight">{t('Rebríčky')}</h1>
         <p className="mt-2 text-sm text-white/45">Poradie hráčov podľa ELO a arén, ktoré navštevujú.</p>
       </header>
@@ -183,19 +183,19 @@ export function RankingsView({ onChallenge, onMessage, publicView = false }: {
       ) : visiblePlayers.length === 0 ? (
         <p className="mt-6 rounded-xl border border-white/10 bg-[#111722] p-6 text-center text-sm text-white/50">V tomto rebríčku sa nenašli hráči.</p>
       ) : (
-        <ol className="mt-6 divide-y divide-white/[0.08] rounded-xl border border-white/[0.08] bg-[#111722]">
+        <ol className="mx-auto mt-6 max-w-3xl divide-y divide-white/[0.08] rounded-xl border border-white/[0.08] bg-[#111722]">
           {visiblePlayers.map((player) => (
-            <li key={player.id} className={`grid gap-3 px-4 py-4 sm:grid-cols-[56px_minmax(0,1fr)_auto_auto] sm:items-center sm:px-5 ${player.isCurrentPlayer ? 'bg-[#ccff00]/[0.04]' : ''}`}>
-              <span className="font-mono text-lg font-black text-[#ccff00]">{String(player.rank).padStart(2, '0')}</span>
+            <li key={player.id} className={`grid grid-cols-[30px_minmax(0,1fr)_auto] items-center gap-x-2 gap-y-2 px-3 py-3 sm:grid-cols-[56px_minmax(0,1fr)_auto_auto] sm:gap-3 sm:px-5 sm:py-4 ${player.isCurrentPlayer ? 'bg-[#ccff00]/[0.04]' : ''}`}>
+              <span className="font-mono text-base font-black text-[#ccff00] sm:text-lg">{String(player.rank).padStart(2, '0')}</span>
               <div className="flex min-w-0 items-center gap-3">
-                {player.avatarUrl ? <img src={player.avatarUrl} alt="" className="h-10 w-10 shrink-0 rounded-full object-cover" /> : <span aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#ccff00] font-black text-[#10150d]">{player.name.slice(0, 1)}</span>}
+                {player.avatarUrl ? <img src={player.avatarUrl} alt="" className="h-9 w-9 shrink-0 rounded-full object-cover sm:h-10 sm:w-10" /> : <span aria-hidden="true" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#ccff00] font-black text-[#10150d] sm:h-10 sm:w-10">{player.name.slice(0, 1)}</span>}
                 <div className="min-w-0">
                 <p className="truncate font-bold">{player.name}{player.isCurrentPlayer ? <span className="ml-2 text-[10px] font-black uppercase tracking-wider text-[#ccff00]">Tvoj profil</span> : null}</p>
                 <p className="mt-1 flex items-center gap-1 text-xs text-white/45"><MapPin size={12} />{player.region || 'Kraj neuvedený'} · {player.level || 'Úroveň neuvedená'}</p>
                 </div>
               </div>
-              <p className="font-mono text-lg font-black text-white">{player.elo} <span className="text-xs text-white/40">ELO</span></p>
-              {publicView || player.isCurrentPlayer ? null : <div className="flex gap-2">
+              <p className="whitespace-nowrap font-mono text-base font-black text-white sm:text-lg">{player.elo} <span className="text-[10px] text-white/40 sm:text-xs">ELO</span></p>
+              {publicView || player.isCurrentPlayer ? null : <div className="col-start-2 col-span-2 flex gap-2 sm:col-start-auto sm:col-span-1">
                 <button type="button" onClick={() => openChallenge(player)} className="inline-flex items-center gap-1.5 rounded-lg bg-[#ccff00] px-3 py-2 text-xs font-black text-[#10150d]"><Swords size={14} />Vyzvať</button>
                 <button type="button" onClick={() => openMessage(player)} className="rounded-lg border border-white/10 px-3 py-2 text-xs font-bold text-white/70">Správa</button>
               </div>}

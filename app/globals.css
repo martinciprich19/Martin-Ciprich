@@ -1,12 +1,14 @@
 @import 'tailwindcss';
+@custom-variant dark (&:where(.dark, .dark *));
 
-:root { --lime: #a8e63c; --ink: #061016; --panel: #0b1b22; }
+:root { --lime: #a8e63c; --ink: #f5f7f6; --panel: #ffffff; --foreground: #061016; color-scheme: light; }
+:root.dark { --ink: #061016; --panel: #0b1b22; --foreground: #f5f7f6; color-scheme: dark; }
 * { box-sizing: border-box; }
 html { scroll-behavior: auto; }
-html, body { overscroll-behavior: none; }
+html, body { min-height: 100%; overscroll-behavior-y: none; -webkit-overflow-scrolling: touch; }
 .ios-scroll { overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
 form.overflow-y-auto { max-height: 90dvh; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
-body { margin: 0; background: var(--ink); color: #f5f7f6; font-family: var(--font-inter), system-ui, sans-serif; font-weight: 400; line-height: 1.5; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+body { min-height: 100svh; margin: 0; background: var(--ink); color: var(--foreground); font-family: var(--font-inter), system-ui, sans-serif; font-weight: 400; line-height: 1.5; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
 body, input, button, select, textarea { font-family: inherit; font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
 @layer base { h1, h2, h3, h4 { font-weight: 700; letter-spacing: -0.02em; } }
 /* Heaviest weights capped at 700 for a cleaner look. */

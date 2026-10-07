@@ -2,7 +2,7 @@
 
 import { createClient } from '@/lib/supabase/client'
 import Link from 'next/link'
-import { SplLogo } from '@/components/spl-logo'
+import { RivaLogo } from '@/components/riva-logo'
 import { FormEvent, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import useSWR from 'swr'
@@ -108,7 +108,7 @@ export default function SignUpPage() {
     <main className="min-h-screen bg-[#061016] px-4 sm:px-6 py-8 text-white flex flex-col items-center justify-center">
       <div className="w-full max-w-sm md:max-w-md bg-[#0b1922] p-6 sm:p-8 rounded-2xl border border-white/10 shadow-xl">
         <div className="flex justify-center mb-6">
-          <SplLogo />
+          <RivaLogo />
         </div>
         <h1 className="text-xl sm:text-2xl font-bold mb-6 text-center">REGISTRÁCIA</h1>
 

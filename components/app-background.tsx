@@ -1,6 +1,6 @@
 export function AppBackground() {
   return (
-    <div aria-hidden="true" className="pointer-events-none fixed inset-0 -z-10">
+    <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10">
       <div
         className="absolute inset-0 bg-cover bg-center bg-no-repeat opacity-[0.24] blur-[2px]"
         style={{ backgroundImage: "url('/images/padel-bg.jpg')" }}

@@ -35,9 +35,9 @@ export function ArenasView({ arenas, isLoading, loadError, region, setRegion, se
   return (
     <div id="arenas" className="mx-auto max-w-[1120px]">
       <div>
-        <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#ccff00]">SPL /</p>
+        <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#ccff00]">RIVA /</p>
         <h1 className="mt-2 text-3xl font-black">{t('Arény')}</h1>
-        <p className="mt-2 text-sm text-white/45">{t('Partnerské arény ligy SPL. Nájdi svoj domovský klub a rezervuj si kurt.')}</p>
+        <p className="mt-2 text-sm text-white/45">{t('Partnerské arény RIVA Padel. Nájdi svoj domovský klub a rezervuj si kurt.', 'RIVA Padel partner arenas. Find your home club and book a court.')}</p>
       </div>
 
       <div className="mt-8 flex flex-col gap-3 lg:flex-row">

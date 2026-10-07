@@ -1,7 +1,7 @@
 const arenaStrings: Record<string, string> = {
   'Arény': 'Arenas',
   'ARÉNY': 'ARENAS',
-  'Partnerské arény ligy SPL. Nájdi svoj domovský klub a rezervuj si kurt.': 'SPL partner arenas. Find your home club and book a court.',
+  'Partnerské arény RIVA Padel. Nájdi svoj domovský klub a rezervuj si kurt.': 'RIVA Padel partner arenas. Find your home club and book a court.',
   'Hľadať arénu, mesto alebo adresu': 'Search arena, city or address',
   'Celé Slovensko': 'All of Slovakia',
   'Zobrazené arény': 'Arenas shown',

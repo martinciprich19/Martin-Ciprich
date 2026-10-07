@@ -1,7 +1,7 @@
 const playerStrings: Record<string, string> = {
   'Nájsť hráčov': 'Find players',
   'NÁJSŤ HRÁČOV': 'FIND PLAYERS',
-  'Vyhľadaj hráčov ligy SPL podľa mena, kraja, úrovne alebo ELO a vyzvi ich na zápas.': 'Search SPL league players by name, region, level or ELO and challenge them to a match.',
+  'Vyhľadaj hráčov RIVA Padel podľa mena, kraja, úrovne alebo ELO a vyzvi ich na zápas.': 'Search RIVA Padel players by name, region, level or ELO and challenge them to a match.',
   'Hľadať podľa mena alebo emailu': 'Search by name or email',
   'Kraj': 'Region',
   'Všetky kraje': 'All regions',

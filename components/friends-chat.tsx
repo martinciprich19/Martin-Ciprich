@@ -21,7 +21,7 @@ export function FriendsChat({ myProfileId, activeFriendId, setActiveFriendId, on
   const { mutate: mutateCache } = useSWRConfig()
   const friends = useSWR(myProfileId !== null ? ['friends', myProfileId] : null, ([, id]) => fetchFriends(id), { shouldRetryOnError: false })
   const requests = useSWR(myProfileId !== null ? ['friend-requests', myProfileId] : null, ([, id]) => fetchIncomingRequests(id), { shouldRetryOnError: false })
-  const pairInvitations = useSWR(myProfileId !== null ? ['incoming-pair-invitations', myProfileId] : null, ([, id]) => fetchIncomingPairInvitations(id), { refreshInterval: 30000, shouldRetryOnError: false })
+  const pairInvitations = useSWR(myProfileId !== null ? ['incoming-pair-invitations', myProfileId] : null, ([, id]) => fetchIncomingPairInvitations(id), { refreshInterval: 15000, revalidateOnFocus: true, shouldRetryOnError: false })
   const unreadMessages = useSWR(myProfileId !== null ? ['unread-messages-by-sender', myProfileId] : null, ([, id]) => fetchUnreadMessagesBySender(id), { refreshInterval: 30000, shouldRetryOnError: false })
   const activeFriend = friends.data?.find((friend) => friend.id === activeFriendId) ?? null
 
@@ -83,6 +83,7 @@ export function FriendsChat({ myProfileId, activeFriendId, setActiveFriendId, on
 
   return (
     <div className="mt-6 space-y-4">
+      {pairInvitations.error ? <p role="alert" className="rounded-xl border border-red-400/30 bg-red-500/10 p-4 text-sm text-red-200">{getErrorMessage(pairInvitations.error, 'Žiadosti o vytvorenie dvojice sa nepodarilo načítať.')}</p> : null}
       {pairInvitations.data?.length ? (
         <section className="rounded-2xl border border-[#ccff00]/25 bg-[#131924] p-4">
           <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#ccff00]">Žiadosti o vytvorenie dvojice</p>

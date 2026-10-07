@@ -210,7 +210,7 @@ export default function FindPlayerPage() {
     <main className="mx-auto min-h-screen max-w-[1200px] px-4 py-8 text-white sm:px-8">
       <header className="flex flex-col justify-between gap-5 border-b border-white/10 pb-5 sm:flex-row sm:items-center">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#ccff00]">SPL / HRÁČI</p>
+          <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#ccff00]">RIVA / HRÁČI</p>
           <h1 className="mt-2 text-3xl font-black">Padel Matchmaking</h1>
         </div>
         <nav className="flex gap-2" aria-label="Matchmaking">

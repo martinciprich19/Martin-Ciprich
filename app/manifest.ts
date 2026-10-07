@@ -3,8 +3,8 @@ import type { MetadataRoute } from 'next'
 export default function manifest(): MetadataRoute.Manifest {
   return {
     id: '/',
-    name: 'SPL — Slovak Padel League',
-    short_name: 'SPL',
+    name: 'RIVA Padel',
+    short_name: 'RIVA Padel',
     description: 'Hraj. Vyzývaj. Zlepšuj sa. Staň sa najlepším.',
     start_url: '/',
     scope: '/',
@@ -13,9 +13,15 @@ export default function manifest(): MetadataRoute.Manifest {
     theme_color: '#bef264',
     icons: [
       {
-        src: '/images/spl-logo-new.webp',
+        src: '/images/riva-padel-icon-192.png',
+        sizes: '192x192',
+        type: 'image/png',
+        purpose: 'any',
+      },
+      {
+        src: '/images/riva-padel-icon-512.png',
         sizes: '512x512',
-        type: 'image/webp',
+        type: 'image/png',
         purpose: 'any',
       },
     ],

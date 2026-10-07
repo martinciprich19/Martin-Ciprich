@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { SplLogo } from '@/components/spl-logo'
+import { RivaLogo } from '@/components/riva-logo'
 import { ResendVerificationButton } from '@/components/resend-verification-button'
 
 function SignUpSuccessContent() {
@@ -11,7 +11,7 @@ function SignUpSuccessContent() {
 
   return (
     <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#0b1922] p-6 text-center shadow-xl sm:p-8 md:max-w-md">
-      <div className="mb-6 flex justify-center"><SplLogo /></div>
+      <div className="mb-6 flex justify-center"><RivaLogo /></div>
       <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#b5ef33]/10 text-2xl" aria-hidden="true">✉️</div>
       <p className="mt-4 text-[10px] font-bold uppercase tracking-[.25em] text-[#b5ef33]">Posledný krok</p>
       <h1 className="mt-2 text-2xl font-black uppercase">Skontroluj svoj e-mail</h1>

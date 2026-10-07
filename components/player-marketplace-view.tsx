@@ -200,9 +200,9 @@ export function PlayerMarketplaceView({ currentPlayerId, currentPlayerAvatarUrl,
     <div className="mx-auto max-w-[1120px]">
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4 border-b border-white/10 pb-4">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#ccff00]">SPL / HRÁČI</p>
+          <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#ccff00]">RIVA / HRÁČI</p>
           <h1 className="mt-2 text-3xl font-black">Nájsť hráčov</h1>
-          <p className="mt-2 text-sm text-white/45">Vyhľadaj hráčov ligy SPL alebo pozri aktívne inzeráty.</p>
+          <p className="mt-2 text-sm text-white/45">Vyhľadaj hráčov RIVA Padel alebo pozri aktívne inzeráty.</p>
         </div>
         <nav className="flex gap-2" aria-label="Matchmaking">
           <button type="button" onClick={() => setActiveTab('players')} aria-pressed={activeTab === 'players'} className={`rounded-lg px-4 py-2.5 text-sm font-bold ${activeTab === 'players' ? 'bg-[#ccff00] text-[#10150d]' : 'border border-white/10 text-white/65'}`}>Hráči</button>

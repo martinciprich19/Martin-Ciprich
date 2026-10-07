@@ -64,7 +64,7 @@ export function PairsView({ currentPlayerId, onChallenge, onBack }: { currentPla
     <header className="flex flex-wrap items-end justify-between gap-4">
       <div>
         <button type="button" onClick={onBack} className="mb-4 inline-flex items-center gap-2 text-sm font-semibold text-white/55 hover:text-[#ccff00]"><ArrowLeft size={16} />{t('Späť na výzvu')}</button>
-        <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#ccff00]">SPL /</p>
+        <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#ccff00]">RIVA /</p>
         <h1 className="mt-2 text-3xl font-black">{t('Dvojice')}</h1>
       </div>
       <button type="button" disabled={!currentPlayerId} onClick={() => { setError(''); setFeedback(''); setIsModalOpen(true) }} className="inline-flex items-center gap-2 rounded-lg bg-[#ccff00] px-4 py-2.5 text-sm font-black text-[#10150d] disabled:cursor-not-allowed disabled:opacity-50"><Plus size={16} />{t('Pozvať priateľa do dvojice', 'Invite a friend to pair')}</button>

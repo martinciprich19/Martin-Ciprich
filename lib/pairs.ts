@@ -12,12 +12,8 @@ export type PlayerPair = {
 export type PairPlayer = { full_name: string; region: string; elo: number; matches_played: number; matches_won: number }
 export type PairInvitation = { id: string; inviterId: string; inviterName: string; createdAt: string }
 
-const OPTIONAL_SCHEMA_CODES = new Set(['42P01', '42703', 'PGRST200', 'PGRST204', 'PGRST205'])
-let pairInvitationsSchemaAvailable: boolean | null = null
-
-export function canSubscribeToPairInvitations() {
-  return pairInvitationsSchemaAvailable === true
-}
+const PAIR_INVITATIONS_SCHEMA_CODES = new Set(['42P01', '42703', '42883', 'PGRST200', 'PGRST202', 'PGRST204', 'PGRST205'])
+const PAIR_INVITATIONS_SCHEMA_MESSAGE = 'Pozvania do dvojice nie sú v databáze nastavené. Spusti migráciu scripts/020_pair_invitations.sql v Supabase.'
 
 type PairPlayerRow = { full_name: string | null; region: string | null; elo_rating: number | null; matches_played: number | null; matches_won: number | null }
 type PairRow = {
@@ -61,11 +57,13 @@ export async function fetchPairs(): Promise<PlayerPair[]> {
 
 export async function sendPairInvitation(inviteeId: string): Promise<void> {
   const { error } = await createClient().rpc('create_pair_invitation', { p_invitee_id: Number(inviteeId) })
-  if (error) throw error
+  if (error) {
+    if (PAIR_INVITATIONS_SCHEMA_CODES.has(error.code)) throw new Error(PAIR_INVITATIONS_SCHEMA_MESSAGE)
+    throw error
+  }
 }
 
 export async function fetchIncomingPairInvitations(userId: string | number): Promise<PairInvitation[]> {
-  if (pairInvitationsSchemaAvailable === false) return []
   const supabase = createClient()
   const { data, error } = await supabase
     .from('pair_invitations')
@@ -74,13 +72,9 @@ export async function fetchIncomingPairInvitations(userId: string | number): Pro
     .eq('status', 'pending')
     .order('created_at', { ascending: false })
   if (error) {
-    if (OPTIONAL_SCHEMA_CODES.has(error.code)) {
-      pairInvitationsSchemaAvailable = false
-      return []
-    }
+    if (PAIR_INVITATIONS_SCHEMA_CODES.has(error.code)) throw new Error(PAIR_INVITATIONS_SCHEMA_MESSAGE)
     throw error
   }
-  pairInvitationsSchemaAvailable = true
 
   const invitations = (data ?? []) as { id: string | number; inviter_id: string | number; created_at: string }[]
   if (!invitations.length) return []
