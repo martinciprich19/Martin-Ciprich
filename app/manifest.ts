@@ -9,8 +9,8 @@ export default function manifest(): MetadataRoute.Manifest {
     start_url: '/',
     scope: '/',
     display: 'standalone',
-    background_color: '#0b0f19',
-    theme_color: '#bef264',
+    background_color: '#0b0f17',
+    theme_color: '#0b0f17',
     icons: [
       {
         src: '/images/riva-padel-play-together-compact-icon-192.png',

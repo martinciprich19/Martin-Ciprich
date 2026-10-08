@@ -16,7 +16,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     title: 'RIVA Padel',
-    statusBarStyle: 'default',
+    statusBarStyle: 'black',
   },
   other: {
     'apple-mobile-web-app-capable': 'yes',
@@ -31,7 +31,8 @@ export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   viewportFit: 'cover',
-  themeColor: '#bef264',
+  themeColor: '#0b0f17',
+  colorScheme: 'dark',
 }
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

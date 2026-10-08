@@ -14,6 +14,9 @@ test('settings and layout no longer switch themes; dark colors are unconditional
   ])
   assert.doesNotMatch(layout + profile, /ThemeProvider|ThemeToggle|useTheme|riva-theme/)
   assert.match(layout, /className=\{`\$\{inter.variable\} dark`\}/)
+  assert.match(layout, /statusBarStyle: 'black'/)
+  assert.match(layout, /themeColor: '#0b0f17'/)
+  assert.match(layout, /colorScheme: 'dark'/)
   assert.match(css, /:root \{[^}]*--ink: #061016;[^}]*--foreground: #f5f7f6;[^}]*color-scheme: dark;/)
   assert.doesNotMatch(css, /color-scheme: light/)
 })
@@ -30,6 +33,8 @@ test('manifest references the new artwork in correctly sized standalone app icon
   assert.equal(result.name, 'RIVA Padel')
   assert.equal(result.short_name, 'RIVA Padel')
   assert.equal(result.display, 'standalone')
+  assert.equal(result.theme_color, '#0b0f17')
+  assert.equal(result.background_color, '#0b0f17')
   assert.deepEqual(result.icons.map((icon) => [icon.src, icon.sizes]), [
     ['/images/riva-padel-play-together-compact-icon-192.png', '192x192'],
     ['/images/riva-padel-play-together-compact-icon-512.png', '512x512'],

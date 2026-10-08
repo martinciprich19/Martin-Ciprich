@@ -23,9 +23,13 @@ Run `node --test scripts/player-accent-installation.test.mjs scripts/profile-gen
 
 The application always uses the dark theme; settings no longer offer a theme switch and previously saved `riva-theme` preferences are ignored. The shared logo, manifest icons (192 and 512 pixels), browser icon and Apple touch icon use the RIVA Padel Play Together artwork. New asset filenames avoid cached copies of the previous logo. Existing iOS Home Screen shortcuts may need to be removed and added again after deployment to refresh their icon.
 
+Android/browser chrome uses the profile background color `#0b0f17` through viewport and manifest theme colors. The manifest launch background uses the same color. iOS standalone uses Apple's `black` status-bar style; iOS controls the exact system-bar shade rather than supporting an arbitrary CSS color.
+
 Run `node --test scripts/dark-branding.test.mjs` to verify permanent dark styling, manifest configuration, icon dimensions and artwork consistency.
 
 The compact logo assets remove only the artwork's excess dark margins, retaining the full symbol, RIVA Padel name and Play Together tagline. Artwork occupies over 80% of the square's width for better readability in the UI and Home Screen icons.
+
+All authenticated profile tabs and public player profiles share a viewport-fixed, centered `cover` background. It fills the screen without letterboxing or stretching; image edges are cropped as necessary for the screen's aspect ratio. The background is independent of page length and covers the viewport when mobile browser toolbars expand or collapse.
 
 ## Legacy UUID pair invitations
 
