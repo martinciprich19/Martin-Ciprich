@@ -22,8 +22,8 @@ export const metadata: Metadata = {
     'apple-mobile-web-app-capable': 'yes',
   },
   icons: {
-    icon: [{ url: '/images/riva-padel-play-together-icon-192.png', type: 'image/png', sizes: '192x192' }],
-    apple: [{ url: '/images/riva-padel-play-together-apple-touch-icon.png', type: 'image/png', sizes: '180x180' }],
+    icon: [{ url: '/images/riva-padel-play-together-compact-icon-192.png', type: 'image/png', sizes: '192x192' }],
+    apple: [{ url: '/images/riva-padel-play-together-compact-apple-touch-icon.png', type: 'image/png', sizes: '180x180' }],
   },
 }
 

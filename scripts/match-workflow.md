@@ -24,3 +24,11 @@ Run `node --test scripts/player-accent-installation.test.mjs scripts/profile-gen
 The application always uses the dark theme; settings no longer offer a theme switch and previously saved `riva-theme` preferences are ignored. The shared logo, manifest icons (192 and 512 pixels), browser icon and Apple touch icon use the RIVA Padel Play Together artwork. New asset filenames avoid cached copies of the previous logo. Existing iOS Home Screen shortcuts may need to be removed and added again after deployment to refresh their icon.
 
 Run `node --test scripts/dark-branding.test.mjs` to verify permanent dark styling, manifest configuration, icon dimensions and artwork consistency.
+
+The compact logo assets remove only the artwork's excess dark margins, retaining the full symbol, RIVA Padel name and Play Together tagline. Artwork occupies over 80% of the square's width for better readability in the UI and Home Screen icons.
+
+## Legacy UUID pair invitations
+
+For deployments whose `pair_invitations` uses UUID `id`, `sender_id` and `receiver_id` referencing `auth.users`, run `039_repair_uuid_pair_invitations.sql` in the Supabase SQL editor instead of rerunning 020. It preserves the original table as `pair_invitations_uuid_backup`, maps accounts to numeric profiles by case-insensitive email and transfers invitations without automatically accepting them. Missing/ambiguous profile mappings, unsupported statuses or duplicate pending pairs abort the transaction rather than discard data. Client access to the backup is revoked; existing pairs remain untouched. The RPC writes the accepting profile into `pairs.created_by`.
+
+Run `node --test scripts/pair-invitations-repair.test.mjs` for isolated migration, repeat-run, rollback and acceptance tests. This does not verify the live database's additional constraints or triggers.

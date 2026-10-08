@@ -13,13 +13,13 @@ export default function manifest(): MetadataRoute.Manifest {
     theme_color: '#bef264',
     icons: [
       {
-        src: '/images/riva-padel-play-together-icon-192.png',
+        src: '/images/riva-padel-play-together-compact-icon-192.png',
         sizes: '192x192',
         type: 'image/png',
         purpose: 'any',
       },
       {
-        src: '/images/riva-padel-play-together-icon-512.png',
+        src: '/images/riva-padel-play-together-compact-icon-512.png',
         sizes: '512x512',
         type: 'image/png',
         purpose: 'any',

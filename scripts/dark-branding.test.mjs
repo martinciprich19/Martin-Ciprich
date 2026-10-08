@@ -31,17 +31,34 @@ test('manifest references the new artwork in correctly sized standalone app icon
   assert.equal(result.short_name, 'RIVA Padel')
   assert.equal(result.display, 'standalone')
   assert.deepEqual(result.icons.map((icon) => [icon.src, icon.sizes]), [
-    ['/images/riva-padel-play-together-icon-192.png', '192x192'],
-    ['/images/riva-padel-play-together-icon-512.png', '512x512'],
+    ['/images/riva-padel-play-together-compact-icon-192.png', '192x192'],
+    ['/images/riva-padel-play-together-compact-icon-512.png', '512x512'],
   ])
 })
 
 test('browser, Apple and PWA assets use the same new logo without cropping', async () => {
-  const logo = await readFile(new URL('../public/images/riva-padel-play-together-logo.png', import.meta.url))
+  const logo = await readFile(new URL('../public/images/riva-padel-play-together-compact-logo.png', import.meta.url))
+  const { data, info } = await sharp(logo).removeAlpha().raw().toBuffer({ resolveWithObject: true })
+  let left = info.width
+  let right = -1
+  let top = info.height
+  let bottom = -1
+  for (let y = 0; y < info.height; y++) {
+    for (let x = 0; x < info.width; x++) {
+      const offset = (y * info.width + x) * info.channels
+      if (Math.max(data[offset], data[offset + 1], data[offset + 2]) <= 150) continue
+      left = Math.min(left, x)
+      right = Math.max(right, x)
+      top = Math.min(top, y)
+      bottom = Math.max(bottom, y)
+    }
+  }
+  assert.ok((right - left + 1) / info.width >= 0.8, 'Artwork should occupy at least 80% of the logo width')
+  assert.ok(left > 0 && top > 0 && right < info.width - 1 && bottom < info.height - 1, 'Entire artwork must retain padding')
   for (const [size, name] of [
-    [192, 'riva-padel-play-together-icon-192.png'],
-    [512, 'riva-padel-play-together-icon-512.png'],
-    [180, 'riva-padel-play-together-apple-touch-icon.png'],
+    [192, 'riva-padel-play-together-compact-icon-192.png'],
+    [512, 'riva-padel-play-together-compact-icon-512.png'],
+    [180, 'riva-padel-play-together-compact-apple-touch-icon.png'],
   ]) {
     const icon = await readFile(new URL(`../public/images/${name}`, import.meta.url))
     const metadata = await sharp(icon).metadata()
@@ -56,7 +73,7 @@ test('browser, Apple and PWA assets use the same new logo without cropping', asy
     readSource('../app/layout.tsx'),
     readSource('../components/riva-logo.tsx'),
   ])
-  assert.match(layout, /riva-padel-play-together-icon-192\.png/)
-  assert.match(layout, /riva-padel-play-together-apple-touch-icon\.png/)
-  assert.match(component, /riva-padel-play-together-logo\.png/)
+  assert.match(layout, /riva-padel-play-together-compact-icon-192\.png/)
+  assert.match(layout, /riva-padel-play-together-compact-apple-touch-icon\.png/)
+  assert.match(component, /riva-padel-play-together-compact-logo\.png/)
 })

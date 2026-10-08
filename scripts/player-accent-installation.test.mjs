@@ -29,7 +29,7 @@ test('shared avatar renders the same gender accent for initials and photos', asy
     .replace('@/lib/player-accent', new URL('../lib/player-accent.ts', import.meta.url).href)
   const { PlayerAvatar } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`)
   for (const [gender, accent] of [['female', '#f472b6'], ['male', '#ccff00'], [null, '#ccff00']]) {
-    for (const src of [null, '/images/riva-padel-play-together-logo.png']) {
+    for (const src of [null, '/images/riva-padel-play-together-compact-logo.png']) {
       const html = renderToStaticMarkup(createElement(PlayerAvatar, { name: 'Test', gender, src }))
       assert.ok(html.includes(`background-color:${accent}`))
       assert.ok(html.includes(`--player-accent:${accent}`))
