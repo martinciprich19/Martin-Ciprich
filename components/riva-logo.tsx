@@ -20,7 +20,7 @@ export function RivaLogo({ size = 'md', className }: RivaLogoProps) {
       ].filter(Boolean).join(' ')}
     >
       <img
-        src="/images/riva-padel-logo.png"
+        src="/images/riva-padel-play-together-logo.png"
         alt="RIVA Padel"
         decoding="async"
         className="block size-full rounded-[inherit] object-contain"

@@ -9,6 +9,8 @@ import { fetchArenas, type Arena } from '@/lib/arenas'
 import { createClient } from '@/lib/supabase/client'
 import { fetchPlayerProfile, fetchPlayerProfiles, refreshMyAutoVenue } from '@/lib/profiles'
 import { getErrorMessage } from '@/lib/errors'
+import { PlayerAvatar } from '@/components/player-avatar'
+import type { Gender } from '@/lib/profiles'
 
 type RankingTab = 'national' | 'regional' | 'arenas'
 type RankingPlayer = {
@@ -22,6 +24,7 @@ type RankingPlayer = {
   wins: number
   losses: number
   avatarUrl: string | null
+  gender: Gender | null
   autoVenueId: string | null
   homeVenueId: string | null
   isCurrentPlayer: boolean
@@ -91,6 +94,7 @@ export function RankingsView({ onChallenge, onMessage, publicView = false }: {
             wins: profile.matches_won,
             losses: Math.max(0, profile.matches_played - profile.matches_won),
             avatarUrl: profile.avatar_url,
+            gender: profile.gender,
             autoVenueId: profile.auto_venue_id,
             homeVenueId: profile.home_venue_id,
             isCurrentPlayer: String(profile.id) === myProfileId,
@@ -188,7 +192,7 @@ export function RankingsView({ onChallenge, onMessage, publicView = false }: {
             <li key={player.id} className={`grid grid-cols-[30px_minmax(0,1fr)_auto] items-center gap-x-2 gap-y-2 px-3 py-3 sm:grid-cols-[56px_minmax(0,1fr)_auto_auto] sm:gap-3 sm:px-5 sm:py-4 ${player.isCurrentPlayer ? 'bg-[#ccff00]/[0.04]' : ''}`}>
               <span className="font-mono text-base font-black text-[#ccff00] sm:text-lg">{String(player.rank).padStart(2, '0')}</span>
               <div className="flex min-w-0 items-center gap-3">
-                {player.avatarUrl ? <img src={player.avatarUrl} alt="" className="h-9 w-9 shrink-0 rounded-full object-cover sm:h-10 sm:w-10" /> : <span aria-hidden="true" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#ccff00] font-black text-[#10150d] sm:h-10 sm:w-10">{player.name.slice(0, 1)}</span>}
+                <PlayerAvatar name={player.name} src={player.avatarUrl} gender={player.gender} className="size-9 text-sm sm:size-10" />
                 <div className="min-w-0">
                 <p className="truncate font-bold">{player.name}{player.isCurrentPlayer ? <span className="ml-2 text-[10px] font-black uppercase tracking-wider text-[#ccff00]">Tvoj profil</span> : null}</p>
                 <p className="mt-1 flex items-center gap-1 text-xs text-white/45"><MapPin size={12} />{player.region || 'Kraj neuvedený'} · {player.level || 'Úroveň neuvedená'}</p>

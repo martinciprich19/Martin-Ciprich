@@ -1,12 +1,14 @@
 import { createClient } from '@/lib/supabase/client'
+import type { Gender } from '@/lib/profiles'
+import { withProfileGender } from '@/lib/profile-gender-query'
 
 export type FriendshipStatus = 'none' | 'pending_sent' | 'pending_received' | 'accepted'
 
-export type Friend = { id: string; name: string; region: string; elo: number }
+export type Friend = { id: string; name: string; region: string; elo: number; gender?: Gender | null; avatarUrl?: string | null }
 export type FriendRequest = { friendshipId: string; fromId: string; fromName: string }
 
 type FriendshipRow = { id: number | string; user_id: number | string; friend_id: number | string; status: string }
-type ProfileRow = { id: number | string; full_name: string | null; region: string | null; elo_rating: number | null }
+type ProfileRow = { id: number | string; full_name: string | null; region: string | null; elo_rating: number | null; gender: Gender | null; avatar_url: string | null }
 
 function toId(value: string | number) {
   const id = Number(value)
@@ -74,9 +76,9 @@ export async function sendFriendRequest(myId: string | number, friendId: string 
 
 async function fetchProfiles(ids: number[]): Promise<ProfileRow[]> {
   if (!ids.length) return []
-  const { data, error } = await createClient().from('proffiles').select('id, full_name, region, elo_rating').in('id', ids)
+  const { data, error } = await withProfileGender((columns) => createClient().from('proffiles').select(columns).in('id', ids).returns<ProfileRow[]>(), 'id, full_name, region, elo_rating, gender, avatar_url')
   if (error) throw error
-  return (data ?? []) as ProfileRow[]
+  return data ?? []
 }
 
 export async function fetchFriends(myId: string | number): Promise<Friend[]> {
@@ -89,7 +91,7 @@ export async function fetchFriends(myId: string | number): Promise<Friend[]> {
   if (error) throw error
   const ids = Array.from(new Set(((data ?? []) as FriendshipRow[]).map((row) => Number(row.user_id) === me ? Number(row.friend_id) : Number(row.user_id))))
   return (await fetchProfiles(ids))
-    .map((row) => ({ id: String(row.id), name: row.full_name?.trim() || 'Hráč', region: row.region ?? '', elo: Number(row.elo_rating ?? 1000) }))
+    .map((row) => ({ id: String(row.id), name: row.full_name?.trim() || 'Hráč', region: row.region ?? '', elo: Number(row.elo_rating ?? 1000), gender: row.gender, avatarUrl: row.avatar_url }))
     .sort((a, b) => a.name.localeCompare(b.name, 'sk'))
 }
 

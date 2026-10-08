@@ -9,6 +9,7 @@ import { fetchFriends, fetchIncomingRequests, respondToFriendRequest, type Frien
 import { fetchMessages, fetchUnreadMessagesBySender, sendMessage } from '@/lib/messages'
 import { fetchIncomingPairInvitations, respondToPairInvitation } from '@/lib/pairs'
 import { getErrorMessage } from '@/lib/errors'
+import { PlayerAvatar } from '@/components/player-avatar'
 
 type FriendsChatProps = {
   myProfileId: number | null
@@ -131,7 +132,7 @@ export function FriendsChat({ myProfileId, activeFriendId, setActiveFriendId, on
             <div className="mt-3 space-y-1">
               {friends.data.map((friend) => (
                 <button key={friend.id} type="button" onClick={() => setActiveFriendId(friend.id)} className={`flex w-full items-center gap-3 rounded-xl p-3 text-left hover:bg-white/5 ${friend.id === activeFriendId ? 'bg-white/10' : ''}`}>
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#ccff00] text-xs font-black text-[#10150d]">{friend.name.slice(0, 1)}</span>
+                  <PlayerAvatar name={friend.name} src={friend.avatarUrl} gender={friend.gender} />
                   <span className="min-w-0 flex-1"><span className="block truncate text-sm font-bold">{friend.name}</span><span className="block truncate text-xs text-white/40">{friend.region || 'Kraj neuvedený'} · {friend.elo} ELO</span></span>
                   {unreadMessages.data?.[friend.id] ? <span aria-label={`${unreadMessages.data[friend.id]} neprečítaných správ`} className="flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-black text-white">{unreadMessages.data[friend.id] > 99 ? '99+' : unreadMessages.data[friend.id]}</span> : null}
                 </button>
@@ -178,7 +179,7 @@ function Conversation({ myProfileId, friend, onBack }: { myProfileId: number; fr
     <div className="flex h-[70vh] flex-col lg:h-full">
       <div className="flex items-center gap-3 border-b border-white/10 p-5">
         <button type="button" onClick={onBack} className="text-sm text-white/50 lg:hidden">← Späť</button>
-        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#ccff00] text-xs font-black text-[#10150d]">{friend.name.slice(0, 1)}</span>
+        <PlayerAvatar name={friend.name} src={friend.avatarUrl} gender={friend.gender} />
         <div className="flex-1"><p className="font-bold">{friend.name}</p><p className="text-xs text-white/40">{friend.region || 'Kraj neuvedený'} · {friend.elo} ELO</p></div>
         <Link href={`/players/${friend.id}`} className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-2 text-xs font-bold text-white/75 hover:border-[#ccff00]/50 hover:text-white"><UserRound size={14} />Zobraziť profil</Link>
       </div>

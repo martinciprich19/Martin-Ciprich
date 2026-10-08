@@ -12,3 +12,15 @@ Apply `027_match_results_approval_elo.sql` in the Supabase SQL editor before dep
 Run `pnpm test:matches` for isolated PostgreSQL approval, RLS, score-validation and ELO tests. On Windows without pnpm in PATH, run `npx.cmd --yes pnpm@10 test:matches`. Tests do not connect to Supabase or modify live data.
 
 The integration tests use a minimal schema. Before production deployment, test with your actual schema and any existing matches/profile triggers, policies or enum-based status columns.
+
+## Player accents
+
+Apply `028_profile_gender.sql` so public profiles, rankings, player searches, friends, chat headers and match details can display the gender saved during registration. Female avatars use pink (`#f472b6`); male and legacy profiles without a selection use lime (`#ccff00`). Photographs retain a colored ring. Missing-column compatibility emits a migration warning instead of preventing older deployments from loading players.
+
+Run `node --test scripts/player-accent-installation.test.mjs scripts/profile-gender.test.mjs scripts/match-detail.test.mjs` to check accent colors, gender persistence, match participant mapping, schema compatibility and installation-platform detection. Installation help is available on the landing page and profile header; installed mode hides the profile install button and offers an already-installed explanation on the landing page. The iOS guide must also be checked on a physical iPhone/iPad in Safari.
+
+## Appearance and app icons
+
+The application always uses the dark theme; settings no longer offer a theme switch and previously saved `riva-theme` preferences are ignored. The shared logo, manifest icons (192 and 512 pixels), browser icon and Apple touch icon use the RIVA Padel Play Together artwork. New asset filenames avoid cached copies of the previous logo. Existing iOS Home Screen shortcuts may need to be removed and added again after deployment to refresh their icon.
+
+Run `node --test scripts/dark-branding.test.mjs` to verify permanent dark styling, manifest configuration, icon dimensions and artwork consistency.

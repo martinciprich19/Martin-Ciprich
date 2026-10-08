@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/client'
 import { fetchFriendshipStatus } from '@/lib/friendships'
+import { withProfileGender } from '@/lib/profile-gender-query'
 
 export type DominantHand = 'right' | 'left' | 'both'
 export type Gender = 'male' | 'female'
@@ -33,16 +34,16 @@ export type PlayerProfileUpdate = Partial<PlayerProfileInput>
 
 const LEGACY_PROFILE_COLUMNS = 'id, full_name, email, phone, elo_rating, highest_elo, matches_played, matches_won, region, level, bio, avatar_url, phone_visibility, dominant_hand, home_venue_id, auto_venue_id, created_at'
 const PROFILE_COLUMNS = `${LEGACY_PROFILE_COLUMNS}, gender`
-const PUBLIC_PROFILE_COLUMNS = 'id, full_name, email, elo_rating, highest_elo, matches_played, matches_won, region, level, avatar_url, home_venue_id, auto_venue_id'
-const PUBLIC_PLAYER_PROFILE_COLUMNS = 'id, full_name, email, elo_rating, highest_elo, matches_played, matches_won, region, level, bio, avatar_url, home_venue_id, auto_venue_id'
+const PUBLIC_PROFILE_COLUMNS = 'id, full_name, email, elo_rating, highest_elo, matches_played, matches_won, region, level, gender, avatar_url, home_venue_id, auto_venue_id'
+const PUBLIC_PLAYER_PROFILE_COLUMNS = 'id, full_name, email, elo_rating, highest_elo, matches_played, matches_won, region, level, gender, bio, avatar_url, home_venue_id, auto_venue_id'
 // Added by migration 034; queries fall back to the columns without them until it is applied.
 const SEASON_ELO_COLUMNS = 'career_elo, elo_season_start'
 
 type QueryResult = { data: unknown; error: { code: string; message: string } | null }
 async function withSeasonColumns<T extends QueryResult>(run: (columns: string) => PromiseLike<T>, baseColumns: string): Promise<T> {
-  const result = await run(`${baseColumns}, ${SEASON_ELO_COLUMNS}`)
+  const result = await withProfileGender(run, `${baseColumns}, ${SEASON_ELO_COLUMNS}`)
   const missingColumn = result.error && ['42703', 'PGRST204'].includes(result.error.code) && /career_elo|elo_season_start/.test(result.error.message)
-  return missingColumn ? run(baseColumns) : result
+  return missingColumn ? withProfileGender(run, baseColumns) : result
 }
 
 type ProfileRow = Omit<Partial<PlayerProfile>, 'id' | 'home_venue_id' | 'auto_venue_id'> & {

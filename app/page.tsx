@@ -51,7 +51,7 @@ export default function Home() {
             <p className="mb-5 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.28em] text-[#a8e63c]"><span className="h-px w-8 bg-[#a8e63c]" /> {t('RIVA Padel')}</p>
             <h1 className="text-[46px] font-black uppercase leading-[.94] tracking-[-.05em] text-white sm:text-[64px] lg:text-[76px]">{t('Hraj.')}<br /><span className="text-[#a8e63c]">{t('Vyzývaj.')}</span><br /><span className="text-[#a8e63c]">{t('Zlepšuj sa.')}</span><br />{t('Staň sa najlepším.')}</h1>
             <p className="mt-7 max-w-[390px] text-[14px] leading-6 text-white/60">{t('RIVA Padel je aplikácia pre padelových hráčov. Zbieraj body, zlepšuj svoj rebríček, vyzývaj súperov a hraj o skvelé ceny.', 'RIVA Padel is an app for padel players. Earn points, climb the rankings, challenge opponents and play for great prizes.')}</p>
-            <div className="relative -top-[20px] mt-8 flex flex-wrap gap-3"><Link href="/auth/sign-up" className="group flex items-center gap-3 rounded-lg bg-[#a8e63c] px-5 py-3.5 text-xs font-bold text-[#061016] transition hover:bg-[#c1fa66]">{t('Stať sa členom')} <ArrowRight size={16} className="transition group-hover:translate-x-1" /></Link><InstallAppButton /></div>
+            <div className="relative -top-[20px] mt-8 flex flex-wrap gap-3"><Link href="/auth/sign-up" className="group flex items-center gap-3 rounded-lg bg-[#a8e63c] px-5 py-3.5 text-xs font-bold text-[#061016] transition hover:bg-[#c1fa66]">{t('Stať sa členom')} <ArrowRight size={16} className="transition group-hover:translate-x-1" /></Link><InstallAppButton showWhenInstalled /></div>
           </div>
         </div>
 

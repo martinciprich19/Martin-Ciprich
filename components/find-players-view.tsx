@@ -8,24 +8,16 @@ import { getErrorMessage } from '@/lib/errors'
 import { useLanguage } from '@/components/language-provider'
 import { emptyPlayerFilters, fetchLeaguePlayers, MAX_ELO, filterPlayers, PLAYER_LEVELS, type LeaguePlayer, type PlayerFilters } from '@/lib/players'
 import { fetchFriendshipStatuses, sendFriendRequest, type FriendshipStatus } from '@/lib/friendships'
+import { PlayerAvatar as GenderAvatar } from '@/components/player-avatar'
 
 const REGIONS = ['Bratislavský kraj', 'Trnavský kraj', 'Trenčiansky kraj', 'Nitriansky kraj', 'Žilinský kraj', 'Banskobystrický kraj', 'Prešovský kraj', 'Košický kraj']
-const AVATAR_TONES = ['bg-[#ccff00] text-[#10150d]', 'bg-sky-400 text-[#0b0f17]', 'bg-emerald-400 text-[#0b0f17]', 'bg-amber-300 text-[#0b0f17]', 'bg-rose-400 text-[#0b0f17]']
 
 const fieldClass = 'w-full rounded-lg border border-white/10 bg-[#0b0f17] px-3 py-2.5 text-sm text-white outline-none transition placeholder:text-white/30 focus:border-[#ccff00]/60 focus:ring-2 focus:ring-[#ccff00]/15'
 const labelClass = 'mb-1.5 block text-[11px] font-bold uppercase tracking-[0.14em] text-white/45'
 
-function toneFor(name: string) {
-  const hash = [...name].reduce((sum, char) => sum + char.charCodeAt(0), 0)
-  return AVATAR_TONES[hash % AVATAR_TONES.length]
-}
-
 function PlayerAvatar({ player, size = 'md' }: { player: LeaguePlayer; size?: 'md' | 'lg' }) {
   const dimensions = size === 'lg' ? 'h-20 w-20 text-3xl' : 'h-14 w-14 text-xl'
-  if (player.avatarUrl) {
-    return <img src={player.avatarUrl} alt="" className={`${dimensions} shrink-0 rounded-full object-cover ring-2 ring-white/10`} />
-  }
-  return <span aria-hidden="true" className={`${dimensions} ${toneFor(player.name)} flex shrink-0 items-center justify-center rounded-full font-black uppercase`}>{player.name.slice(0, 1)}</span>
+  return <GenderAvatar name={player.name} src={player.avatarUrl} gender={player.gender} className={dimensions} />
 }
 
 export function PlayerSearchView({ currentPlayerId, currentPlayerAvatarUrl, defaultRegion, onMessage, showCurrentPlayer = false }: { currentPlayerId?: string; currentPlayerAvatarUrl?: string | null; defaultRegion?: string; onMessage: (player: LeaguePlayer) => void; showCurrentPlayer?: boolean }) {

@@ -14,6 +14,7 @@ export type LeaguePlayer = {
   wins: number
   losses: number
   avatarUrl: string | null
+  gender: PlayerProfile['gender']
 }
 
 export type PlayerFilters = {
@@ -44,6 +45,7 @@ function toPlayer(row: PlayerProfile): LeaguePlayer {
     wins: row.matches_won,
     losses: Math.max(0, row.matches_played - row.matches_won),
     avatarUrl: row.avatar_url,
+    gender: row.gender,
   }
 }
 

@@ -2,7 +2,6 @@ import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
 import { LanguageProvider } from '@/components/language-provider'
-import { ThemeProvider } from '@/components/theme-provider'
 
 const inter = Inter({
   subsets: ['latin', 'latin-ext'],
@@ -23,8 +22,8 @@ export const metadata: Metadata = {
     'apple-mobile-web-app-capable': 'yes',
   },
   icons: {
-    icon: [{ url: '/images/riva-padel-icon-192.png', type: 'image/png', sizes: '192x192' }],
-    apple: [{ url: '/images/riva-padel-apple-touch-icon.png', type: 'image/png', sizes: '180x180' }],
+    icon: [{ url: '/images/riva-padel-play-together-icon-192.png', type: 'image/png', sizes: '192x192' }],
+    apple: [{ url: '/images/riva-padel-play-together-apple-touch-icon.png', type: 'image/png', sizes: '180x180' }],
   },
 }
 
@@ -36,5 +35,5 @@ export const viewport: Viewport = {
 }
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="sk" className={`${inter.variable} dark`} suppressHydrationWarning><body><ThemeProvider><LanguageProvider>{children}</LanguageProvider></ThemeProvider></body></html>
+  return <html lang="sk" className={`${inter.variable} dark`} suppressHydrationWarning><body><LanguageProvider>{children}</LanguageProvider></body></html>
 }

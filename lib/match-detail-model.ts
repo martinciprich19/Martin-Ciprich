@@ -32,6 +32,7 @@ export type MatchDetailProfileRow = {
   id: number | string
   full_name?: string | null
   avatar_url?: string | null
+  gender?: 'male' | 'female' | null
   elo_rating?: number | null
   career_elo?: number | null
   email?: string | null
@@ -44,6 +45,7 @@ export type MatchDetailPlayer = {
   id: string
   name: string
   avatarUrl: string | null
+  gender: 'male' | 'female' | null
   currentElo: number | null
   careerElo: number | null
   deleted: boolean
@@ -166,6 +168,7 @@ export function buildMatchDetail(row: MatchDetailRow, profiles: MatchDetailProfi
       id,
       name,
       avatarUrl: profile?.avatar_url || null,
+      gender: profile?.gender === 'female' || profile?.gender === 'male' ? profile.gender : null,
       currentElo: toNumber(profile?.elo_rating),
       careerElo: toNumber(profile?.career_elo),
       deleted: name === DELETED_PLAYER_NAME || String(profile?.email ?? '').endsWith('@deleted.spl.invalid'),

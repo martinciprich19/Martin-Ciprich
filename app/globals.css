@@ -1,8 +1,7 @@
 @import 'tailwindcss';
 @custom-variant dark (&:where(.dark, .dark *));
 
-:root { --lime: #a8e63c; --ink: #f5f7f6; --panel: #ffffff; --foreground: #061016; color-scheme: light; }
-:root.dark { --ink: #061016; --panel: #0b1b22; --foreground: #f5f7f6; color-scheme: dark; }
+:root { --lime: #a8e63c; --ink: #061016; --panel: #0b1b22; --foreground: #f5f7f6; color-scheme: dark; }
 * { box-sizing: border-box; }
 html { scroll-behavior: auto; }
 html, body { min-height: 100%; overscroll-behavior-y: none; -webkit-overflow-scrolling: touch; }

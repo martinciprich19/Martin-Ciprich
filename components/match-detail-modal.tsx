@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react'
 import useSWR from 'swr'
 import { AlertTriangle, Calendar, Check, Clock, Hourglass, MapPin, Swords, TrendingDown, TrendingUp, Trophy, X } from 'lucide-react'
 import { useLanguage } from '@/components/language-provider'
+import { PlayerAvatar as GenderAvatar } from '@/components/player-avatar'
 import { fetchArenas } from '@/lib/arenas'
 import { fetchMatchDetail, type MatchDetail, type MatchDetailPlayer, type MatchDetailStatus } from '@/lib/match-details'
 
@@ -27,10 +28,7 @@ function DeltaBadge({ value, muted = false }: { value: number | null; muted?: bo
 
 function PlayerAvatar({ player, size = 'md' }: { player: MatchDetailPlayer; size?: 'sm' | 'md' }) {
   const dimension = size === 'sm' ? 'h-8 w-8 text-xs' : 'h-11 w-11 text-sm'
-  if (player.avatarUrl && !player.deleted) {
-    // eslint-disable-next-line @next/next/no-img-element
-    return <img src={player.avatarUrl} alt="" className={`${dimension} shrink-0 rounded-full border border-white/10 object-cover`} />
-  }
+  if (!player.deleted) return <GenderAvatar name={player.name} src={player.avatarUrl} gender={player.gender} className={dimension} />
   return <span aria-hidden="true" className={`${dimension} flex shrink-0 items-center justify-center rounded-full border border-white/10 bg-[#1d2b44] font-black text-white/80`}>{player.deleted ? '?' : player.name.slice(0, 1).toUpperCase()}</span>
 }
 

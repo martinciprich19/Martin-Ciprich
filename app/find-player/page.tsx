@@ -2,7 +2,9 @@
 
 import { FormEvent, useCallback, useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { DELETED_PROFILE_EMAIL_DOMAIN } from '@/lib/profiles'
+import { DELETED_PROFILE_EMAIL_DOMAIN, type Gender } from '@/lib/profiles'
+import { withProfileGender } from '@/lib/profile-gender-query'
+import { PlayerAvatar } from '@/components/player-avatar'
 
 const REGIONS = ['Bratislavský kraj', 'Trnavský kraj', 'Trenčiansky kraj', 'Nitriansky kraj', 'Žilinský kraj', 'Banskobystrický kraj', 'Prešovský kraj', 'Košický kraj']
 const LEVELS = ['Začiatočník', 'Mierne pokročilý', 'Pokročilý', 'Expert']
@@ -24,6 +26,7 @@ type Player = {
   level: string | null
   elo_rating: number | null
   avatar_url: string | null
+  gender: Gender | null
 }
 
 type Listing = {
@@ -89,13 +92,14 @@ export default function FindPlayerPage() {
       }
 
       if (activeTab === 'players') {
-        let query = supabase.from('proffiles').select('id, full_name, email, region, level, elo_rating, avatar_url').not('email', 'like', `%${DELETED_PROFILE_EMAIL_DOMAIN}`)
-        const search = searchTerm.trim()
-        if (search) query = query.ilike('full_name', `%${search}%`)
-        query = query.gte('elo_rating', filterEloMin).lte('elo_rating', filterEloMax)
-        const { data, error: playersError } = await query.order('elo_rating', { ascending: false })
+        const { data, error: playersError } = await withProfileGender((columns) => {
+          let query = supabase.from('proffiles').select(columns).not('email', 'like', `%${DELETED_PROFILE_EMAIL_DOMAIN}`)
+          const search = searchTerm.trim()
+          if (search) query = query.ilike('full_name', `%${search}%`)
+          return query.gte('elo_rating', filterEloMin).lte('elo_rating', filterEloMax).order('elo_rating', { ascending: false }).returns<Player[]>()
+        }, 'id, full_name, email, region, level, elo_rating, avatar_url, gender')
         if (playersError) throw playersError
-        setPlayers(((data ?? []) as Player[]).filter((player) =>
+        setPlayers((data ?? []).filter((player) =>
           (filterRegion === 'Všetky kraje' || normalizeFilterValue(player.region ?? '') === normalizeFilterValue(filterRegion)) &&
           (filterLevel === 'Všetky úrovne' || normalizeFilterValue(player.level ?? '') === normalizeFilterValue(filterLevel))))
       } else {
@@ -237,7 +241,7 @@ export default function FindPlayerPage() {
           {loading ? <p role="status" className="py-12 text-center text-sm text-white/50">Načítavam hráčov…</p> : (
             <ul className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               {players.map((player) => <li key={player.id} className={cardClass}>
-                <div className="flex items-center gap-3">{player.avatar_url ? <img src={player.avatar_url} alt="" className="h-12 w-12 rounded-full object-cover" /> : <span className="flex h-12 w-12 items-center justify-center rounded-full bg-[#ccff00] font-black text-[#10150d]">{player.full_name?.slice(0, 1) || '?'}</span>}<h3 className="text-lg font-bold">{player.full_name || 'Neznámy hráč'}</h3></div>
+                <div className="flex items-center gap-3"><PlayerAvatar name={player.full_name || '?'} src={player.avatar_url} gender={player.gender} className="size-12 text-lg" /><h3 className="text-lg font-bold">{player.full_name || 'Neznámy hráč'}</h3></div>
                 <p className="mt-1 text-sm text-white/55">Kraj: {player.region || 'Nezadaný'}</p>
                 <p className="mt-1 text-sm text-white/55">Úroveň: {player.level || 'Nezadaná'}</p>
                 <p className="mt-3 text-sm font-bold text-[#ccff00]">ELO: {player.elo_rating ?? 1000}</p>
