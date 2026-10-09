@@ -36,3 +36,9 @@ All authenticated profile tabs and public player profiles share a viewport-fixed
 For deployments whose `pair_invitations` uses UUID `id`, `sender_id` and `receiver_id` referencing `auth.users`, run `039_repair_uuid_pair_invitations.sql` in the Supabase SQL editor instead of rerunning 020. It preserves the original table as `pair_invitations_uuid_backup`, maps accounts to numeric profiles by case-insensitive email and transfers invitations without automatically accepting them. Missing/ambiguous profile mappings, unsupported statuses or duplicate pending pairs abort the transaction rather than discard data. Client access to the backup is revoked; existing pairs remain untouched. The RPC writes the accepting profile into `pairs.created_by`.
 
 Run `node --test scripts/pair-invitations-repair.test.mjs` for isolated migration, repeat-run, rollback and acceptance tests. This does not verify the live database's additional constraints or triggers.
+
+## My pairs
+
+Apply `040_delete_my_pair.sql` in the Supabase SQL editor before using pair deletion. In the Challenge a pair tab, "My pairs" lists only pairs containing the signed-in profile. "Delete pair" requires confirmation and permanently deletes the pair for both members. The `delete_my_pair` RPC verifies membership in the database; direct client DELETE access is revoked. Existing challenges, invitations and match results are preserved. A new pair still requires a new invitation and acceptance.
+
+Run `node --test scripts/delete-pair.test.mjs scripts/pair-invitations-repair.test.mjs` for isolated deletion, authorization, identifier compatibility and invitation regression tests. These tests do not modify the live database; apply the migration separately and verify any additional production constraints or triggers.

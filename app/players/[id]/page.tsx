@@ -4,9 +4,10 @@ import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import useSWR from 'swr'
-import { ArrowLeft, Check, ChevronRight, Clock3, MapPin, Phone, Trash2, Trophy, UserPlus, UserRound, X } from 'lucide-react'
+import { ArrowLeft, Check, Clock3, MapPin, Phone, Trash2, Trophy, UserPlus, UserRound, X } from 'lucide-react'
 import { AppBackground } from '@/components/app-background'
 import { MatchDetailModal } from '@/components/match-detail-modal'
+import { MatchDetailButton } from '@/components/match-detail-button'
 import { useLanguage } from '@/components/language-provider'
 import { getErrorMessage } from '@/lib/errors'
 import { fetchProfileMatches, isCountedMatch } from '@/lib/profile-matches'
@@ -152,10 +153,10 @@ export default function PublicPlayerProfilePage() {
                 <ol className="divide-y divide-white/[0.07]">
                   {matches.map((match) => {
                     const isWin = match.result === 'win'
-                    return <li key={match.id}><button type="button" onClick={() => setDetailMatchId(match.id)} aria-label={t(`Detail zápasu proti ${match.opponent_name}`, `Match details vs ${match.opponent_name}`)} className="group -mx-3 flex w-[calc(100%+1.5rem)] flex-col gap-3 rounded-lg px-3 py-5 text-left transition-colors hover:bg-white/[0.03] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#ccff00] sm:flex-row sm:items-center sm:justify-between">
+                    return <li key={match.id}><div onClick={() => setDetailMatchId(match.id)} className="group -mx-3 flex w-[calc(100%+1.5rem)] cursor-pointer flex-col gap-3 rounded-lg px-3 py-5 text-left transition-colors hover:bg-white/[0.03] sm:flex-row sm:items-center sm:justify-between">
                       <div><p className="font-bold">{match.opponent_name}</p><time dateTime={match.match_date} className="mt-1 block text-xs text-white/45">{new Intl.DateTimeFormat(language === 'en' ? 'en-GB' : 'sk-SK', { dateStyle: 'medium' }).format(new Date(match.match_date))}</time></div>
-                      <div className="flex items-center gap-4"><p className="text-xs text-white/55">{t('Sety', 'Sets')}: {match.sets_won} : {match.sets_lost} <span className="mx-1 text-white/20">·</span> {t('Gemy', 'Games')}: {match.games_won} : {match.games_lost}</p><span className={`rounded-md px-2.5 py-1.5 text-[10px] font-black ${isWin ? 'bg-emerald-400/15 text-emerald-300' : 'bg-red-400/15 text-red-300'}`}>{isWin ? t('VÝHRA', 'WIN') : t('PREHRA', 'LOSS')}</span><ChevronRight size={16} aria-hidden="true" className="hidden text-white/25 transition-colors group-hover:text-[#ccff00] sm:block" /></div>
-                    </button></li>
+                      <div className="flex flex-wrap items-center gap-4"><p className="text-xs text-white/55">{t('Sety', 'Sets')}: {match.sets_won} : {match.sets_lost} <span className="mx-1 text-white/20">·</span> {t('Gemy', 'Games')}: {match.games_won} : {match.games_lost}</p><span className={`rounded-md px-2.5 py-1.5 text-[10px] font-black ${isWin ? 'bg-emerald-400/15 text-emerald-300' : 'bg-red-400/15 text-red-300'}`}>{isWin ? t('VÝHRA', 'WIN') : t('PREHRA', 'LOSS')}</span><MatchDetailButton matchId={match.id} onOpen={setDetailMatchId} /></div>
+                    </div></li>
                   })}
                 </ol>
               )}

@@ -63,6 +63,16 @@ export async function sendPairInvitation(inviteeId: string): Promise<void> {
   }
 }
 
+export async function deletePair(pairId: string): Promise<void> {
+  const { error } = await createClient().rpc('delete_my_pair', { p_pair_id: pairId })
+  if (error) {
+    if (PAIR_INVITATIONS_SCHEMA_CODES.has(error.code)) {
+      throw new Error('Odstránenie dvojice nie je v databáze nastavené. Spusti migráciu scripts/040_delete_my_pair.sql v Supabase.')
+    }
+    throw error
+  }
+}
+
 export async function fetchIncomingPairInvitations(userId: string | number): Promise<PairInvitation[]> {
   const supabase = createClient()
   const { data, error } = await supabase

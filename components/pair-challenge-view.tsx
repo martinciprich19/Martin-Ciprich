@@ -2,12 +2,12 @@
 
 import { useEffect, useState } from 'react'
 import useSWR from 'swr'
-import { Calendar, Check, MapPin, Send, Swords, Users, X } from 'lucide-react'
+import { Calendar, Check, MapPin, Send, Swords, Trash2, Users, X } from 'lucide-react'
 import { useLanguage } from '@/components/language-provider'
 import { createClient } from '@/lib/supabase/client'
 import type { Arena } from '@/lib/arenas'
 import { getErrorMessage } from '@/lib/errors'
-import { fetchPairs, type PairPlayer, type PlayerPair } from '@/lib/pairs'
+import { deletePair, fetchPairs, type PairPlayer, type PlayerPair } from '@/lib/pairs'
 import {
   cancelPairChallenge,
   fetchPairChallenge,
@@ -46,6 +46,10 @@ export function PairChallengeView({ userId, arenas, initialArena, onOpenPairs, i
   const [region, setRegion] = useState('')
   const [target, setTarget] = useState<PlayerPair | null>(null)
   const [feedback, setFeedback] = useState<{ tone: 'success' | 'error'; message: string } | null>(null)
+  const [showMyPairs, setShowMyPairs] = useState(false)
+  const [pairToDelete, setPairToDelete] = useState<PlayerPair | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
 
   const pairs = useSWR('league-pairs', fetchPairs)
   const challenges = useSWR(userId ? ['pair-challenges', userId] : null, () => fetchMyPairChallenges(userId), { refreshInterval: 15000 })
@@ -57,6 +61,7 @@ export function PairChallengeView({ userId, arenas, initialArena, onOpenPairs, i
   const opponentPairs = allPairs
     .filter((pair) => !myPairs.includes(pair) && (!region || pair.player_1.region === region || pair.player_2.region === region))
     .sort((a, b) => pairElo(b) - pairElo(a))
+  const visiblePairs = showMyPairs ? myPairs : opponentPairs
 
   useEffect(() => {
     if (!initialChallengedPair || !pairs.data) return
@@ -78,6 +83,27 @@ export function PairChallengeView({ userId, arenas, initialArena, onOpenPairs, i
     }
   }
 
+  async function handleDeletePair() {
+    if (!pairToDelete || isDeleting) return
+    const pair = pairToDelete
+    setIsDeleting(true)
+    setDeleteError('')
+    try {
+      await pairs.mutate(async (current: PlayerPair[] | undefined) => {
+        await deletePair(pair.id)
+        return (current ?? []).filter((item) => item.id !== pair.id)
+      }, { revalidate: false })
+      setPairToDelete(null)
+      setFeedback({ tone: 'success', message: t('Dvojica bola odstránená.') })
+    } catch (error: unknown) {
+      const message = getErrorMessage(error, t('Dvojicu sa nepodarilo odstrániť.'))
+      console.error('Odstránenie dvojice zlyhalo:', message)
+      setDeleteError(message)
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
   function pairLabel(id1: string, id2: string, player1: PairChallenge['challenger_1'], player2: PairChallenge['challenger_2']) {
     const getName = (profile: PairChallenge['challenger_1'], id: string) => {
       const joinedProfile = Array.isArray(profile) ? profile[0] : profile
@@ -94,28 +120,31 @@ export function PairChallengeView({ userId, arenas, initialArena, onOpenPairs, i
           <h1 className="mt-2 text-3xl font-black text-balance">{t('Vyzvať dvojicu')}</h1>
           <p className="mt-2 text-sm leading-relaxed text-white/45 text-pretty">{t('Vyber súperiacu dvojicu vo svojom okolí a navrhni termín zápasu.')}</p>
         </div>
-        <button type="button" onClick={onOpenPairs} className="inline-flex items-center gap-2 rounded-lg border border-[#ccff00]/30 px-4 py-2.5 text-sm font-bold text-[#ccff00] transition hover:bg-[#ccff00]/10"><Users size={16} />{t('Pridať dvojicu')}</button>
+        <div className="flex flex-wrap gap-3">
+          <button type="button" aria-pressed={showMyPairs} onClick={() => { setShowMyPairs((current) => !current); setFeedback(null) }} className="inline-flex items-center gap-2 rounded-lg border border-[#ccff00]/30 px-4 py-2.5 text-sm font-bold text-[#ccff00] transition hover:bg-[#ccff00]/10"><Users size={16} />{t(showMyPairs ? 'Súperiace dvojice' : 'Moje dvojice')}</button>
+          <button type="button" onClick={onOpenPairs} className="inline-flex items-center gap-2 rounded-lg border border-[#ccff00]/30 px-4 py-2.5 text-sm font-bold text-[#ccff00] transition hover:bg-[#ccff00]/10"><Users size={16} />{t('Pridať dvojicu')}</button>
+        </div>
       </header>
 
       <div className="mt-6 flex flex-wrap items-center gap-3">
-        <label className="block w-full sm:w-72">
+        {showMyPairs ? <h2 className="text-lg font-black">{t('Moje dvojice')}</h2> : <label className="block w-full sm:w-72">
           <span className="sr-only">{t('Filtrovať podľa kraja')}</span>
           <select aria-label={t('Filtrovať podľa kraja')} value={region} onChange={(event) => setRegion(event.target.value)} className={inputClass}>
             <option value="">{t('Všetky kraje')}</option>
             {regions.map((item) => <option key={item} value={item}>{item}</option>)}
           </select>
-        </label>
-        <p className="text-xs text-white/40">{opponentPairs.length} {t('dvojíc')}</p>
+        </label>}
+        <p className="text-xs text-white/40">{visiblePairs.length} {t('dvojíc')}</p>
       </div>
 
       {feedback ? <p role="status" className={`mt-4 rounded-lg px-3 py-2 text-sm font-semibold ${feedback.tone === 'success' ? 'bg-emerald-400/10 text-emerald-300' : 'bg-red-400/10 text-red-300'}`}>{feedback.message}</p> : null}
       {pairs.error ? <p role="alert" className="mt-6 rounded-lg border border-red-400/30 bg-red-500/10 p-4 text-sm text-red-200">{getErrorMessage(pairs.error, t('Dvojice sa nepodarilo načítať.'))}</p> : null}
       {pairs.isLoading ? <p role="status" className="py-12 text-center text-sm text-white/50">{t('Načítavam dvojice…')}</p> : null}
       {!pairs.isLoading && !pairs.error && !myPairs.length ? <p className="mt-4 rounded-lg border border-[#ccff00]/20 bg-[#ccff00]/5 px-3 py-2 text-sm text-white/70">{t('Aby si mohol vyzývať, najprv si vytvor dvojicu so spoluhráčom.')}</p> : null}
-      {!pairs.isLoading && !pairs.error && !opponentPairs.length ? <div className="mt-6 rounded-xl border border-white/10 bg-[#111722] p-8 text-center text-sm text-white/55">{t('Žiadne dvojice v tomto kraji.')}</div> : null}
+      {!pairs.isLoading && !pairs.error && !visiblePairs.length ? <div className="mt-6 rounded-xl border border-white/10 bg-[#111722] p-8 text-center text-sm text-white/55">{t(showMyPairs ? 'Zatiaľ nemáš vytvorenú žiadnu dvojicu.' : 'Žiadne dvojice v tomto kraji.')}</div> : null}
 
       <ul className="mt-6 grid gap-4 md:grid-cols-2">
-        {opponentPairs.map((pair) => (
+        {visiblePairs.map((pair) => (
           <li key={pair.id} className="flex flex-col rounded-2xl border border-white/[0.08] bg-[#131924] p-5">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
@@ -136,7 +165,9 @@ export function PairChallengeView({ userId, arenas, initialArena, onOpenPairs, i
                 </div>
               ))}
             </div>
-            <button type="button" disabled={!myPairs.length} onClick={() => { setFeedback(null); setTarget(pair) }} className="mt-4 inline-flex items-center justify-center gap-2 rounded-lg bg-[#ccff00] px-4 py-3 text-xs font-black text-[#10150d] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"><Swords size={15} />{t('Vyzvať dvojicu')}</button>
+            {showMyPairs
+              ? <button type="button" onClick={() => { setDeleteError(''); setFeedback(null); setPairToDelete(pair) }} className="mt-4 inline-flex items-center justify-center gap-2 rounded-lg border border-red-400/30 px-4 py-3 text-xs font-black text-red-300 transition hover:bg-red-400/10"><Trash2 size={15} />{t('Odstrániť dvojicu')}</button>
+              : <button type="button" disabled={!myPairs.length} onClick={() => { setFeedback(null); setTarget(pair) }} className="mt-4 inline-flex items-center justify-center gap-2 rounded-lg bg-[#ccff00] px-4 py-3 text-xs font-black text-[#10150d] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"><Swords size={15} />{t('Vyzvať dvojicu')}</button>}
           </li>
         ))}
       </ul>
@@ -165,6 +196,19 @@ export function PairChallengeView({ userId, arenas, initialArena, onOpenPairs, i
           </ul>
         )}
       </section>
+
+      {pairToDelete ? <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onKeyDown={(event) => { if (event.key === 'Escape' && !isDeleting) setPairToDelete(null) }}>
+        <section role="dialog" aria-modal="true" aria-labelledby="delete-pair-title" aria-describedby="delete-pair-description" className="w-full max-w-md rounded-2xl border border-white/10 bg-[#131924] p-6">
+          <h2 id="delete-pair-title" className="text-lg font-black">{t('Odstrániť dvojicu')}</h2>
+          <p className="mt-3 font-bold">{pairToDelete.player_1.full_name} & {pairToDelete.player_2.full_name}</p>
+          <p id="delete-pair-description" className="mt-3 text-sm leading-relaxed text-white/55">{t('Dvojica sa natrvalo odstráni z databázy pre oboch hráčov. Existujúce výzvy a výsledky zápasov zostanú zachované.')}</p>
+          {deleteError ? <p role="alert" className="mt-4 text-sm text-red-300">{deleteError}</p> : null}
+          <div className="mt-6 flex justify-end gap-3">
+            <button type="button" autoFocus disabled={isDeleting} onClick={() => setPairToDelete(null)} className="rounded-lg border border-white/10 px-4 py-2 text-sm font-bold disabled:opacity-40">{t('Zrušiť')}</button>
+            <button type="button" disabled={isDeleting} onClick={() => void handleDeletePair()} className="rounded-lg bg-red-500 px-4 py-2 text-sm font-bold text-white disabled:opacity-40">{t(isDeleting ? 'Odstraňujem…' : 'Odstrániť dvojicu')}</button>
+          </div>
+        </section>
+      </div> : null}
 
       {target ? (
         <ChallengeDialog

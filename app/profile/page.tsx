@@ -58,6 +58,7 @@ import { removeProfileAvatar, saveProfileAvatar } from '@/lib/profile-avatar'
 import { getErrorMessage } from '@/lib/errors'
 import { RecentFormCard } from '@/components/recent-form-card'
 import { MatchDetailModal, matchDetailKey } from '@/components/match-detail-modal'
+import { MatchDetailButton } from '@/components/match-detail-button'
 import { fetchNotifications, markNotificationRead, type LeagueNotification } from '@/lib/notifications'
 import { fetchUnreadMessagesBySender } from '@/lib/messages'
 import { FriendsChat } from '@/components/friends-chat'
@@ -486,7 +487,7 @@ export default function ProfilePage() {
     <main className="relative isolate min-h-[100svh] bg-[#0b0f17] text-white" style={{ '--profile-avatar-color': playerAccentColor(gender) } as React.CSSProperties}>
       <AppBackground />
       <div className="flex min-h-[100svh]">
-        <aside className={`fixed inset-y-0 left-0 z-30 flex w-[264px] flex-col border-r border-white/[0.07] bg-[#111722] px-5 py-6 lg:static lg:translate-x-0 ${menuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        <aside id="profile-navigation" className={`mobile-sidebar fixed inset-y-0 left-0 z-30 flex w-[264px] max-w-full flex-col border-r border-white/[0.07] bg-[#111722] px-5 py-6 lg:static lg:translate-x-0 ${menuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
           <div className="flex items-center justify-between px-2">
             <Link href="/profile" className="flex items-center gap-3" onClick={() => { setMenuOpen(false); setActiveTab('overview') }}>
 <RivaLogo />
@@ -511,7 +512,7 @@ export default function ProfilePage() {
 
         <section className="min-w-0 flex-1">
           <header className="sticky top-0 z-10 flex h-14 items-center justify-between gap-2 border-b border-white/[0.07] bg-[#0b0f17]/85 px-3 backdrop-blur md:static md:h-[76px] md:bg-transparent md:px-8 md:backdrop-blur-none lg:px-10">
-            <button className="flex h-11 w-11 items-center justify-center rounded-lg text-white/70 lg:hidden" onClick={() => setMenuOpen(true)} aria-label="Otvoriť menu"><Menu size={22} /></button>
+            <button className="flex h-11 w-11 items-center justify-center rounded-lg text-white/70 lg:hidden" onClick={() => setMenuOpen(true)} aria-expanded={menuOpen} aria-controls="profile-navigation" aria-label="Otvoriť menu"><Menu size={22} /></button>
             <Link href="/profile" onClick={() => setActiveTab('overview')} className="md:hidden" aria-label="RIVA Padel — Prehľad"><RivaLogo size="sm" /></Link>
             <div className="hidden text-xs text-white/35 sm:block">RIVA / <span className="text-white/70">{activeTab === 'profile' ? 'MÔJ PROFIL' : activeTab === 'challenges' ? t(showPairsView ? 'DVOJICE' : 'VYZVAŤ DVOJICU') : activeTab === 'matches' ? t('VÝSLEDKY', 'RESULTS') : activeTab === 'arenas' ? 'ARÉNY' : activeTab === 'messages' ? t('SPRÁVY', 'MESSAGES') : activeTab === 'settings' ? 'NASTAVENIA' : activeTab === 'opponents' ? t('NÁJSŤ HRÁČOV') : activeTab === 'rankings' ? t('REBRÍČKY', 'RANKINGS') : activeTab === 'tournaments' ? t('TURNAJE', 'TOURNAMENTS') : 'PREHĽAD'}</span></div>
             <div className="ml-auto flex items-center gap-2 md:gap-4">
@@ -572,7 +573,7 @@ export default function ProfilePage() {
                   : profileMatchesError ? <p role="alert" className="py-6 text-sm text-red-300">{getErrorMessage(profileMatchesError, t('Históriu zápasov sa nepodarilo načítať.', 'Could not load match history.'))}</p>
                   : profileMatches.length ? <ul className="mt-6 divide-y divide-white/10">
                     {profileMatches.slice(0, 3).map((match) => <li key={match.id} className="py-1 first:pt-0">
-                      <button type="button" onClick={() => setDetailMatchId(match.id)} aria-label={t(`Detail zápasu proti ${match.opponent_name}`, `Match details vs ${match.opponent_name}`)} className="group -mx-2 block w-[calc(100%+1rem)] rounded-lg px-2 py-3 text-left transition-colors hover:bg-white/[0.04] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#ccff00]">
+                      <div onClick={() => setDetailMatchId(match.id)} className="group -mx-2 block w-[calc(100%+1rem)] cursor-pointer rounded-lg px-2 py-3 text-left transition-colors hover:bg-white/[0.04]">
                       <div className="flex items-start justify-between gap-3">
                         <p className="min-w-0 break-words text-sm font-bold">{match.opponent_name}</p>
                         <span className="flex shrink-0 items-center gap-1.5"><span className={`rounded-md px-2 py-1 text-[10px] font-bold ${match.result === 'win' ? 'bg-emerald-400/10 text-emerald-300' : 'bg-red-400/10 text-red-300'}`}>{match.result === 'win' ? t('Výhra', 'Win') : t('Prehra', 'Loss')}</span><ChevronRight size={15} aria-hidden="true" className="text-white/25 transition-colors group-hover:text-[#ccff00]" /></span>
@@ -580,7 +581,8 @@ export default function ProfilePage() {
                       <time dateTime={match.match_date} className="mt-2 block text-xs text-white/45">{new Intl.DateTimeFormat(language === 'en' ? 'en-GB' : 'sk-SK', { dateStyle: 'medium' }).format(new Date(match.match_date))}</time>
                       <p className="mt-2 text-xs text-white/65">{t('Sety', 'Sets')}: <span className="font-bold text-white">{match.sets_won} : {match.sets_lost}</span><span className="mx-2 text-white/25">·</span>{t('Gemy', 'Games')}: {match.games_won} : {match.games_lost}</p>
                       {match.status === 'rejected' || match.status === 'disputed' ? <p className="mt-1 text-[10px] font-semibold text-amber-300">{t('Výsledok je sporný', 'Result disputed')}</p> : null}
-                      </button>
+                      <div className="mt-3"><MatchDetailButton matchId={match.id} onOpen={setDetailMatchId} /></div>
+                      </div>
                     </li>)}
                   </ul> : <div className="mt-8 flex min-h-[210px] flex-col items-center justify-center text-center"><div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/[0.05] text-white/30"><Trophy size={21} /></div><p className="mt-4 text-sm font-semibold text-white/65">Zatiaľ bez zápasov</p><p className="mt-2 text-xs text-white/30">Tvoja história zápasov sa zobrazí tu.</p></div>}
               </section>
@@ -1027,7 +1029,7 @@ const MatchesView = memo(function MatchesView({ initialArena, modalOpen, setModa
             </>}
             {respondingId === match.id ? <span role="status" className="text-xs text-white/45">Spracúvam…</span> : null}
           </div> : null}
-          <p className="mt-4 inline-flex items-center gap-1 text-[11px] font-bold text-white/35 transition-colors group-hover:text-[#ccff00]" aria-hidden="true">Detail zápasu<ChevronRight size={13} /></p>
+          <div className="mt-4"><MatchDetailButton matchId={match.id} onOpen={onOpenMatch} /></div>
         </li>
       })}</ul>}
     {modalOpen ? <MatchRecordModal form={form} setForm={setForm} slots={playerSlots} setSlot={setPlayerSlot} submit={submit} onClose={() => { if (!isSaving) setModalOpen(false) }} /> : null}
@@ -1209,10 +1211,10 @@ const ProfileMatchHistoryItem = memo(function ProfileMatchHistoryItem({ match, o
   const { language } = useLanguage()
   const date = new Intl.DateTimeFormat(language === 'en' ? 'en-GB' : 'sk-SK', { dateStyle: 'medium' }).format(new Date(match.match_date))
   const isWin = match.result === 'win'
-  return <button type="button" onClick={() => onOpen(match.id)} aria-label={`Detail zápasu ${date} proti ${match.opponent_name}`} className="group -mx-3 flex w-[calc(100%+1.5rem)] flex-col gap-3 rounded-lg px-3 py-5 text-left transition-colors hover:bg-white/[0.03] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#ccff00] sm:flex-row sm:items-center sm:justify-between">
+  return <div onClick={() => onOpen(match.id)} className="group -mx-3 flex w-[calc(100%+1.5rem)] cursor-pointer flex-col gap-3 rounded-lg px-3 py-5 text-left transition-colors hover:bg-white/[0.03] sm:flex-row sm:items-center sm:justify-between">
     <div><p className="text-sm font-bold">{date}</p><p className="mt-1 text-sm text-white/55">Súper: {match.opponent_name}</p><p className="mt-1 text-xs text-white/40">Sety {match.sets_won} : {match.sets_lost} · Gemy {match.games_won} : {match.games_lost}</p></div>
-    <div className="flex flex-wrap items-center gap-2"><span className={`w-fit rounded-md px-2.5 py-1.5 text-[10px] font-black ${isWin ? 'bg-[#35d6a2]/15 text-[#35d6a2]' : 'bg-red-400/15 text-red-300'}`}>{isWin ? 'VÝHRA' : 'PREHRA'}</span>{match.status === 'rejected' || match.status === 'disputed' ? <span className="w-fit rounded-md bg-amber-400/10 px-2 py-1.5 text-[10px] font-bold text-amber-300">SPORNÝ VÝSLEDOK</span> : null}<ChevronRight size={16} aria-hidden="true" className="hidden text-white/25 transition-colors group-hover:text-[#ccff00] sm:block" /></div>
-  </button>
+    <div className="flex flex-wrap items-center gap-2"><span className={`w-fit rounded-md px-2.5 py-1.5 text-[10px] font-black ${isWin ? 'bg-[#35d6a2]/15 text-[#35d6a2]' : 'bg-red-400/15 text-red-300'}`}>{isWin ? 'VÝHRA' : 'PREHRA'}</span>{match.status === 'rejected' || match.status === 'disputed' ? <span className="w-fit rounded-md bg-amber-400/10 px-2 py-1.5 text-[10px] font-bold text-amber-300">SPORNÝ VÝSLEDOK</span> : null}<MatchDetailButton matchId={match.id} onOpen={onOpen} /></div>
+  </div>
 })
 
 const InfoCard = memo(function InfoCard({ title, children }: { title: string; children: React.ReactNode }) { return <section className="rounded-2xl border border-white/[0.08] bg-[#111722] p-6 sm:p-8"><h2 className="border-b border-white/[0.08] pb-4 text-2xl font-black">{title}</h2><div>{children}</div></section> })
