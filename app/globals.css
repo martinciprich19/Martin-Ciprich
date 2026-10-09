@@ -27,7 +27,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .hero-noise { background-image: radial-gradient(circle at 20% 10%, rgba(255,255,255,.04) 0 1px, transparent 1px); background-size: 5px 5px; }
 
 @media (prefers-reduced-motion: no-preference) {
-  .mobile-sidebar { transition: transform 300ms cubic-bezier(0.22, 1, 0.36, 1); }
+  .mobile-sidebar { transition: translate 300ms cubic-bezier(0.22, 1, 0.36, 1); }
   .match-detail-sheet { animation: match-detail-slide-up 350ms cubic-bezier(0.22, 1, 0.36, 1) both; }
 }
 

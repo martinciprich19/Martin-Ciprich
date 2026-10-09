@@ -36,12 +36,12 @@ test('detail button is localized, keyboard accessible and opens exactly once', a
   }
 })
 
-test('slide animations respect reduced motion and use only transforms', async () => {
+test('slide animations respect reduced motion and transition Tailwind translate', async () => {
   const css = postcss.parse(await readSource('../app/globals.css'))
   const motion = css.nodes.find((node) => node.type === 'atrule' && node.name === 'media' && node.params === '(prefers-reduced-motion: no-preference)')
   assert.ok(motion)
   const sidebar = motion.nodes.find((node) => node.selector === '.mobile-sidebar')
-  assert.ok(sidebar.nodes.some((node) => node.prop === 'transition' && node.value.startsWith('transform 300ms')))
+  assert.ok(sidebar.nodes.some((node) => node.prop === 'transition' && node.value.startsWith('translate 300ms')))
   const sheet = motion.nodes.find((node) => node.selector === '.match-detail-sheet')
   assert.ok(sheet.nodes.some((node) => node.prop === 'animation' && node.value.startsWith('match-detail-slide-up 350ms')))
   const keyframes = css.nodes.find((node) => node.type === 'atrule' && node.name === 'keyframes' && node.params === 'match-detail-slide-up')
