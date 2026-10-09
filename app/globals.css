@@ -4,7 +4,7 @@
 :root { --lime: #a8e63c; --ink: #061016; --panel: #0b1b22; --foreground: #f5f7f6; color-scheme: dark; }
 * { box-sizing: border-box; }
 html { scroll-behavior: auto; }
-html, body { width: 100%; max-width: 100%; min-height: 100%; overflow-x: hidden; overscroll-behavior-x: none; overscroll-behavior-y: none; touch-action: pan-x pan-y; -webkit-overflow-scrolling: touch; }
+html, body { width: 100%; max-width: 100%; min-height: 100%; overflow-x: hidden; overscroll-behavior-x: none; touch-action: pan-x pan-y; -webkit-overflow-scrolling: touch; }
 .ios-scroll { overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
 form.overflow-y-auto { max-height: 90dvh; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
 body { min-height: 100svh; margin: 0; background: var(--ink); color: var(--foreground); font-family: var(--font-inter), system-ui, sans-serif; font-weight: 400; line-height: 1.5; overflow-wrap: anywhere; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
@@ -25,16 +25,6 @@ body, input, button, select, textarea { font-family: inherit; font-variant-numer
 button, a { -webkit-tap-highlight-color: transparent; }
 ::selection { background: var(--lime); color: #061016; }
 .hero-noise { background-image: radial-gradient(circle at 20% 10%, rgba(255,255,255,.04) 0 1px, transparent 1px); background-size: 5px 5px; }
-
-@media (prefers-reduced-motion: no-preference) {
-  .mobile-sidebar { transition: translate 300ms cubic-bezier(0.22, 1, 0.36, 1); }
-  .match-detail-sheet { animation: match-detail-slide-up 350ms cubic-bezier(0.22, 1, 0.36, 1) both; }
-}
-
-@keyframes match-detail-slide-up {
-  from { transform: translateY(100dvh); }
-  to { transform: translateY(0); }
-}
 
 @keyframes spl-screen-in {
   from { opacity: 0; transform: translateY(8px); }

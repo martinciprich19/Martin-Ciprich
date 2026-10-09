@@ -487,7 +487,7 @@ export default function ProfilePage() {
     <main className="relative isolate min-h-[100svh] bg-[#0b0f17] text-white" style={{ '--profile-avatar-color': playerAccentColor(gender) } as React.CSSProperties}>
       <AppBackground />
       <div className="flex min-h-[100svh]">
-        <aside id="profile-navigation" className={`mobile-sidebar fixed inset-y-0 left-0 z-30 flex w-[264px] max-w-full flex-col border-r border-white/[0.07] bg-[#111722] px-5 py-6 lg:static lg:translate-x-0 ${menuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        <aside id="profile-navigation" className={`fixed inset-y-0 left-0 z-30 flex w-[264px] max-w-full flex-col overflow-y-auto border-r border-white/[0.07] bg-[#111722] px-5 py-6 lg:static lg:translate-x-0 ${menuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
           <div className="flex items-center justify-between px-2">
             <Link href="/profile" className="flex items-center gap-3" onClick={() => { setMenuOpen(false); setActiveTab('overview') }}>
 <RivaLogo />

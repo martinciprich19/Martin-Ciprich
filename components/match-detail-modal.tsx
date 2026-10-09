@@ -52,15 +52,12 @@ export function MatchDetailModal({ matchId, currentProfileId, onClose }: { match
 
   useEffect(() => {
     const previousFocus = document.activeElement as HTMLElement | null
-    const previousOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    closeButtonRef.current?.focus()
+    closeButtonRef.current?.focus({ preventScroll: true })
     const onKeyDown = (event: KeyboardEvent) => { if (event.key === 'Escape') onCloseRef.current() }
     window.addEventListener('keydown', onKeyDown)
     return () => {
       window.removeEventListener('keydown', onKeyDown)
-      document.body.style.overflow = previousOverflow
-      previousFocus?.focus?.()
+      previousFocus?.focus?.({ preventScroll: true })
     }
   }, [])
 
@@ -74,8 +71,8 @@ export function MatchDetailModal({ matchId, currentProfileId, onClose }: { match
   const arena = match?.arenaName ? arenas.find((item) => item.name.trim().toLowerCase() === match.arenaName.toLowerCase()) : undefined
   const teamName = (index: 0 | 1) => match?.teams[index].players.map((player) => player.name).join(' & ') || t(`Dvojica ${index + 1}`, `Team ${index + 1}`)
 
-  return <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/75 p-0 backdrop-blur-sm sm:items-center sm:p-4" onClick={onClose}>
-    <div role="dialog" aria-modal="true" aria-labelledby="match-detail-title" onClick={(event) => event.stopPropagation()} className="match-detail-sheet relative max-h-[94dvh] w-full max-w-3xl overflow-y-auto rounded-t-2xl border border-white/10 bg-[#0f141d] text-white shadow-2xl sm:rounded-2xl">
+  return <div className="fixed inset-0 z-[60] overflow-y-auto bg-black/75 p-0 backdrop-blur-sm sm:p-4" onClick={onClose}>
+    <div role="dialog" aria-modal="true" aria-labelledby="match-detail-title" onClick={(event) => event.stopPropagation()} className="relative mx-auto w-full max-w-3xl rounded-t-2xl border border-white/10 bg-[#0f141d] text-white shadow-2xl sm:rounded-2xl">
       <header className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-white/[0.08] bg-[#0f141d]/95 px-5 py-4 backdrop-blur sm:px-7">
         <div className="min-w-0">
           <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#ccff00]">{t('Detail zápasu', 'Match details')} · #{matchId}</p>

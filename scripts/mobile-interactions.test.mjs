@@ -36,18 +36,12 @@ test('detail button is localized, keyboard accessible and opens exactly once', a
   }
 })
 
-test('slide animations respect reduced motion and transition Tailwind translate', async () => {
+test('recent slide animations and vertical overscroll restrictions are removed', async () => {
   const css = postcss.parse(await readSource('../app/globals.css'))
-  const motion = css.nodes.find((node) => node.type === 'atrule' && node.name === 'media' && node.params === '(prefers-reduced-motion: no-preference)')
-  assert.ok(motion)
-  const sidebar = motion.nodes.find((node) => node.selector === '.mobile-sidebar')
-  assert.ok(sidebar.nodes.some((node) => node.prop === 'transition' && node.value.startsWith('translate 300ms')))
-  const sheet = motion.nodes.find((node) => node.selector === '.match-detail-sheet')
-  assert.ok(sheet.nodes.some((node) => node.prop === 'animation' && node.value.startsWith('match-detail-slide-up 350ms')))
-  const keyframes = css.nodes.find((node) => node.type === 'atrule' && node.name === 'keyframes' && node.params === 'match-detail-slide-up')
-  assert.ok(keyframes)
-  assert.equal(keyframes.nodes[0].nodes[0].value, 'translateY(100dvh)')
-  assert.equal(keyframes.nodes[1].nodes[0].value, 'translateY(0)')
+  assert.doesNotMatch(css.toString(), /mobile-sidebar|match-detail-sheet|match-detail-slide-up/)
+  const root = css.nodes.find((node) => node.type === 'rule' && node.selector === 'html, body')
+  assert.ok(root)
+  assert.ok(!root.nodes.some((node) => node.prop === 'overscroll-behavior-y' || node.prop === 'height' || node.prop === 'max-height'))
 })
 
 test('sidebar, recent matches and all histories use shared interactions', async () => {
@@ -56,13 +50,14 @@ test('sidebar, recent matches and all histories use shared interactions', async 
     readSource('../app/players/[id]/page.tsx'),
     readSource('../components/match-detail-modal.tsx'),
   ])
-  assert.match(profile, /id="profile-navigation" className=\{`mobile-sidebar/)
+  assert.match(profile, /id="profile-navigation" className=\{`fixed/)
+  assert.doesNotMatch(profile, /mobile-sidebar/)
   assert.match(profile, /menuOpen \? 'translate-x-0' : '-translate-x-full'/)
   assert.match(profile, /aria-expanded=\{menuOpen\} aria-controls="profile-navigation"/)
   assert.equal((profile.match(/<MatchDetailButton /g) || []).length, 3)
   assert.equal((publicProfile.match(/<MatchDetailButton /g) || []).length, 1)
-  assert.match(modal, /className="match-detail-sheet relative max-h-\[94dvh\]/)
+  assert.match(modal, /fixed inset-0 z-\[60\] overflow-y-auto/)
+  assert.doesNotMatch(modal, /match-detail-sheet|max-h-|document.body.style.overflow/)
   assert.match(modal, /event.key === 'Escape'/)
-  assert.match(modal, /document.body.style.overflow = previousOverflow/)
   assert.match(modal, /previousFocus\?\.focus/)
 })
