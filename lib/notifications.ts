@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/client'
+import { getFirebasePushConfig } from '@/lib/firebase-client'
 
 export type ChallengeResponse = 'pending' | 'confirmed' | 'declined' | 'cancelled' | 'unavailable'
 
@@ -101,4 +102,86 @@ export async function fetchNotifications(userId: string | number): Promise<Leagu
 export async function markNotificationRead(id: string) {
   const { error } = await createClient().from('notifications').update({ is_read: true }).eq('id', id)
   if (error && !MISSING_SCHEMA_CODES.has(error.code)) throw error
+}
+
+const PUSH_DEVICE_KEY = 'riva-push-device'
+let pushMutation: Promise<unknown> = Promise.resolve()
+
+function mutatePush<T>(action: () => Promise<T>): Promise<T> {
+  const next = pushMutation.then(action, action)
+  pushMutation = next
+  return next
+}
+
+export function getPushDevice(): { userId: string; token: string } | null {
+  const stored = localStorage.getItem(PUSH_DEVICE_KEY)
+  if (!stored) return null
+  const value: unknown = JSON.parse(stored)
+  if (!value || typeof value !== 'object' || !('userId' in value) || typeof value.userId !== 'string'
+    || !('token' in value) || typeof value.token !== 'string') {
+    throw new Error('Neplatná lokálna registrácia push notifikácií.')
+  }
+  return { userId: value.userId, token: value.token }
+}
+
+export function refreshPushToken(userId: string, options: { restoreOnly?: boolean; enableAlerts?: boolean } = {}) {
+  return mutatePush(async () => {
+    if (options.restoreOnly && getPushDevice()?.userId !== userId) return null
+    const { getFirebasePushClient } = await import('@/lib/firebase-client')
+    const { getToken } = await import('firebase/messaging')
+    const { messaging, registration, vapidKey } = await getFirebasePushClient()
+    const token = await getToken(messaging, { vapidKey, serviceWorkerRegistration: registration })
+    if (!token) throw new Error('Firebase nevrátil token pre push notifikácie.')
+    const supabase = createClient()
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (authError) throw authError
+    if (!user || user.id !== userId) throw new Error('Prihlásenie sa zmenilo. Skús zapnúť notifikácie znova.')
+    const previous = getPushDevice()
+    const { error } = await supabase.rpc('register_push_token', { p_token: token, p_enable_alerts: options.enableAlerts ?? false })
+    if (error) throw error
+    if (previous?.userId === userId && previous.token !== token) {
+      const { error: deleteError } = await supabase.from('user_push_tokens').delete().eq('token', previous.token).eq('user_id', userId)
+      if (deleteError) throw deleteError
+    }
+    localStorage.setItem(PUSH_DEVICE_KEY, JSON.stringify({ userId, token }))
+    window.dispatchEvent(new Event('riva-push-changed'))
+    return { messaging, registration }
+  })
+}
+
+export async function enablePushNotifications(userId: string) {
+  if (!window.isSecureContext || !('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) {
+    throw new Error('Push notifikácie vyžadujú HTTPS a podporovaný prehliadač.')
+  }
+  getFirebasePushConfig()
+  const permission = await Notification.requestPermission()
+  if (permission !== 'granted') {
+    throw new Error(permission === 'denied'
+      ? 'Notifikácie sú zablokované. Povoľ ich v nastaveniach prehliadača alebo systému.'
+      : 'Povolenie notifikácií nebolo udelené.')
+  }
+  return refreshPushToken(userId, { enableAlerts: true })
+}
+
+export function disablePushNotifications() {
+  return mutatePush(async () => {
+    const device = getPushDevice()
+    if (!device) return
+    const { error } = await createClient().from('user_push_tokens').delete().eq('token', device.token).eq('user_id', device.userId)
+    if (error) throw error
+    localStorage.removeItem(PUSH_DEVICE_KEY)
+    window.dispatchEvent(new Event('riva-push-changed'))
+    const { getFirebasePushClient } = await import('@/lib/firebase-client')
+    const { deleteToken } = await import('firebase/messaging')
+    const { messaging } = await getFirebasePushClient()
+    if (!await deleteToken(messaging)) throw new Error('Token bol odstránený z databázy, ale Firebase registráciu sa nepodarilo zrušiť.')
+  })
+}
+
+export async function sendTestPushNotification() {
+  const response = await fetch('/api/push/test', { method: 'POST' })
+  const result = await response.json()
+  if (!response.ok) throw new Error(result.error || 'Testovaciu notifikáciu sa nepodarilo odoslať.')
+  if (typeof result.sent !== 'number' || result.sent < 1) throw new Error('Server nepotvrdil odoslanie testovacej notifikácie.')
+  return result.sent
 }

@@ -5,6 +5,8 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { RivaLogo } from '@/components/riva-logo'
 import { InstallAppButton } from '@/components/install-app-button'
+import { PushNotificationSettings } from '@/components/push-notifications'
+import { disablePushNotifications } from '@/lib/notifications'
 import { playerAccentColor } from '@/lib/player-accent'
 import { useRouter } from 'next/navigation'
 import {
@@ -58,7 +60,7 @@ import { fetchIncomingRequests } from '@/lib/friendships'
 import { removeProfileAvatar, saveProfileAvatar } from '@/lib/profile-avatar'
 import { getErrorMessage } from '@/lib/errors'
 import { RecentFormCard } from '@/components/recent-form-card'
-import { QRCodeSVG } from 'qrcode.react'
+import { PlayerQrCard } from '@/components/player-qr-card'
 import { MatchDetailModal, matchDetailKey } from '@/components/match-detail-modal'
 import { MatchDetailButton } from '@/components/match-detail-button'
 import { fetchNotifications, markNotificationRead, type LeagueNotification } from '@/lib/notifications'
@@ -66,6 +68,7 @@ import { fetchUnreadMessagesBySender } from '@/lib/messages'
 import { FriendsChat } from '@/components/friends-chat'
 import { fetchIncomingPairInvitations, respondToPairInvitation, type PairInvitation, type PlayerPair } from '@/lib/pairs'
 import { fetchParticipantMatches, fetchProfileMatches, isAwaitingResponseFrom, isCountedMatch, respondToMatchResult, submitMatchResult, type ProfileMatch } from '@/lib/profile-matches'
+import { ProfileServeStatistics } from '@/components/profile-serve-statistics'
 import { validateMatchScore } from '@/lib/match-score'
 import { EMPTY_PLAYER_SLOT, MATCH_PLAYER_FIELDS, DUPLICATE_PLAYER_ERROR, normalizePlayerName, validateMatchPlayers, type MatchPlayerField, type MatchPlayerSlot, type MatchPlayerSlots } from '@/lib/match-players'
 import { fetchUpcomingPairChallenges, respondToPairChallenge } from '@/lib/pair-challenges'
@@ -482,8 +485,15 @@ export default function ProfilePage() {
   }
 
   async function handleLogout() {
-    await createClient().auth.signOut()
-    router.push('/auth/login')
+    try {
+      await disablePushNotifications()
+      const { error } = await createClient().auth.signOut()
+      if (error) throw error
+      router.push('/auth/login')
+    } catch (error) {
+      console.error('Odhlásenie zlyhalo:', error)
+      window.alert(getErrorMessage(error, 'Odhlásenie sa nepodarilo dokončiť.'))
+    }
   }
 
   return (
@@ -529,6 +539,9 @@ export default function ProfilePage() {
             </div>
           </header>
 
+          <div className="px-4 md:px-8 lg:px-10">
+            <PushNotificationSettings visible={activeTab === 'overview' || (activeTab === 'settings' && settingsSection === 'notifications')} pushAllowed={settings.pushAlerts} onEnabled={() => setSettings((current) => ({ ...current, pushAlerts: true }))} />
+          </div>
           {activeTab === 'matches' ? <div className="mx-auto flex max-w-[1280px] justify-end px-4 pt-4 md:px-8 lg:px-10"><button type="button" onClick={() => setMatchModalOpen(true)} className="rounded-lg bg-[#ccff00] px-4 py-2.5 text-xs font-black text-[#10150d]">Zadať výsledok</button></div> : null}
           <div key={activeTab} className="mx-auto max-w-[1280px] px-4 pb-28 pt-6 md:px-8 md:py-8 lg:px-10 lg:py-10">
             {activeTab === 'rankings' ? <RankingsView onChallenge={(opponent) => { setChallengeForm((current) => ({ ...current, opponentId: opponent.id, opponentName: opponent.name })); setActiveTab('challenges') }} onMessage={(opponent) => openConversation(opponent)} /> : activeTab === 'tournaments' ? <TournamentsView /> : activeTab === 'opponents' ? <FindPlayersView currentPlayerId={player.profile_id === null ? undefined : String(player.profile_id)} currentPlayerAvatarUrl={avatarUrl} defaultRegion={player.region} onMessage={(opponent) => openConversation(opponent)} /> : activeTab === 'settings' ? <SettingsView language={language} setLanguage={setLanguage} t={t} onSaveEmail={(email) => setPlayer((current) => ({ ...current, email }))} settings={settings} setSettings={setSettings} section={settingsSection} setSection={setSettingsSection} arenas={arenas} toast={settingsToast} setToast={setSettingsToast} deleteModalOpen={deleteModalOpen} setDeleteModalOpen={setDeleteModalOpen} /> : activeTab === 'messages' ? <MessagesView category={messagesCategory} setCategory={setMessagesCategory} notifications={notifications} pairInvitations={incomingPairInvitations} pairInvitationsError={incomingPairInvitationsError} onMarkRead={markRead} myProfileId={player.profile_id} activeFriendId={activeConversationId} setActiveFriendId={setActiveConversationId} onChallenge={(friend) => { setChallengeForm((current) => ({ ...current, opponentId: friend.id, opponentName: friend.name })); setChallengeModalOpen(true); setActiveTab('challenges') }} /> : activeTab === 'arenas' ? <ArenasView arenas={visibleArenas} totalCount={arenas.length} isLoading={arenasLoading} loadError={Boolean(arenasError)} isAdmin={isLeagueAdmin} region={arenaRegion} setRegion={setArenaRegion} search={arenaSearch} setSearch={setArenaSearch} onChallenge={openArenaChallenge} onMatch={openArenaMatch} onSetHome={setHomeArena} onSaved={(saved) => { setArenas((current) => [...current.filter((item) => item.id !== saved.id), saved].sort((a, b) => a.name.localeCompare(b.name))); void mutateArenas() }} onDeleted={(id) => { setArenas((current) => current.filter((item) => item.id !== id)); void mutateArenas() }} /> : activeTab === 'matches' ? <MatchesView matches={matchRecords} setMatches={setMatchRecords} initialArena={matchArena} modalOpen={matchModalOpen} setModalOpen={setMatchModalOpen} onMatchSaved={() => mutateProfileMatches()} onOpenMatch={setDetailMatchId} /> : activeTab === 'challenges' ? showPairsView ? <PairsView currentPlayerId={player.profile_id === null ? null : String(player.profile_id)} onBack={() => setShowPairsView(false)} onChallenge={(pair: PlayerPair) => { setChallengeTargetPair({ player1Id: pair.player_1_id, player1Name: pair.player_1.full_name, player2Id: pair.player_2_id, player2Name: pair.player_2.full_name }); setShowPairsView(false) }} /> : <PairChallengeView userId={player.profile_id === null ? '' : String(player.profile_id)} userName={player.username} arenas={arenas} initialArena={challengeForm.arena} onOpenPairs={() => setShowPairsView(true)} initialChallengedPair={challengeTargetPair} onInitialPairApplied={setChallengeTargetPair} /> : activeTab === 'profile' ? <ProfileView player={player} phone={settings.phone} avatarUrl={avatarUrl} avatarInputRef={avatarInputRef} handleAvatarChange={handleAvatarChange} removeAvatar={removeAvatar} matches={matches} profileMatches={profileMatches} profileMatchesLoading={profileMatchesLoading} profileMatchesError={profileMatchesError} matchStats={matchStats} matchModalOpen={matchModalOpen} setMatchModalOpen={setMatchModalOpen} matchForm={matchForm} setMatchForm={setMatchForm} submitMatch={submitMatch} approveMatch={approveMatch} onOpenMatch={setDetailMatchId} /> : <>
@@ -537,6 +550,7 @@ export default function ProfilePage() {
               <button type="button" onClick={() => setActiveTab('matches')} className="group inline-flex items-center gap-2 self-start rounded-lg border border-spl-border bg-slate-800/90 px-4 py-2.5 text-xs font-bold text-white/65 hover:border-[#ccff00]/50 hover:text-white sm:self-auto">{t('Zobraziť moje zápasy', 'View my matches')} <span className="transition-colors group-hover:text-[#ccff00]">&gt;</span></button>
             </div>
 
+            <PlayerQrCard profileId={player.profile_id} name={overviewName} />
             <section id="profile" className="mt-8 flex flex-col gap-5 rounded-2xl border border-white/[0.08] bg-[#111722] p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6"><div className="flex items-center gap-4"><AvatarPreview src={avatarUrl} initials={player.username.slice(0, 1)} /><div><p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/35">Môj profil</p><p className="mt-1 font-bold">{player.username}</p><p className="mt-1 text-xs text-white/40">{player.region} · {player.level}</p></div></div></section>
 
             <div className="mt-6 grid gap-3 md:mt-9 md:grid-cols-2 md:gap-4 xl:grid-cols-4">
@@ -1060,35 +1074,17 @@ const ProfileView = memo(function ProfileView({ player, phone, avatarUrl, avatar
   const { data: arenas = [] } = useSWR<Arena[]>('arenas', fetchArenas)
   const { data: profile } = useSWR(player.email ? ['profile-bio', player.email] : null, ([, email]) => fetchPlayerProfile(email))
   const { language, t } = useLanguage()
-  const [profileUrl, setProfileUrl] = useState('')
   const effectiveVenueId = player.home_venue_id || player.auto_venue_id
   const homeVenue = arenas.find((arena) => arena.id === effectiveVenueId)
   const homeVenueDetail = !player.home_venue_id && player.auto_venue_id ? 'Automaticky podľa najnavštevovanejšieho klubu' : undefined
 
-  useEffect(() => {
-    if (player.profile_id === null) {
-      setProfileUrl('')
-      return
-    }
-    setProfileUrl(`${window.location.origin}/players/${encodeURIComponent(String(player.profile_id))}`)
-  }, [player.profile_id])
-
   return <div className="mx-auto max-w-[1120px]">
     <div className="mb-8 flex items-end justify-between"><div><p className="text-xs font-bold uppercase tracking-[0.22em] text-[#ccff00]">RIVA /</p><h1 className="mt-2 text-3xl font-black">Môj profil</h1></div><div className="hidden items-center gap-3 sm:flex"><div className="text-right"><p className="font-bold">{player.username}</p><p className="text-xs text-white/45">{player.region}</p></div><AvatarPreview src={avatarUrl} initials={player.username.slice(0, 1)} /></div></div>
     <section className="rounded-2xl border border-white/[0.08] bg-[#111722] p-6 sm:p-10"><div className="flex flex-col gap-6 sm:flex-row sm:items-center"><div className="relative"><AvatarPreview src={avatarUrl} initials={player.username.slice(0, 1)} size="lg" /><label htmlFor="profile-avatar-upload" className="absolute -bottom-2 -right-2 flex h-12 w-12 cursor-pointer items-center justify-center rounded-xl bg-[var(--profile-avatar-color,#ccff00)] text-xl font-black text-[#10150d]">⌾</label></div><div className="flex-1"><h2 className="text-4xl font-black">{player.username}</h2><p className="mt-1 text-lg text-white/45">{player.email}</p><div className="mt-4 flex flex-wrap gap-2"><span className="rounded-lg bg-[var(--profile-avatar-color,#ccff00)] px-3 py-2 text-xs font-black text-[#10150d]">{player.region}</span><span className="rounded-lg bg-[#1d2b44] px-3 py-2 text-xs font-bold">{player.level}</span><span className="rounded-lg border border-[var(--profile-avatar-color,#ccff00)] bg-white/5 px-3 py-2 text-xs font-bold text-[var(--profile-avatar-color,#ccff00)]">{matchStats.elo} ELO</span></div></div></div></section>
-    <section aria-labelledby="profile-qr-heading" className="mt-6 flex flex-col items-center gap-6 rounded-2xl border border-[#ccff00]/20 bg-gradient-to-br from-[#111722] to-[#131d22] p-6 shadow-[0_12px_40px_rgba(0,0,0,0.18)] sm:flex-row sm:justify-between sm:p-8">
-      <div className="max-w-lg">
-        <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#ccff00]">RIVA / IDENTIFIKÁCIA HRÁČA</p>
-        <h2 id="profile-qr-heading" className="mt-2 text-2xl font-black">Tvoj osobný QR kód</h2>
-        <p className="mt-2 text-sm leading-6 text-white/55">Naskenuj svoj kód do kiosku a začni hru.</p>
-      </div>
-      <div className="flex min-h-[216px] min-w-[216px] items-center justify-center rounded-2xl border border-white/10 bg-white p-3 shadow-lg">
-        {profileUrl ? <QRCodeSVG value={profileUrl} size={192} level="M" bgColor="#ffffff" fgColor="#061016" title={`QR kód profilu hráča ${player.username}`} /> : <span className="text-xs text-slate-500">Načítavam QR kód…</span>}
-      </div>
-    </section>
     <section className="mt-6 rounded-xl border border-white/[0.08] bg-[#111722] p-5"><h2 className="text-sm font-bold">{t('Profilový popis', 'About me')}</h2><p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-white/65">{profile?.bio.trim() || t('Bio zatiaľ nie je vyplnené.', 'No Bio added yet.')}</p></section><input ref={avatarInputRef} id="profile-avatar-upload" type="file" accept="image/*" onChange={handleAvatarChange} className="sr-only" />
     <div className="mt-8 grid gap-6 lg:grid-cols-2"><InfoCard title="Osobné údaje"><InfoRow label="Meno:" value={player.username} /><InfoRow label="Kraj:" value={player.region} /><InfoRow label="Úroveň:" value={player.level} /><HomeArenaInfoRow email={player.email} arenas={arenas} homeVenueId={player.home_venue_id} autoVenueId={player.auto_venue_id} /><DominantHandInfoRow email={player.email} value={player.dominant_hand} /><InfoRow label="Telefón:" value={phone || 'Neuvedené'} /><InfoRow label="Dátum registrácie:" value={player.created_at ? new Intl.DateTimeFormat(language === 'en' ? 'en-GB' : 'sk-SK', { day: 'numeric', month: 'long', year: 'numeric' }).format(new Date(player.created_at)) : 'Neuvedené'} /></InfoCard><InfoCard title="Štatistiky ELO"><InfoRow label="Aktuálne ELO:" value={`${player.elo} ELO`} highlight /><InfoRow label="ELO od registrácie:" value={`${player.career_elo} ELO`} /><InfoRow label="Najvyššie ELO:" value={`${player.highest_elo} ELO`} /><InfoRow label="Aktuálna sezóna:" value={formatSeason(player.elo_season_start, language)} /><InfoRow label="Krajská pozícia:" value="1. miesto" /><InfoRow label="Celoslovenská pozícia:" value="1. miesto" /></InfoCard></div>
-    <div className="mt-8"><h2 className="text-xl font-black">Štatistiky zápasov</h2></div><section className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><MatchStatCard label="Odohraté zápasy" value={profileMatchesLoading || profileMatchesError ? '–' : String(matchStats.total)} detail="Celkový počet zápasov" /><MatchStatCard label="Výhry" value={profileMatchesLoading || profileMatchesError ? '–' : String(matchStats.wins)} detail="Vyhraté zápasy" /><MatchStatCard label="Prehry" value={profileMatchesLoading || profileMatchesError ? '–' : String(matchStats.losses)} detail="Ostatné zápasy" /><MatchStatCard label="Úspešnosť" value={profileMatchesLoading || profileMatchesError ? '–' : `${matchStats.winRate}%`} detail="Win rate" progress={matchStats.winRate} /><MatchStatCard label="Vyhraté sety" value={profileMatchesLoading || profileMatchesError ? '–' : String(matchStats.wonSets)} detail="Celkový počet" /><MatchStatCard label="Prehraté sety" value={profileMatchesLoading || profileMatchesError ? '–' : String(matchStats.lostSets)} detail="Celkový počet" /><MatchStatCard label="Vyhraté gemy" value={profileMatchesLoading || profileMatchesError ? '–' : String(matchStats.wonGames)} detail="Celkový počet" /><MatchStatCard label="Prehraté gemy" value={profileMatchesLoading || profileMatchesError ? '–' : String(matchStats.lostGames)} detail="Celkový počet" /><RecentFormCard matches={profileMatches.filter(isCountedMatch)} isLoading={profileMatchesLoading} error={profileMatchesError} /></section><section className="mt-8 rounded-2xl border border-white/[0.08] bg-[#111722] p-6 sm:p-8">
+    <div className="mt-8"><h2 className="text-xl font-black">Štatistiky zápasov</h2></div>
+    <section className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><MatchStatCard label="Odohraté zápasy" value={profileMatchesLoading || profileMatchesError ? '–' : String(matchStats.total)} detail="Celkový počet zápasov" /><MatchStatCard label="Výhry" value={profileMatchesLoading || profileMatchesError ? '–' : String(matchStats.wins)} detail="Vyhraté zápasy" /><MatchStatCard label="Prehry" value={profileMatchesLoading || profileMatchesError ? '–' : String(matchStats.losses)} detail="Ostatné zápasy" /><MatchStatCard label="Úspešnosť" value={profileMatchesLoading || profileMatchesError ? '–' : `${matchStats.winRate}%`} detail="Win rate" progress={matchStats.winRate} /><MatchStatCard label="Vyhraté sety" value={profileMatchesLoading || profileMatchesError ? '–' : String(matchStats.wonSets)} detail="Celkový počet" /><MatchStatCard label="Prehraté sety" value={profileMatchesLoading || profileMatchesError ? '–' : String(matchStats.lostSets)} detail="Celkový počet" /><MatchStatCard label="Vyhraté gemy" value={profileMatchesLoading || profileMatchesError ? '–' : String(matchStats.wonGames)} detail="Celkový počet" /><MatchStatCard label="Prehraté gemy" value={profileMatchesLoading || profileMatchesError ? '–' : String(matchStats.lostGames)} detail="Celkový počet" />    <ProfileServeStatistics profileId={player.profile_id} /><RecentFormCard matches={profileMatches.filter(isCountedMatch)} isLoading={profileMatchesLoading} error={profileMatchesError} /></section><section className="mt-8 rounded-2xl border border-white/[0.08] bg-[#111722] p-6 sm:p-8">
       <div className="flex items-end justify-between border-b border-white/[0.08] pb-5">
         <div>
           <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/35">Výsledky</p>

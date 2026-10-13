@@ -89,8 +89,8 @@ export function MatchStartView() {
 
         <button type="button" onClick={() => setIsScanning(true)} className={`${cardClass} border-violet-300/20 hover:border-violet-300/60 hover:shadow-[0_16px_45px_rgba(196,181,253,0.1)]`}>
           <span className="flex h-20 w-20 items-center justify-center rounded-2xl bg-violet-300/10 text-violet-200"><ScanQrCode size={38} aria-hidden="true" /></span>
-          <span className="mt-6 text-2xl font-black">{t('Naskenuj svoj RIVA QR kód', 'Scan your RIVA QR code')}</span>
-          <span className="mt-3 text-sm leading-6 text-white/55">{t('Ukáž kamere svoj osobný QR kód z profilu a rýchlo identifikuj hráča.', 'Show the camera your personal profile QR code to identify the player.')}</span>
+          <span className="mt-6 text-2xl font-black">{t('QR ligový zápas', 'QR league match')}</span>
+          <span className="mt-3 text-sm leading-6 text-white/55">{t('Naskenuj štyroch hráčov do dvoch tímov. Po zápase všetci potvrdia výsledok vo svojom profile a započíta sa ELO.', 'Scan four players into two teams. After the match everyone approves the result in their profile to apply ELO.')}</span>
           <span className="mt-auto flex items-center gap-2 pt-6 text-sm font-bold text-violet-200">{t('Spustiť skener', 'Start scanner')}<ArrowRight size={18} aria-hidden="true" className="transition-transform group-hover:translate-x-1" /></span>
         </button>
       </div>

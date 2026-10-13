@@ -1,4 +1,5 @@
 // Pure match-detail model (no Supabase imports) so it can be unit-tested in isolation.
+import type { RecordedMatchStatistics } from './match-statistics'
 
 export const ELO_K_FACTOR = 32
 export const DELETED_PLAYER_NAME = 'Vymazaný hráč'
@@ -66,6 +67,7 @@ export type MatchDetailTeam = {
 }
 
 export type MatchDetail = {
+  statistics?: RecordedMatchStatistics | null
   id: string
   date: string | null
   createdAt: string | null

@@ -50,6 +50,18 @@ test('confirmed pair challenge gets a one-time kiosk PIN', async () => {
     const playerScoreMigration = await readFile(new URL('./044_live_match_players_sets.sql', import.meta.url), 'utf8')
     await db.exec(playerScoreMigration)
     await db.exec(playerScoreMigration)
+    const finishMigration = await readFile(new URL('./045_live_match_finish_statistics.sql', import.meta.url), 'utf8')
+    await db.exec(finishMigration)
+    await db.exec(finishMigration)
+    const serveStatisticsMigration = await readFile(new URL('./046_live_match_serve_statistics.sql', import.meta.url), 'utf8')
+    await db.exec(serveStatisticsMigration)
+    await db.exec(serveStatisticsMigration)
+    const durationStatisticsMigration = await readFile(new URL('./047_live_match_duration_and_stats.sql', import.meta.url), 'utf8')
+    await db.exec(durationStatisticsMigration)
+    await db.exec(durationStatisticsMigration)
+    const setStatisticsMigration = await readFile(new URL('./050_live_match_set_statistics.sql', import.meta.url), 'utf8')
+    await db.exec(setStatisticsMigration)
+    await db.exec(setStatisticsMigration)
 
     await db.exec('set role anon')
     const quickGames = []
@@ -79,6 +91,37 @@ test('confirmed pair challenge gets a one-time kiosk PIN', async () => {
     assert.equal(extendedScore.team_a_sets, 1)
     assert.equal(extendedScore.serving_player, 2)
     assert.equal(extendedScore.team_a_player2_name, 'Hráč 2')
+    const { rows: [finished] } = await db.query(
+      `update public.live_matches set team_a_sets = 2, team_a_games = 0, team_b_games = 0,
+        completed_sets = '[[6,3],[6,4]]', team_a_player1_points = 30, team_a_player2_points = 20,
+        team_a_player1_serve_points_won = 7, team_b_player2_serve_points_lost = 4,
+        team_a_total_points_won = 55, team_a_longest_point_streak = 8,
+        team_a_break_points = 3, team_a_break_points_converted = 2, team_a_break_points_missed = 1,
+        started_at = '2026-10-13T10:00:00Z', finished_at = '2026-10-13T11:00:00Z'
+        where id = $1 returning team_a_sets, completed_sets, team_a_player1_points,
+        team_a_player1_serve_points_won, team_b_player2_serve_points_lost, statistics_complete,
+        team_a_total_points_won, team_a_longest_point_streak, team_a_break_points,
+        team_a_break_points_converted, team_a_break_points_missed, started_at, finished_at`,
+      [quickGames[1].id],
+    )
+    assert.equal(finished.team_a_sets, 2)
+    assert.deepEqual(finished.completed_sets, [[6, 3], [6, 4]])
+    assert.equal(finished.team_a_player1_points, 30)
+    assert.equal(finished.team_a_player1_serve_points_won, 7)
+    assert.equal(finished.team_b_player2_serve_points_lost, 4)
+    assert.equal(finished.team_a_total_points_won, 55)
+    assert.equal(finished.team_a_longest_point_streak, 8)
+    assert.equal(finished.team_a_break_points, 3)
+    assert.equal(finished.team_a_break_points_converted, 2)
+    assert.equal(finished.team_a_break_points_missed, 1)
+    assert.equal(new Date(finished.finished_at).getTime() - new Date(finished.started_at).getTime(), 3600000)
+    assert.equal(finished.statistics_complete, true)
+    await assert.rejects(db.query('update public.live_matches set team_a_game_score = 15 where id = $1', [quickGames[1].id]))
+    await assert.rejects(db.query('update public.live_matches set team_a_sets = 1 where id = $1', [quickGames[1].id]))
+    await assert.rejects(db.query('update public.live_matches set team_a_player1_serve_points_won = 8 where id = $1', [quickGames[1].id]))
+    await assert.rejects(db.query('update public.live_matches set team_a_total_points_won = 56 where id = $1', [quickGames[1].id]))
+    await assert.rejects(db.query('update public.live_matches set team_b_player2_serve_points_lost = -1 where id = $1', [quickGames[0].id]))
+    await assert.rejects(db.query('update public.live_matches set team_a_break_points = 4 where id = $1', [quickGames[0].id]))
     await assert.rejects(db.query('update public.live_matches set serving_player = 3 where id = $1', [quickGames[0].id]))
     await assert.rejects(db.query('update public.live_matches set team_a_sets = -1 where id = $1', [quickGames[0].id]))
     await assert.rejects(db.query("insert into public.live_matches (match_pin) values ('4829')"))

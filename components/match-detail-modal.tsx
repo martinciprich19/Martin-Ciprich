@@ -6,6 +6,7 @@ import { AlertTriangle, Calendar, Check, Clock, Hourglass, MapPin, Swords, Trend
 import { useLanguage } from '@/components/language-provider'
 import { PlayerAvatar as GenderAvatar } from '@/components/player-avatar'
 import { fetchArenas } from '@/lib/arenas'
+import { MatchStatistics } from '@/components/match-statistics'
 import { fetchMatchDetail, type MatchDetail, type MatchDetailPlayer, type MatchDetailStatus } from '@/lib/match-details'
 
 export const matchDetailKey = (matchId: string) => ['match-detail', matchId] as const
@@ -137,6 +138,10 @@ export function MatchDetailModal({ matchId, currentProfileId, onClose }: { match
           </section>
 
           {/* ELO */}
+          {match.statistics ? <section className="rounded-xl border border-white/[0.08] bg-[#131924] p-4 sm:p-6">
+            {!match.statistics.statistics_complete ? <p role="status" className="mb-4 text-sm text-amber-200">{t('Podrobné štatistiky boli zaznamenané iba pre časť zápasu.', 'Detailed statistics were recorded for only part of this match.')}</p> : null}
+            <MatchStatistics match={match.statistics} />
+          </section> : <p role="status" className="text-sm text-white/50">{t('Podrobné bodové štatistiky tohto zápasu neboli zaznamenané.', 'Detailed point statistics were not recorded for this match.')}</p>}
           <section className="rounded-xl border border-white/[0.08] bg-[#131924] p-4 sm:p-6">
             <h3 className="flex items-center gap-2 text-sm font-black"><TrendingUp size={15} className="text-[#ccff00]" aria-hidden="true" />{t('Zmeny ELO', 'ELO changes')}</h3>
             {match.status !== 'confirmed' ? <p className="mt-2 text-xs text-white/45">{match.status === 'pending' ? t('ELO a štatistiky sa započítajú až po potvrdení výsledku všetkými hráčmi.', 'ELO and statistics are applied once all players confirm the result.') : t('Tento zápas sa nezapočítava do ELO.', 'This match does not count towards ELO.')}</p> : null}

@@ -6,7 +6,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: 'RIVA Padel',
     short_name: 'RIVA Padel',
     description: 'Hraj. Vyzývaj. Zlepšuj sa. Staň sa najlepším.',
-    start_url: '/',
+    start_url: '/profile?view=overview',
     scope: '/',
     display: 'standalone',
     background_color: '#0b0f17',

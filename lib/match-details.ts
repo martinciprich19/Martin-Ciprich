@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/client'
 import { withProfileGender } from '@/lib/profile-gender-query'
+import { parseRecordedMatchStatistics } from '@/lib/live-match-scoring'
 import { buildMatchDetail, parseIdList, type MatchDetail, type MatchDetailProfileRow, type MatchDetailRow } from '@/lib/match-detail-model'
 
 export * from '@/lib/match-detail-model'
@@ -36,5 +37,7 @@ export async function fetchMatchDetail(matchId: string): Promise<MatchDetail> {
     profiles = (result.data ?? []) as unknown as MatchDetailProfileRow[]
   }
 
-  return buildMatchDetail(match, profiles)
+  const { data: statisticsRow, error: statisticsError } = await supabase.from('matches').select('live_statistics').eq('id', matchId).maybeSingle()
+  if (statisticsError) throw statisticsError
+  return { ...buildMatchDetail(match, profiles), statistics: parseRecordedMatchStatistics(statisticsRow?.live_statistics) }
 }

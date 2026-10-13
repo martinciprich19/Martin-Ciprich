@@ -1,0 +1,115 @@
+# Finished-match statistics
+
+The personal player QR code is shown near the top of Overview, not in the
+Profile tab. "Enlarge QR code" opens a responsive modal with the same profile
+URL, white scan margin, close button and native Escape/focus handling.
+The installed app starts at `/profile?view=overview`; signed-out users are
+redirected to login by the existing authentication guard.
+
+Apply [053_extended_match_statistics.sql](../scripts/053_extended_match_statistics.sql)
+after 052 before running the updated app. Service games won/lost are recorded
+for the team serving the game-ending point (manual changes use the current server),
+both match-wide and per set, and restored by undo. Hold serve is service games won
+divided by all service games, not points won on serve. Older games remain unknown.
+Official QR results receive an immutable `matches.live_statistics` snapshot
+in the same transaction as the final point. Existing linked finished results
+are backfilled only from recorded counters; no capability hashes are copied.
+The official match modal reuses the full match/set comparison and serving-player
+cards, including points, return points, streaks, break chances/conversions/misses
+and hold serve. Manual results without live records display an unavailable notice.
+
+The profile's own-serve card sums won/lost points for the participant's exact
+team/player slot across all confirmed/approved results with complete recordings.
+It uses a database aggregate (not a limited client page or an average of match
+percentages), respects RLS and refreshes after confirmation. Pending, rejected,
+unrecorded and partially recorded matches are excluded, with coverage displayed.
+Zero opportunities is a dash; 0 wins out of positive opportunities is 0%.
+Apply [054_profile_serve_return_statistics.sql](../scripts/054_profile_serve_return_statistics.sql)
+after 053 for the two cards inside the match-statistics grid: "Úspešnosť vlastného
+podania" uses individual serve points; "Úspešnosť súperovho podania" uses points
+won by the participant's pair on opponents' serve. The latter is opposing
+players' serve points lost divided by their total serve points, not the opposing
+team's serve success or personal receiving attribution. Both rates are weighted
+across all fully recorded confirmed matches and show recording coverage.
+Individual rally winners and individual receiving points are not tracked by
+the team buttons: only the actual server's won/lost points are attributed to
+an individual. Team total points must not be presented as personal rally wins.
+
+The live scoreboard shows the serve draw only before the initial server is
+chosen. The draw cannot be repeated or undone; point undo and manual server
+selection remain available. There is no persistent synchronization badge.
+Removing the draw row gives its space to the flexible team panels; score digits
+and player cards scale with their available height. Save errors remain visible.
+
+League matches (QR registration or challenge/PIN) show profile avatars next to
+names on the live court, final result and player-stat cards. Quick games retain
+text-only names and numbered stat cards. Apply
+[051_live_match_player_avatars.sql](../scripts/051_live_match_player_avatars.sql)
+after 048. The RPC resolves real participant IDs, never names; it exposes only
+ordered avatar URLs to QR participants, challenge participants, or an activated
+PIN scoreboard. Players without a photo use the existing initial avatar.
+Photo load failures have an explicit retry notice and do not block scoring.
+
+Apply [052_qr_matches_without_login.sql](../scripts/052_qr_matches_without_login.sql)
+after 048, 050 and 051 to scan all four players without logging into the scanner.
+Scanning identifies profiles, not account authentication. The creating browser
+stores a random device capability in localStorage before creation; only its hash
+is stored in the database. Score writes include the capability in a request
+header, never the match URL. Other devices can view these scoreboards and avatars
+but cannot score them without that capability (or the existing organizer account).
+Reloading in the same browser preserves scoring access; clearing site storage
+loses the device key. The first scanned participant is the legacy `qr_created_by`
+reference, not a claim that they logged in or approved the match.
+Finishing submits a pending result with **zero approvals**; ELO still requires
+all four players to approve in their own authenticated profiles.
+Existing login-created QR matches retain their participant/organizer access.
+
+QR setup loads the existing arena directory. Focusing the arena input or opening
+its dropdown shows available arenas; typing filters names, cities and addresses
+without case/accent sensitivity. Arrow keys and Enter select an option; Escape
+closes the list. Custom arena names remain supported. Loading errors include a
+retry action and do not block manual entry. No database migration is needed.
+
+The camera viewfinder covers the central 70% of the shorter video dimension.
+The scanner's crop and custom overlay share the same coordinates, including
+portrait/landscape streams, object-cover scaling and mirrored front cameras.
+Only that crop is decoded (no whole-frame fallback). Accepted player profiles
+animate into their slots, flash a confirmation and vibrate briefly where supported.
+Unknown or duplicate profiles do not produce success feedback. Reduced-motion
+preferences disable arrival animations. After the fourth scan, a 450 ms confirmation
+precedes automatic match creation; closing the scanner cancels that timer.
+
+Apply [050_live_match_set_statistics.sql](../scripts/050_live_match_set_statistics.sql)
+after 048 to persist per-set statistics. The filter defaults to **Entire match**;
+**Set 1 / Set 2 / Set 3** switches both team and player stats. Set streaks restart
+at each set boundary, while the match-wide streak can span sets. Set start/end
+timestamps and counters are saved with every point and included in undo.
+Game reset retains recorded points, just like match-wide counters.
+Old completed sets and sets already in progress at upgrade show an explicit
+unavailable message; their breakdown cannot be reconstructed. Later sets can
+still be tracked independently. No totals are fabricated for missing sets.
+
+The finished live match uses a two-team comparison with centered labels and
+mirrored lime/blue bars, followed by separate serving-stat cards for all four
+players. On small screens the player groups stack; the team comparison retains
+both columns. The result screen scrolls independently of the fixed live court.
+
+All values cover the entire match, not a single set. Set chips and duration
+remain visible in the result summary. Existing save/approval states and the
+warning for partially recorded historical matches are preserved.
+
+- Serve success = recorded serve points won / all recorded serve points.
+- Team return points won = the opposing team's recorded serve points lost.
+- Total-point share = team points won / both teams' total points won.
+- Break conversion = converted / (converted + missed). A chance is a rally
+  where the receiving team has 40 before the point, including 40–40.
+- Longest streak and each player's serve counters use existing persisted stats.
+- No opportunities is displayed as a dash, not a claimed 0% success rate.
+- Bars compare relative values; rates compare percentages, not sample sizes.
+  A colored larger value is not necessarily better (e.g. serve points lost).
+
+Untracked winners, errors, net points and first/second serves
+are not inferred or displayed.
+
+Validate calculations with `node --test scripts/match-statistics.test.mjs
+scripts/live-match-scoring.test.mjs`; use the production build to check the UI.

@@ -11,21 +11,27 @@ const navItems = [
   { label: 'Turnaje', href: '/tournaments' },
 ]
 
-export function PublicShell({ children }: { children: React.ReactNode }) {
+export function PublicShell({ children, showAuthLinks = true, logoHref = '/' }: {
+  children: React.ReactNode
+  showAuthLinks?: boolean
+  logoHref?: string
+}) {
   const [menuOpen, setMenuOpen] = useState(false)
 
   return (
     <main className="relative isolate min-h-screen bg-[#061016] text-white">
       <div className="fixed inset-0 -z-20 bg-[url('/padel-hero.png')] bg-cover bg-[position:68%_center] opacity-35" />
       <div className="fixed inset-0 -z-10 bg-[linear-gradient(90deg,#061016_0%,rgba(6,16,22,.85)_40%,rgba(6,16,22,.6)_100%)]" />
-      <header className="mx-auto flex w-full max-w-[1260px] items-center justify-between gap-3 px-4 py-6 sm:px-6 lg:px-10 lg:py-8">
-        <Link href="/" aria-label="RIVA Padel domov"><RivaLogo size="header" /></Link>
-        <nav className="hidden items-center gap-7 lg:flex" aria-label="Hlavná navigácia">
+      <header className="relative mx-auto flex w-full max-w-[1260px] items-center justify-between gap-3 px-4 py-6 sm:px-6 lg:px-10 lg:py-8">
+        <Link href={logoHref} aria-label={logoHref === '/' ? 'RIVA Padel domov' : 'RIVA Padel prehľad'}><RivaLogo size="header" /></Link>
+        <nav className="hidden items-center gap-7 lg:absolute lg:left-1/2 lg:flex lg:-translate-x-1/2" aria-label="Hlavná navigácia">
           {navItems.map((item) => <Link key={item.label} href={item.href} className="text-[11px] font-medium text-white/70 transition hover:text-[#a8e63c]">{item.label}</Link>)}
         </nav>
         <div className="flex shrink-0 items-center gap-2 lg:gap-3">
+          {showAuthLinks ? <>
           <Link href="/auth/login" className="whitespace-nowrap rounded-lg border border-white/15 px-3 py-2 text-[10px] font-semibold text-white transition hover:border-white/35 sm:px-4 sm:py-2.5 sm:text-[11px]">Prihlásiť sa</Link>
           <Link href="/auth/sign-up" className="whitespace-nowrap rounded-lg bg-[#a8e63c] px-3 py-2 text-[10px] font-bold text-[#061016] transition hover:bg-[#c1fa66] sm:px-4 sm:py-2.5 sm:text-[11px]">Registrovať sa</Link>
+          </> : null}
           <button className="rounded-lg border border-white/15 p-1.5 text-white sm:p-2.5 lg:hidden" aria-expanded={menuOpen} onClick={() => setMenuOpen(!menuOpen)} aria-label={menuOpen ? 'Zavrieť menu' : 'Otvoriť menu'}>{menuOpen ? <X size={20} /> : <Menu size={20} />}</button>
         </div>
       </header>
