@@ -190,6 +190,8 @@ export function PairChallengeView({ userId, arenas, initialArena, onOpenPairs, i
                 </div>
                 <p className="mt-2 flex items-center gap-1.5 text-xs text-white/45"><Calendar size={12} />{dateFormatter.format(new Date(challenge.match_date))}</p>
                 {challenge.arena_id ? <p className="mt-1 flex items-center gap-1.5 text-xs text-white/45"><MapPin size={12} />{arenas.find((arena) => arena.id === challenge.arena_id)?.name ?? t('Aréna')}</p> : null}
+                {challenge.match_pin && !challenge.is_pin_activated ? <p className="mt-3 rounded-lg border border-[#ccff00]/20 bg-[#ccff00]/[0.06] px-3 py-2 text-xs font-semibold text-[#ccff00]">{t('Váš PIN pre kiosk')}: <span className="ml-1 font-black tracking-[0.2em]">{challenge.match_pin}</span></p> : null}
+                {challenge.is_pin_activated ? <p className="mt-3 text-xs font-semibold text-emerald-300">{t('Zápas bol spustený v kiosku.')}</p> : null}
                 {challenge.status === 'pending' ? <button type="button" onClick={() => void handleCancel(challenge.id)} className="mt-3 inline-flex items-center gap-1 text-xs font-bold text-white/50 hover:text-red-300"><X size={12} />{t('Zrušiť výzvu')}</button> : null}
               </li>
             ))}

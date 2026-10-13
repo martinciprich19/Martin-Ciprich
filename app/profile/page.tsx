@@ -27,6 +27,7 @@ import {
   LogOut,
   Mail,
   Phone,
+  Play,
   Save,
   UserCog,
   UserPlus,
@@ -57,6 +58,7 @@ import { fetchIncomingRequests } from '@/lib/friendships'
 import { removeProfileAvatar, saveProfileAvatar } from '@/lib/profile-avatar'
 import { getErrorMessage } from '@/lib/errors'
 import { RecentFormCard } from '@/components/recent-form-card'
+import { QRCodeSVG } from 'qrcode.react'
 import { MatchDetailModal, matchDetailKey } from '@/components/match-detail-modal'
 import { MatchDetailButton } from '@/components/match-detail-button'
 import { fetchNotifications, markNotificationRead, type LeagueNotification } from '@/lib/notifications'
@@ -83,6 +85,7 @@ const navItems = [
   { label: 'Nájsť hráčov', href: '#players', icon: UserSearch },
   { label: 'Vyzvať dvojicu', href: '#challenges', icon: Swords },
   { label: 'Výsledky', href: '#matches', icon: Crosshair },
+  { label: 'Začať zápas', href: '/match', icon: Play },
   { label: 'Turnaje', href: '/profile?view=tournaments', icon: Shield },
   { label: 'Arény', href: '#arenas', icon: Users },
   { label: 'Správy', href: '#messages', icon: MessageSquare },
@@ -97,8 +100,8 @@ const bottomNavItems = [
   { label: 'My profile', short: 'Môj profil', tab: 'profile', href: '/profile?view=profile', icon: UserRound },
 ] as const
 
-type ProfileTab = 'overview' | 'profile' | 'challenges' | 'matches' | 'arenas' | 'messages' | 'settings' | 'leaderboards' | 'opponents' | 'rankings' | 'tournaments'
-const tabByLabel: Record<string, ProfileTab> = { 'Prehľad': 'overview', 'Môj profil': 'profile', 'Rebríčky': 'rankings', 'Nájsť hráčov': 'opponents', 'Vyzvať dvojicu': 'challenges', 'Výsledky': 'matches', 'Turnaje': 'tournaments', 'Arény': 'arenas', 'Správy': 'messages', 'Nastavenia': 'settings' }
+type ProfileTab = 'overview' | 'profile' | 'challenges' | 'matches' | 'arenas' | 'messages' | 'settings' | 'leaderboards' | 'opponents' | 'rankings' | 'tournaments' | 'match'
+const tabByLabel: Record<string, ProfileTab> = { 'Prehľad': 'overview', 'Môj profil': 'profile', 'Rebríčky': 'rankings', 'Nájsť hráčov': 'opponents', 'Vyzvať dvojicu': 'challenges', 'Výsledky': 'matches', 'Začať zápas': 'match', 'Turnaje': 'tournaments', 'Arény': 'arenas', 'Správy': 'messages', 'Nastavenia': 'settings' }
 const tabsFromUrl: ProfileTab[] = ['profile', 'challenges', 'matches', 'messages', 'settings', 'opponents', 'arenas', 'rankings', 'tournaments']
 
 export default function ProfilePage() {
@@ -560,6 +563,8 @@ export default function ProfilePage() {
                         <p className="flex items-center gap-2 text-xs text-white/60"><Calendar size={14} className="shrink-0" /><time dateTime={match.match_date}>{new Intl.DateTimeFormat(language === 'en' ? 'en-GB' : 'sk-SK', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(match.match_date))}</time></p>
                         <p className="flex items-center gap-2 text-xs text-white/60"><MapPin size={14} className="shrink-0" />{arena ? `${arena.name} · ${arena.city}` : t('Aréna', 'Arena')}</p>
                         <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-300"><Check size={14} />{t('Potvrdené', 'Confirmed')}</span>
+                        {match.match_pin && !match.is_pin_activated ? <p className="mt-2 rounded-lg border border-[#ccff00]/20 bg-[#ccff00]/[0.06] px-3 py-2 text-xs font-semibold text-[#ccff00]">Váš PIN pre kiosk: <span className="ml-1 font-black tracking-[0.2em]">{match.match_pin}</span></p> : null}
+                        {match.is_pin_activated ? <p className="mt-2 text-xs font-semibold text-emerald-300">Zápas bol spustený v kiosku.</p> : null}
                       </li>
                     })}
                   </ul> : <div className="mt-8 flex min-h-[210px] flex-col items-center justify-center rounded-xl border border-dashed border-white/10 bg-white/[0.015] text-center"><div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#ccff00]/10 text-[#ccff00]"><Swords size={22} /></div><p className="mt-4 text-sm font-semibold text-white/75">Zatiaľ žiadne naplánované zápasy</p><p className="mt-2 max-w-xs text-xs leading-relaxed text-white/35">Prijmi výzvu od hráča alebo vytvor nový zápas.</p><button type="button" onClick={() => setActiveTab('opponents')} className="mt-5 rounded-lg bg-[#ccff00] px-4 py-2.5 text-xs font-black text-[#10150d] hover:bg-[#d9ff4d]">{t('Nájsť hráčov')}</button></div>}
@@ -1055,13 +1060,33 @@ const ProfileView = memo(function ProfileView({ player, phone, avatarUrl, avatar
   const { data: arenas = [] } = useSWR<Arena[]>('arenas', fetchArenas)
   const { data: profile } = useSWR(player.email ? ['profile-bio', player.email] : null, ([, email]) => fetchPlayerProfile(email))
   const { language, t } = useLanguage()
+  const [profileUrl, setProfileUrl] = useState('')
   const effectiveVenueId = player.home_venue_id || player.auto_venue_id
   const homeVenue = arenas.find((arena) => arena.id === effectiveVenueId)
   const homeVenueDetail = !player.home_venue_id && player.auto_venue_id ? 'Automaticky podľa najnavštevovanejšieho klubu' : undefined
 
+  useEffect(() => {
+    if (player.profile_id === null) {
+      setProfileUrl('')
+      return
+    }
+    setProfileUrl(`${window.location.origin}/players/${encodeURIComponent(String(player.profile_id))}`)
+  }, [player.profile_id])
+
   return <div className="mx-auto max-w-[1120px]">
     <div className="mb-8 flex items-end justify-between"><div><p className="text-xs font-bold uppercase tracking-[0.22em] text-[#ccff00]">RIVA /</p><h1 className="mt-2 text-3xl font-black">Môj profil</h1></div><div className="hidden items-center gap-3 sm:flex"><div className="text-right"><p className="font-bold">{player.username}</p><p className="text-xs text-white/45">{player.region}</p></div><AvatarPreview src={avatarUrl} initials={player.username.slice(0, 1)} /></div></div>
-    <section className="rounded-2xl border border-white/[0.08] bg-[#111722] p-6 sm:p-10"><div className="flex flex-col gap-6 sm:flex-row sm:items-center"><div className="relative"><AvatarPreview src={avatarUrl} initials={player.username.slice(0, 1)} size="lg" /><label htmlFor="profile-avatar-upload" className="absolute -bottom-2 -right-2 flex h-12 w-12 cursor-pointer items-center justify-center rounded-xl bg-[var(--profile-avatar-color,#ccff00)] text-xl font-black text-[#10150d]">⌾</label></div><div className="flex-1"><h2 className="text-4xl font-black">{player.username}</h2><p className="mt-1 text-lg text-white/45">{player.email}</p><div className="mt-4 flex flex-wrap gap-2"><span className="rounded-lg bg-[var(--profile-avatar-color,#ccff00)] px-3 py-2 text-xs font-black text-[#10150d]">{player.region}</span><span className="rounded-lg bg-[#1d2b44] px-3 py-2 text-xs font-bold">{player.level}</span><span className="rounded-lg border border-[var(--profile-avatar-color,#ccff00)] bg-white/5 px-3 py-2 text-xs font-bold text-[var(--profile-avatar-color,#ccff00)]">{matchStats.elo} ELO</span></div></div></div></section><section className="mt-6 rounded-xl border border-white/[0.08] bg-[#111722] p-5"><h2 className="text-sm font-bold">{t('Profilový popis', 'About me')}</h2><p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-white/65">{profile?.bio.trim() || t('Bio zatiaľ nie je vyplnené.', 'No Bio added yet.')}</p></section><input ref={avatarInputRef} id="profile-avatar-upload" type="file" accept="image/*" onChange={handleAvatarChange} className="sr-only" />
+    <section className="rounded-2xl border border-white/[0.08] bg-[#111722] p-6 sm:p-10"><div className="flex flex-col gap-6 sm:flex-row sm:items-center"><div className="relative"><AvatarPreview src={avatarUrl} initials={player.username.slice(0, 1)} size="lg" /><label htmlFor="profile-avatar-upload" className="absolute -bottom-2 -right-2 flex h-12 w-12 cursor-pointer items-center justify-center rounded-xl bg-[var(--profile-avatar-color,#ccff00)] text-xl font-black text-[#10150d]">⌾</label></div><div className="flex-1"><h2 className="text-4xl font-black">{player.username}</h2><p className="mt-1 text-lg text-white/45">{player.email}</p><div className="mt-4 flex flex-wrap gap-2"><span className="rounded-lg bg-[var(--profile-avatar-color,#ccff00)] px-3 py-2 text-xs font-black text-[#10150d]">{player.region}</span><span className="rounded-lg bg-[#1d2b44] px-3 py-2 text-xs font-bold">{player.level}</span><span className="rounded-lg border border-[var(--profile-avatar-color,#ccff00)] bg-white/5 px-3 py-2 text-xs font-bold text-[var(--profile-avatar-color,#ccff00)]">{matchStats.elo} ELO</span></div></div></div></section>
+    <section aria-labelledby="profile-qr-heading" className="mt-6 flex flex-col items-center gap-6 rounded-2xl border border-[#ccff00]/20 bg-gradient-to-br from-[#111722] to-[#131d22] p-6 shadow-[0_12px_40px_rgba(0,0,0,0.18)] sm:flex-row sm:justify-between sm:p-8">
+      <div className="max-w-lg">
+        <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#ccff00]">RIVA / IDENTIFIKÁCIA HRÁČA</p>
+        <h2 id="profile-qr-heading" className="mt-2 text-2xl font-black">Tvoj osobný QR kód</h2>
+        <p className="mt-2 text-sm leading-6 text-white/55">Naskenuj svoj kód do kiosku a začni hru.</p>
+      </div>
+      <div className="flex min-h-[216px] min-w-[216px] items-center justify-center rounded-2xl border border-white/10 bg-white p-3 shadow-lg">
+        {profileUrl ? <QRCodeSVG value={profileUrl} size={192} level="M" bgColor="#ffffff" fgColor="#061016" title={`QR kód profilu hráča ${player.username}`} /> : <span className="text-xs text-slate-500">Načítavam QR kód…</span>}
+      </div>
+    </section>
+    <section className="mt-6 rounded-xl border border-white/[0.08] bg-[#111722] p-5"><h2 className="text-sm font-bold">{t('Profilový popis', 'About me')}</h2><p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-white/65">{profile?.bio.trim() || t('Bio zatiaľ nie je vyplnené.', 'No Bio added yet.')}</p></section><input ref={avatarInputRef} id="profile-avatar-upload" type="file" accept="image/*" onChange={handleAvatarChange} className="sr-only" />
     <div className="mt-8 grid gap-6 lg:grid-cols-2"><InfoCard title="Osobné údaje"><InfoRow label="Meno:" value={player.username} /><InfoRow label="Kraj:" value={player.region} /><InfoRow label="Úroveň:" value={player.level} /><HomeArenaInfoRow email={player.email} arenas={arenas} homeVenueId={player.home_venue_id} autoVenueId={player.auto_venue_id} /><DominantHandInfoRow email={player.email} value={player.dominant_hand} /><InfoRow label="Telefón:" value={phone || 'Neuvedené'} /><InfoRow label="Dátum registrácie:" value={player.created_at ? new Intl.DateTimeFormat(language === 'en' ? 'en-GB' : 'sk-SK', { day: 'numeric', month: 'long', year: 'numeric' }).format(new Date(player.created_at)) : 'Neuvedené'} /></InfoCard><InfoCard title="Štatistiky ELO"><InfoRow label="Aktuálne ELO:" value={`${player.elo} ELO`} highlight /><InfoRow label="ELO od registrácie:" value={`${player.career_elo} ELO`} /><InfoRow label="Najvyššie ELO:" value={`${player.highest_elo} ELO`} /><InfoRow label="Aktuálna sezóna:" value={formatSeason(player.elo_season_start, language)} /><InfoRow label="Krajská pozícia:" value="1. miesto" /><InfoRow label="Celoslovenská pozícia:" value="1. miesto" /></InfoCard></div>
     <div className="mt-8"><h2 className="text-xl font-black">Štatistiky zápasov</h2></div><section className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><MatchStatCard label="Odohraté zápasy" value={profileMatchesLoading || profileMatchesError ? '–' : String(matchStats.total)} detail="Celkový počet zápasov" /><MatchStatCard label="Výhry" value={profileMatchesLoading || profileMatchesError ? '–' : String(matchStats.wins)} detail="Vyhraté zápasy" /><MatchStatCard label="Prehry" value={profileMatchesLoading || profileMatchesError ? '–' : String(matchStats.losses)} detail="Ostatné zápasy" /><MatchStatCard label="Úspešnosť" value={profileMatchesLoading || profileMatchesError ? '–' : `${matchStats.winRate}%`} detail="Win rate" progress={matchStats.winRate} /><MatchStatCard label="Vyhraté sety" value={profileMatchesLoading || profileMatchesError ? '–' : String(matchStats.wonSets)} detail="Celkový počet" /><MatchStatCard label="Prehraté sety" value={profileMatchesLoading || profileMatchesError ? '–' : String(matchStats.lostSets)} detail="Celkový počet" /><MatchStatCard label="Vyhraté gemy" value={profileMatchesLoading || profileMatchesError ? '–' : String(matchStats.wonGames)} detail="Celkový počet" /><MatchStatCard label="Prehraté gemy" value={profileMatchesLoading || profileMatchesError ? '–' : String(matchStats.lostGames)} detail="Celkový počet" /><RecentFormCard matches={profileMatches.filter(isCountedMatch)} isLoading={profileMatchesLoading} error={profileMatchesError} /></section><section className="mt-8 rounded-2xl border border-white/[0.08] bg-[#111722] p-6 sm:p-8">
       <div className="flex items-end justify-between border-b border-white/[0.08] pb-5">

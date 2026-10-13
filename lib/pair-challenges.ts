@@ -12,6 +12,8 @@ export type PairChallenge = {
   arena_id: string | null
   match_date: string
   status: PairChallengeStatus
+  match_pin: string | null
+  is_pin_activated: boolean
   challenger_2_accepted: boolean
   challenged_1_accepted: boolean
   challenged_2_accepted: boolean
@@ -23,6 +25,25 @@ export type PairChallenge = {
 
 const PAIR_CHALLENGE_SELECT = 'id, challenger_1_id, challenger_2_id, challenged_1_id, challenged_2_id, arena_id, match_date, status, challenger_2_accepted, challenged_1_accepted, challenged_2_accepted, challenger_1:proffiles!challenges_challenger_1_id_fkey(full_name), challenger_2:proffiles!challenges_challenger_2_id_fkey(full_name), challenged_1:proffiles!challenges_challenged_1_id_fkey(full_name), challenged_2:proffiles!challenges_challenged_2_id_fkey(full_name)'
 
+async function attachLiveMatchPins(challenges: PairChallenge[]): Promise<PairChallenge[]> {
+  if (!challenges.length) return challenges
+  const { data, error } = await createClient()
+    .from('live_matches')
+    .select('challenge_id, match_pin, is_pin_activated')
+    .in('challenge_id', challenges.map((challenge) => challenge.id))
+  if (error) throw error
+
+  const pins = new Map((data ?? []).map((match) => [String(match.challenge_id), {
+    match_pin: match.match_pin === null ? null : String(match.match_pin),
+    is_pin_activated: Boolean(match.is_pin_activated),
+  }]))
+  return challenges.map((challenge) => ({
+    ...challenge,
+    match_pin: pins.get(String(challenge.id))?.match_pin ?? null,
+    is_pin_activated: pins.get(String(challenge.id))?.is_pin_activated ?? false,
+  }))
+}
+
 export async function fetchMyPairChallenges(userId: string): Promise<PairChallenge[]> {
   const { data, error } = await createClient()
     .from('challenges')
@@ -30,7 +51,11 @@ export async function fetchMyPairChallenges(userId: string): Promise<PairChallen
     .eq('challenger_1_id', userId)
     .order('match_date', { ascending: true })
   if (error) throw error
-  return (data ?? []) as PairChallenge[]
+  return attachLiveMatchPins((data ?? []).map((challenge) => ({
+    ...challenge,
+    match_pin: null,
+    is_pin_activated: false,
+  })) as PairChallenge[])
 }
 
 export async function fetchPairChallenge(challengeId: string): Promise<PairChallenge> {
@@ -40,7 +65,11 @@ export async function fetchPairChallenge(challengeId: string): Promise<PairChall
     .eq('id', challengeId)
     .single()
   if (error) throw error
-  return data as PairChallenge
+  return (await attachLiveMatchPins([{
+    ...data,
+    match_pin: null,
+    is_pin_activated: false,
+  } as PairChallenge]))[0]
 }
 
 export async function fetchUpcomingPairChallenges(userId: string | number): Promise<PairChallenge[]> {
@@ -54,7 +83,11 @@ export async function fetchUpcomingPairChallenges(userId: string | number): Prom
     .or(`challenger_1_id.eq.${profileId},challenger_2_id.eq.${profileId},challenged_1_id.eq.${profileId},challenged_2_id.eq.${profileId}`)
     .order('match_date', { ascending: true })
   if (error) throw error
-  return (data ?? []) as PairChallenge[]
+  return attachLiveMatchPins((data ?? []).map((challenge) => ({
+    ...challenge,
+    match_pin: null,
+    is_pin_activated: false,
+  })) as PairChallenge[])
 }
 
 export async function respondToPairChallenge(challengeId: string, accept: boolean): Promise<PairChallengeStatus> {
