@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { awardLivePoint, getPointAnnouncement, getMatchWinner, getWinnerAnnouncement, rotateServer, rotateServingPlayer } from '../lib/live-match-scoring.ts'
+import { awardLivePoint, getPointAnnouncement, getMatchWinner, getWinnerAnnouncement, rotateServer, rotateServingPlayer, isTiebreak, tiebreakServer, parseTiebreakScore } from '../lib/live-match-scoring.ts'
 
 const initial = {
   team_a_game_score: 0, team_b_game_score: 0,
@@ -19,6 +19,51 @@ const initial = {
   started_at: null, finished_at: null,
   completed_sets: [],
 }
+
+test('Golden Point wins at deuce; advantage needs two consecutive points for either team', () => {
+  for (const team of ['TEAM_A', 'TEAM_B']) {
+    const opponent = team === 'TEAM_A' ? 'TEAM_B' : 'TEAM_A'
+    const gameKey = team === 'TEAM_A' ? 'team_a_games' : 'team_b_games'
+    const deuce = {
+      ...initial, scoring_type: 'advantage', advantage_team: null,
+      team_a_game_score: 40, team_b_game_score: 40,
+      service_game_statistics: { team_a_won: 0, team_a_lost: 0, team_b_won: 0, team_b_lost: 0 },
+    }
+    const golden = awardLivePoint({ ...deuce, scoring_type: 'golden_point' }, team)
+    assert.equal(golden[gameKey], 1)
+    assert.equal(golden.advantage_team, null)
+    const advantage = awardLivePoint(deuce, team)
+    assert.equal(advantage.advantage_team, team)
+    assert.equal(advantage[gameKey], 0)
+    assert.equal(advantage.team_a_game_score, 40)
+    assert.equal(advantage.team_b_game_score, 40)
+    assert.equal(advantage.team_b_break_points, 0)
+    assert.deepEqual(advantage.service_game_statistics, deuce.service_game_statistics)
+    assert.ok(!getPointAnnouncement(deuce, advantage).en.includes('game for'))
+    assert.ok(getPointAnnouncement(deuce, advantage).en.includes('advantage for'))
+    const equal = awardLivePoint(advantage, opponent)
+    assert.equal(equal.advantage_team, null)
+    assert.equal(equal.team_a_games + equal.team_b_games, 0)
+    assert.ok(getPointAnnouncement(advantage, equal).en.includes('deuce'))
+    assert.equal(deuce.advantage_team, null)
+    const won = awardLivePoint(advantage, team)
+    assert.equal(won[gameKey], 1)
+    assert.equal(won.advantage_team, null)
+    assert.equal(won.team_a_game_score + won.team_b_game_score, 0)
+    assert.equal(won.service_game_statistics[team === 'TEAM_A' ? 'team_a_won' : 'team_a_lost'], 1)
+    assert.ok(getPointAnnouncement(advantage, won).en.includes('game for'))
+    if (team === 'TEAM_B') {
+      assert.equal(equal.team_b_break_points_missed, 1)
+      assert.equal(won.team_b_break_points_converted, 1)
+    }
+    let repeated = deuce
+    for (let i = 0; i < 10; i++) {
+      repeated = awardLivePoint(awardLivePoint(repeated, team), opponent)
+      assert.equal(repeated.team_a_games + repeated.team_b_games, 0)
+      assert.equal(repeated.advantage_team, null)
+    }
+  }
+})
 
 test('winner announcement identifies both players only when the match is finished', () => {
   const names = {
@@ -154,17 +199,70 @@ test('6-4 wins a set, resets games and rotates the server', () => {
   assert.equal(before.team_a_games, 5)
 })
 
-test('6-5 and 7-6 do not win; 8-6 wins without a tie-break', () => {
+test('6:6 enters a numerical tiebreak and 7:5 ends the set 7:6', () => {
   let score = awardLivePoint({ ...initial, team_a_games: 5, team_b_games: 5, team_a_game_score: 40 }, 'TEAM_A')
   assert.equal(score.team_a_sets, 0)
   score = awardLivePoint({ ...score, team_b_game_score: 40 }, 'TEAM_B')
   assert.equal(score.team_b_games, 6)
-  score = awardLivePoint({ ...score, team_a_game_score: 40 }, 'TEAM_A')
-  assert.equal(score.team_a_games, 7)
+  assert.equal(isTiebreak(score), true)
+  assert.equal(score.tiebreak_score.a, 0)
+  score = awardLivePoint(score, 'TEAM_A')
+  assert.equal(score.tiebreak_score.a, 1)
+  assert.equal(score.team_a_game_score, 0)
+  assert.equal(getPointAnnouncement({ ...score, tiebreak_score: { ...score.tiebreak_score, a: 0 } }, score).en, 'Point for Team 1.')
+  for (let i = 0; i < 5; i++) score = awardLivePoint(awardLivePoint(score, 'TEAM_B'), 'TEAM_A')
   assert.equal(score.team_a_sets, 0)
-  score = awardLivePoint({ ...score, team_a_game_score: 40 }, 'TEAM_A')
+  const previous = score
+  score = awardLivePoint(score, 'TEAM_A')
   assert.equal(score.team_a_sets, 1)
   assert.equal(score.team_a_games, 0)
+  assert.deepEqual(score.completed_sets, [[7, 6]])
+  assert.equal(score.tiebreak_score, null)
+  assert.match(getPointAnnouncement(previous, score).en, /tiebreak and set/)
+})
+
+test('tiebreak extended scores, both modes/teams, stats and server sequence survive snapshots', () => {
+  for (const mode of ['golden_point', 'advantage']) {
+    for (const team of ['TEAM_A', 'TEAM_B']) {
+      const other = team === 'TEAM_A' ? 'TEAM_B' : 'TEAM_A'
+      let score = { ...initial, scoring_type: mode, team_a_games: 6, team_b_games: 6,
+        service_game_statistics: { team_a_won: 0, team_a_lost: 0, team_b_won: 0, team_b_lost: 0 } }
+      for (let i = 0; i < 6; i++) score = awardLivePoint(awardLivePoint(score, team), other)
+      const snapshot = structuredClone(score)
+      const eightSix = awardLivePoint(awardLivePoint(snapshot, team), team)
+      assert.equal(eightSix[team === 'TEAM_A' ? 'team_a_sets' : 'team_b_sets'], 1)
+      score = awardLivePoint(score, team)
+      assert.equal(score.team_a_sets + score.team_b_sets, 0)
+      score = awardLivePoint(score, other)
+      assert.equal(score.team_a_sets + score.team_b_sets, 0)
+      score = awardLivePoint(awardLivePoint(score, team), team)
+      assert.equal(score[team === 'TEAM_A' ? 'team_a_sets' : 'team_b_sets'], 1)
+      assert.deepEqual(score.completed_sets, [team === 'TEAM_A' ? [7,6] : [6,7]])
+      assert.equal(score.team_a_total_points_won + score.team_b_total_points_won, 16)
+      assert.equal(score.team_a_break_points + score.team_b_break_points, 0)
+      assert.deepEqual(score.service_game_statistics, initial.service_game_statistics ?? { team_a_won:0, team_a_lost:0, team_b_won:0, team_b_lost:0 })
+      assert.deepEqual(snapshot.tiebreak_score, parseTiebreakScore(JSON.parse(JSON.stringify(snapshot.tiebreak_score))))
+      assert.equal(snapshot.tiebreak_score.a, 6)
+      assert.equal(snapshot.tiebreak_score.b, 6)
+      assert.deepEqual({ serving_team: score.serving_team, serving_player: score.serving_player }, rotateServer(initial))
+      const finalMatch = awardLivePoint({ ...snapshot, team_a_sets: team === 'TEAM_A' ? 1 : 0,
+        team_b_sets: team === 'TEAM_B' ? 1 : 0, tiebreak_score: { ...snapshot.tiebreak_score, a: team === 'TEAM_A' ? 6 : 0, b: team === 'TEAM_B' ? 6 : 0 } }, team, '2026-10-13T20:00:00Z')
+      assert.equal(getMatchWinner(finalMatch), team)
+      assert.equal(finalMatch.finished_at, '2026-10-13T20:00:00Z')
+      assert.equal(score.advantage_team, null)
+    }
+  }
+  const sequence = ['TEAM_A:1','TEAM_B:1','TEAM_B:1','TEAM_A:2','TEAM_A:2','TEAM_B:2','TEAM_B:2','TEAM_A:1','TEAM_A:1']
+  for (let total = 0; total < sequence.length; total++) {
+    const server = tiebreakServer({ a:total,b:0,first_team:'TEAM_A',first_player:1 })
+    assert.equal(`${server.serving_team}:${server.serving_player}`, sequence[total])
+  }
+  for (const first_team of ['TEAM_A','TEAM_B']) for (const first_player of [1,2]) {
+    const first = { serving_team:first_team, serving_player:first_player }
+    assert.deepEqual(tiebreakServer({a:0,b:0,first_team,first_player}), first)
+    assert.deepEqual(tiebreakServer({a:1,b:0,first_team,first_player}), rotateServer(first))
+  }
+  assert.throws(() => parseTiebreakScore({ a:-1,b:0,first_team:'TEAM_A',first_player:1 }))
 })
 
 test('team 2 sets accumulate and undo snapshot restores games, sets and server', () => {

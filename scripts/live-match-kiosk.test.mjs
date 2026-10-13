@@ -62,8 +62,16 @@ test('confirmed pair challenge gets a one-time kiosk PIN', async () => {
     const setStatisticsMigration = await readFile(new URL('./050_live_match_set_statistics.sql', import.meta.url), 'utf8')
     await db.exec(setStatisticsMigration)
     await db.exec(setStatisticsMigration)
+    const rulesMigration = await readFile(new URL('./055_live_match_scoring_rules.sql', import.meta.url), 'utf8')
+    await db.exec(rulesMigration)
+    await db.exec(rulesMigration)
 
     await db.exec('set role anon')
+    const rulesQuick = (await db.query("insert into live_matches (scoring_type) values ('advantage') returning id")).rows[0]
+    assert.equal((await db.query('select scoring_type from live_matches where id=$1', [rulesQuick.id])).rows[0].scoring_type, 'advantage')
+    await db.query('update live_matches set team_a_game_score=15 where id=$1', [rulesQuick.id])
+    await assert.rejects(db.query("update live_matches set scoring_type='golden_point' where id=$1", [rulesQuick.id]), /Pravidla/)
+    await assert.rejects(db.query("update live_matches set advantage_team='TEAM_A' where id=$1", [rulesQuick.id]), /check constraint/)
     const quickGames = []
     for (let index = 0; index < 2; index++) {
       const { rows: [quickGame] } = await db.query(`
@@ -157,13 +165,16 @@ test('confirmed pair challenge gets a one-time kiosk PIN', async () => {
     await db.exec('reset role')
     const unusedPin = String((Number(match.match_pin) + 1) % 10000).padStart(4, '0')
     await assert.rejects(db.query('select public.activate_live_match_pin($1)', [unusedPin]))
+    await assert.rejects(db.query('select public.activate_live_match_pin_with_rules($1,$2)', [match.match_pin, 'invalid']), /Neplatne/)
+    await db.exec('set role anon')
     assert.equal(
-      (await db.query('select public.activate_live_match_pin($1) as id', [match.match_pin])).rows[0].id,
+      (await db.query('select public.activate_live_match_pin_with_rules($1,$2) as id', [match.match_pin, 'advantage'])).rows[0].id,
       match.id,
     )
+    assert.equal((await db.query('select scoring_type from live_matches where id=$1', [match.id])).rows[0].scoring_type, 'advantage')
     await assert.rejects(db.query('select public.activate_live_match_pin($1)', [match.match_pin]))
+    await assert.rejects(db.query('select public.activate_live_match_pin_with_rules($1,$2)', [match.match_pin, 'golden_point']))
 
-    await db.exec('set role anon')
     assert.equal((await db.query('select id from public.live_matches where id = $1', [match.id])).rows.length, 1)
     await db.query('update public.live_matches set team_a_game_score = 15 where id = $1', [match.id])
     await assert.rejects(db.query('select match_pin from public.live_matches where id = $1', [match.id]))

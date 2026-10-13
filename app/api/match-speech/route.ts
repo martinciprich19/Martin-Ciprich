@@ -19,15 +19,27 @@ const standaloneScores = new Map<string, string>([
 const allowedAnnouncements = new Set<string>([
   'Skóre gemu bolo vynulované.',
   'Game score reset.',
+  'Skóre tajbrejku bolo vynulované.',
+  'Tiebreak score reset.',
+  'Posledná zmena bola vrátená. Tajbrejk.',
+  'Last change undone. Tiebreak.',
   ...standaloneScores.values(),
 ])
 for (const team of [1, 2]) {
   const slovakTeam = team === 1 ? 'jedna' : 'dva'
   allowedAnnouncements.add(`Bod pre tím ${slovakTeam}.`)
   allowedAnnouncements.add(`Bod pre tím ${slovakTeam}, gem pre tím ${slovakTeam}.`)
+  allowedAnnouncements.add(`Bod pre tím ${slovakTeam}, tajbrejk a set pre tím ${slovakTeam}.`)
+  allowedAnnouncements.add(`Bod pre tím ${slovakTeam}, výhoda pre tím ${slovakTeam}.`)
+  allowedAnnouncements.add(`Bod pre tím ${slovakTeam}, zhoda.`)
+  allowedAnnouncements.add(`Posledná zmena bola vrátená. Výhoda pre tím ${slovakTeam}.`)
   allowedAnnouncements.add(`Gem pre tím ${slovakTeam}.`)
   allowedAnnouncements.add(`Point for Team ${team}.`)
   allowedAnnouncements.add(`Point for Team ${team}, game for Team ${team}.`)
+  allowedAnnouncements.add(`Point for Team ${team}, tiebreak and set for Team ${team}.`)
+  allowedAnnouncements.add(`Point for Team ${team}, advantage for Team ${team}.`)
+  allowedAnnouncements.add(`Point for Team ${team}, deuce.`)
+  allowedAnnouncements.add(`Last change undone. Advantage for Team ${team}.`)
   allowedAnnouncements.add(`Podáva Tím ${team}.`)
   allowedAnnouncements.add(`Team ${team} serves.`)
   for (const player of [1, 2]) {
@@ -98,14 +110,6 @@ export async function POST(request: Request) {
     })
     return Response.json({ error: 'Neplatný pôvod požiadavky.' }, { status: 403 })
   }
-  const voice = process.env.ELEVENLABS_VOICE_ID ?? '2bNrEsM0omyhLiEyOwqY'
-  if (!apiKey || !/^[a-zA-Z0-9]{20}$/.test(voice)) {
-    console.error('ElevenLabs configuration error:', {
-      apiKeyConfigured: Boolean(apiKey),
-      voiceIdValid: /^[a-zA-Z0-9]{20}$/.test(voice),
-    })
-    return Response.json({ error: 'Hlas ElevenLabs nie je nakonfigurovaný.' }, { status: 503 })
-  }
   let body: unknown
   try {
     body = await request.json()
@@ -114,16 +118,31 @@ export async function POST(request: Request) {
   }
   if (!body || typeof body !== 'object' || !('text' in body) || !('matchId' in body)
     || typeof body.text !== 'string'
+    || ('language' in body && body.language !== 'sk' && body.language !== 'en')
     || typeof body.matchId !== 'string'
     || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.matchId)) {
     return Response.json({ error: 'Neplatné hlásenie alebo zápas.' }, { status: 400 })
   }
+  const language = 'language' in body ? body.language : 'sk'
   const trimmedText = body.text.trim()
   const scoreToken = trimmedText.endsWith('.') ? trimmedText.slice(0, -1) : trimmedText
   const text = standaloneScores.get(scoreToken) ?? trimmedText
   const isWinnerAnnouncement = text.startsWith('Zápas vyhral tím ') || text.startsWith('Team 1 won the match.') || text.startsWith('Team 2 won the match.')
   if (!text.endsWith('.') || (!allowedAnnouncements.has(text) && !isWinnerAnnouncement)) {
     return Response.json({ error: 'Neplatné hlásenie alebo zápas.' }, { status: 400 })
+  }
+  const voice = isWinnerAnnouncement
+    ? process.env.ELEVENLABS_VOICE_ID_WINNER ?? 'z2Zs6alQTcDzcMWLuK0e'
+    : language === 'en'
+    ? process.env.ELEVENLABS_VOICE_ID_EN ?? 'wAGzRVkxKEs8La0lmdrE'
+    : process.env.ELEVENLABS_VOICE_ID ?? '2bNrEsM0omyhLiEyOwqY'
+  if (!apiKey || !/^[a-zA-Z0-9]{20}$/.test(voice)) {
+    console.error('ElevenLabs configuration error:', {
+      apiKeyConfigured: Boolean(apiKey),
+      voiceIdValid: /^[a-zA-Z0-9]{20}$/.test(voice),
+      language,
+    })
+    return Response.json({ error: 'Hlas ElevenLabs nie je nakonfigurovaný.' }, { status: 503 })
   }
   try {
     const supabase = await createClient(AbortSignal.timeout(5000))

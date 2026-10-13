@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 import { PGlite } from '@electric-sql/pglite'
-import { awardLivePoint, parseRecordedMatchStatistics } from '../lib/live-match-scoring.ts'
+import { awardLivePoint, parseRecordedMatchStatistics, tiebreakServer } from '../lib/live-match-scoring.ts'
 
 test('QR registration, final-result submission and four-player ELO approval', async () => {
   const db = new PGlite()
@@ -60,6 +60,7 @@ test('QR registration, final-result submission and four-player ELO approval', as
     for (let retry = 0; retry < 2; retry++) {
       await db.exec(await readFile(new URL('053_extended_match_statistics.sql', import.meta.url), 'utf8'))
       await db.exec(await readFile(new URL('054_profile_serve_return_statistics.sql', import.meta.url), 'utf8'))
+      await db.exec(await readFile(new URL('055_live_match_scoring_rules.sql', import.meta.url), 'utf8'))
     }
     assert.equal((await db.query('select service_game_statistics from live_matches where id=$1', [historicalId])).rows[0].service_game_statistics, null)
     await assert.rejects(db.query(`update live_matches set service_game_statistics =
@@ -198,11 +199,23 @@ test('QR registration, final-result submission and four-player ELO approval', as
     for (let retry = 0; retry < 2; retry++) {
       await db.exec(await readFile(new URL('052_qr_matches_without_login.sql', import.meta.url), 'utf8'))
     }
+    const legacyTieId = (await db.query("insert into live_matches (team_a_games,team_b_games,team_b_game_score,serving_team,initial_server_chosen) values (6,6,15,'TEAM_A',true) returning id")).rows[0].id
+    const tiebreakMigration = await readFile(new URL('056_live_match_tiebreak.sql', import.meta.url), 'utf8')
+    await db.exec(tiebreakMigration)
+    const legacyTie = (await db.query('select * from live_matches where id=$1', [legacyTieId])).rows[0]
+    assert.equal(legacyTie.is_tiebreak, true)
+    assert.deepEqual([legacyTie.tiebreak_score.a, legacyTie.tiebreak_score.b], [0,1])
+    assert.equal(legacyTie.team_b_game_score, 0)
+    assert.equal(legacyTie.statistics_complete, false)
+    assert.deepEqual(tiebreakServer(legacyTie.tiebreak_score), { serving_team:legacyTie.serving_team, serving_player:legacyTie.serving_player })
+    await assert.rejects(db.query('update live_matches set team_a_game_score=15 where id=$1', [legacyTieId]), /check constraint/)
+    await db.exec(tiebreakMigration)
+    assert.deepEqual((await db.query('select tiebreak_score from live_matches where id=$1', [legacyTieId])).rows[0].tiebreak_score, legacyTie.tiebreak_score)
     const deviceId = '00000000-0000-0000-0000-000000000102'
     const token = 'a'.repeat(64)
     const deviceCreate = (ids = [1, 2, 3, 4], key = token) => db.query(
-      'select create_qr_device_match($1::uuid,$2,$3,$4,$5,$6,$7) as id',
-      [deviceId, ...ids, 'Anonymous QR court', key],
+      'select create_qr_device_match_with_rules($1::uuid,$2,$3,$4,$5,$6,$7,$8) as id',
+      [deviceId, ...ids, 'Anonymous QR court', key, 'advantage'],
     )
     await db.query('select set_config($1,$2,false)', ['request.jwt.claims', '{"role":"anon"}'])
     await db.exec('set role anon')
@@ -211,6 +224,7 @@ test('QR registration, final-result submission and four-player ELO approval', as
     await assert.rejects(deviceCreate([1, 2, 3, 4], 'short'), /kluc/)
     assert.equal((await deviceCreate()).rows[0].id, deviceId)
     assert.equal((await deviceCreate()).rows[0].id, deviceId)
+    assert.equal((await db.query('select scoring_type from live_matches where id=$1', [deviceId])).rows[0].scoring_type, 'advantage')
     await assert.rejects(deviceCreate([1, 3, 2, 4]), /pouzite/)
     await assert.rejects(deviceCreate([1, 2, 3, 4], 'b'.repeat(64)), /pouzite/)
     assert.equal((await db.query('select id from live_matches where id=$1', [deviceId])).rows.length, 1)
@@ -222,6 +236,10 @@ test('QR registration, final-result submission and four-player ELO approval', as
     assert.equal((await updatePoint()).rows.length, 0)
     await db.query('select set_config($1,$2,false)', ['request.headers', JSON.stringify({ 'x-riva-qr-device': token })])
     assert.equal((await updatePoint()).rows.length, 1)
+    await assert.rejects(db.query("update live_matches set scoring_type='golden_point' where id=$1", [deviceId]), /Pravidla/)
+    await db.query("update live_matches set team_a_game_score=40,team_b_game_score=40,advantage_team='TEAM_A' where id=$1", [deviceId])
+    assert.equal((await db.query('select advantage_team from live_matches where id=$1', [deviceId])).rows[0].advantage_team, 'TEAM_A')
+    await db.query('update live_matches set team_a_game_score=15,team_b_game_score=0,advantage_team=null where id=$1', [deviceId])
     await assert.rejects(db.query('update live_matches set qr_device_token_hash=$1 where id=$2', ['b'.repeat(64), deviceId]))
     await db.exec('reset role')
     const deviceRow = (await db.query('select * from live_matches where id=$1', [deviceId])).rows[0]
@@ -243,6 +261,7 @@ test('QR registration, final-result submission and four-player ELO approval', as
     assert.equal(deviceResult.status, 'pending')
     assert.equal(deviceResult.elo_applied, false)
     assert.equal(parseRecordedMatchStatistics(deviceResult.live_statistics).team_a_total_points_won, 48)
+    assert.equal(parseRecordedMatchStatistics(deviceResult.live_statistics).scoring_type, 'advantage')
     assert.ok(!JSON.stringify(deviceResult.live_statistics).includes(token))
     assert.deepEqual(deviceResult.approved_profile_ids, [])
     assert.deepEqual(deviceResult.result_sets, [{ team1Score: 6, team2Score: 0 }, { team1Score: 6, team2Score: 0 }])
@@ -298,8 +317,34 @@ test('QR registration, final-result submission and four-player ELO approval', as
     await db.query('update matches set live_statistics=null where id::text=$1', [resultId])
     await db.exec('alter table matches enable trigger guard_official_live_statistics')
     await db.exec(await readFile(new URL('053_extended_match_statistics.sql', import.meta.url), 'utf8'))
-    assert.deepEqual((await db.query('select live_statistics from matches where id::text=$1', [resultId])).rows[0].live_statistics, result.live_statistics)
+    const { scoring_type, ...legacySnapshot } = result.live_statistics
+    assert.equal(scoring_type, 'golden_point')
+    assert.deepEqual((await db.query('select live_statistics from matches where id::text=$1', [resultId])).rows[0].live_statistics, legacySnapshot)
+    await db.exec(await readFile(new URL('055_live_match_scoring_rules.sql', import.meta.url), 'utf8'))
     assert.equal((await db.query('select * from profile_serve_statistics(1)')).rows[0].points_won, aggregate.points_won)
+    await db.exec(tiebreakMigration)
+    const tieId = '00000000-0000-0000-0000-000000000103'
+    await db.query('select create_qr_device_match_with_rules($1::uuid,1,2,3,4,$2,$3,$4)', [tieId, 'Tiebreak court', token, 'advantage'])
+    await db.query("update live_matches set completed_sets='[[6,0]]', team_a_sets=1,team_a_games=6,team_b_games=6,serving_team='TEAM_A',initial_server_chosen=true,started_at=now() where id=$1", [tieId])
+    let tieScore = (await db.query('select * from live_matches where id=$1', [tieId])).rows[0]
+    await db.exec('set role anon')
+    for (let i = 0; i < 7; i++) {
+      tieScore = awardLivePoint(tieScore, 'TEAM_A')
+      const patch = snapshotForDevice(tieScore)
+      const keys = Object.keys(patch)
+      const values = Object.values(patch).map(value => Array.isArray(value) ? JSON.stringify(value) : value)
+      await db.query(`update live_matches set ${keys.map((key,index) => `${key}=$${index+1}`).join(',')} where id=$${keys.length+1}`, [...values,tieId])
+    }
+    const finishedTie = (await db.query('select is_tiebreak,team_a_sets,tiebreak_score,official_result_id from live_matches where id=$1', [tieId])).rows[0]
+    assert.equal(finishedTie.is_tiebreak, false)
+    assert.equal(finishedTie.team_a_sets, 2)
+    assert.equal(finishedTie.tiebreak_score, null)
+    await db.exec('reset role')
+    const tieResult = (await db.query('select * from matches where id::text=$1', [finishedTie.official_result_id])).rows[0]
+    assert.deepEqual(tieResult.result_sets, [{team1Score:6,team2Score:0},{team1Score:7,team2Score:6}])
+    assert.equal(tieResult.status, 'pending')
+    assert.equal(tieResult.player1_games_won, 13)
+    assert.equal(tieResult.player2_games_won, 6)
   } finally {
     await db.close()
   }
@@ -309,7 +354,7 @@ function snapshotForDevice(score) {
   const { id, team_a_player1_name, team_a_player2_name, team_b_player1_name, team_b_player2_name,
     team_a_player1_id, team_a_player2_id, team_b_player1_id, team_b_player2_id,
     qr_created_by, qr_arena_name, qr_device_token_hash, official_result_id, challenge_id, match_pin, is_pin_activated,
-    created_at, statistics_complete, team_a_player1_points, team_a_player2_points,
+    created_at, statistics_complete, is_tiebreak, team_a_player1_points, team_a_player2_points,
     team_b_player1_points, team_b_player2_points, ...snapshot } = score
   return snapshot
 }

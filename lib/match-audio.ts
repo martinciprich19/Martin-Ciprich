@@ -15,6 +15,7 @@ export class MatchAudio {
   private request: AbortController | null = null
   private audio: HTMLAudioElement | null = null
   private objectUrl: string | null = null
+  private celebrated = false
 
   private readonly options: MatchAudioOptions
 
@@ -28,6 +29,12 @@ export class MatchAudio {
     this.request = null
     this.releaseAudio()
     this.options.stopFallback()
+  }
+
+  async celebrate(text: string, language: Language): Promise<void> {
+    if (this.celebrated) return
+    this.celebrated = true
+    await this.speak(text, language)
   }
 
   private releaseAudio() {
@@ -63,7 +70,7 @@ export class MatchAudio {
       const response = await fetch('/api/match-speech', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, matchId: this.options.matchId }),
+        body: JSON.stringify({ text, matchId: this.options.matchId, language }),
         signal: request.signal,
       })
       if (!response.ok) throw new Error(`Hlasová služba HTTP ${response.status}`)

@@ -1,5 +1,36 @@
 # Finished-match statistics
 
+Apply [055_live_match_scoring_rules.sql](../scripts/055_live_match_scoring_rules.sql)
+after 052 and 053 before using the new match-start screens. Quick games prompt
+before insertion, PIN games before activation, and QR games after the fourth
+player is scanned. Cancelling does not create/activate a match. The selected
+`scoring_type` is persisted atomically with creation/activation; Realtime and
+reloads retain `advantage_team`. Existing matches keep `golden_point`.
+In `advantage` mode, 40:40 goes to AD, an opposing point returns to deuce,
+and a second consecutive point wins the game. Golden Point ends the game
+on the next point at 40:40. Undo restores advantage; reset clears it.
+Rules cannot change after play begins. Break chances are counted only on an actual receiving game point;
+deuce alone is not a break chance in advantage mode. Service games count only
+game-ending points. New official statistics snapshots include the scoring mode.
+
+Apply [056_live_match_tiebreak.sql](../scripts/056_live_match_tiebreak.sql)
+after 055. At 6:6 in every set, both scoring modes automatically switch to a
+numeric tiebreak: first to at least 7 with a two-point lead, finishing the set
+7:6 or 6:7. `is_tiebreak` is generated from games; `tiebreak_score` stores both
+point counters and the first server. The first player serves one point, then
+players in the existing four-player service order serve two points each.
+The next set starts with the server following the first tiebreak server.
+Regular-game teammate rotation is unchanged. Manual server selection is disabled
+during tiebreaks; reset restores its first server, undo restores the whole state.
+Tiebreak points count toward totals, streaks and the actual server's point
+statistics, but not break chances or service-game hold percentages.
+Migration 056 converts existing visible 0/15/30/40 at 6:6 into 0/1/2/3, adds
+one for any advantage and clears the ordinary game score. Earlier deuce rallies
+and original service order cannot be recovered; affected recordings are marked
+incomplete. Gemy, sets and already recorded counters are not erased. This
+conversion runs only when the new column is first added; reruns retain live
+tiebreak points. Existing historical extended sets remain valid.
+
 The personal player QR code is shown near the top of Overview, not in the
 Profile tab. "Enlarge QR code" opens a responsive modal with the same profile
 URL, white scan margin, close button and native Escape/focus handling.
@@ -22,15 +53,21 @@ The profile's own-serve card sums won/lost points for the participant's exact
 team/player slot across all confirmed/approved results with complete recordings.
 It uses a database aggregate (not a limited client page or an average of match
 percentages), respects RLS and refreshes after confirmation. Pending, rejected,
-unrecorded and partially recorded matches are excluded, with coverage displayed.
+unrecorded and partially recorded matches are excluded.
 Zero opportunities is a dash; 0 wins out of positive opportunities is 0%.
 Apply [054_profile_serve_return_statistics.sql](../scripts/054_profile_serve_return_statistics.sql)
-after 053 for the two cards inside the match-statistics grid: "Úspešnosť vlastného
+after 053 for the cards inside the match-statistics grid: "Úspešnosť vlastného
 podania" uses individual serve points; "Úspešnosť súperovho podania" uses points
 won by the participant's pair on opponents' serve. The latter is opposing
 players' serve points lost divided by their total serve points, not the opposing
 team's serve success or personal receiving attribution. Both rates are weighted
-across all fully recorded confirmed matches and show recording coverage.
+across all fully recorded confirmed matches.
+Two separate cards, "Vyhraté body z podania" and "Vyhraté body zo súperovho
+podania", display the corresponding won-point counts as large values. Counts
+are no longer small ratios beneath percentage rates. Explanations remain in
+card tooltips; all four cards share loading and error/retry handling.
+The "Recorded matches" coverage line is not displayed in these cards.
+This presentation uses the existing aggregate RPC without a new migration.
 Individual rally winners and individual receiving points are not tracked by
 the team buttons: only the actual server's won/lost points are attributed to
 an individual. Team total points must not be presented as personal rally wins.

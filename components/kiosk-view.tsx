@@ -3,6 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Delete, LoaderCircle, LockKeyhole } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
+import { ScoringModeDialog } from '@/components/scoring-mode-dialog'
+import type { ScoringType } from '@/lib/live-match-scoring'
+import { getErrorMessage } from '@/lib/errors'
 
 const PIN_LENGTH = 4
 
@@ -11,16 +14,23 @@ export function KioskView() {
   const [isVerifying, setIsVerifying] = useState(false)
   const [error, setError] = useState('')
   const isVerifyingRef = useRef(false)
+  const [choosingRules, setChoosingRules] = useState(false)
 
-  const verifyPin = useCallback(async (value: string) => {
+  const verifyPin = useCallback((value: string) => {
+    if (/^\d{4}$/.test(value) && !isVerifyingRef.current) setChoosingRules(true)
+  }, [])
+
+  const activatePin = useCallback(async (value: string, mode: ScoringType) => {
     if (!/^\d{4}$/.test(value) || isVerifyingRef.current) return
     isVerifyingRef.current = true
     setIsVerifying(true)
     setError('')
     try {
-      const { data, error: rpcError } = await createClient().rpc('activate_live_match_pin', {
+      const { data, error: rpcError } = await createClient().rpc('activate_live_match_pin_with_rules', {
         p_match_pin: value,
+        p_scoring_type: mode,
       })
+      if (rpcError?.code === 'PGRST202') throw new Error('V Supabase spusti SQL migráciu 055 pre pravidlá bodovania.')
       if (rpcError) throw rpcError
       if (typeof data !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(data)) {
         throw new Error('Overenie nevrátilo platný zápas.')
@@ -29,7 +39,8 @@ export function KioskView() {
     } catch (verifyError: unknown) {
       console.error('Overenie PIN-u kiosku zlyhalo:', verifyError)
       setPin('')
-      setError('PIN nie je platný alebo už bol použitý. Skontroluj kód a skús to znova.')
+      setChoosingRules(false)
+      setError(getErrorMessage(verifyError, 'PIN nie je platný alebo už bol použitý. Skontroluj kód a skús to znova.'))
     } finally {
       isVerifyingRef.current = false
       setIsVerifying(false)
@@ -40,11 +51,15 @@ export function KioskView() {
     if (isVerifyingRef.current) return
     setError('')
     setPin((current) => current.length >= PIN_LENGTH ? current : `${current}${digit}`)
-    if (pin.length === PIN_LENGTH - 1) void verifyPin(`${pin}${digit}`)
+  }, [])
+
+  useEffect(() => {
+    if (pin.length === PIN_LENGTH) verifyPin(pin)
   }, [pin, verifyPin])
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
+      if (choosingRules) return
       if (/^\d$/.test(event.key)) {
         event.preventDefault()
         appendDigit(event.key)
@@ -61,7 +76,7 @@ export function KioskView() {
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [appendDigit, pin, verifyPin])
+  }, [appendDigit, pin, verifyPin, choosingRules])
 
   return (
     <main className="relative isolate flex min-h-[100svh] items-center justify-center overflow-hidden bg-[#061016] px-4 py-8 text-white">
@@ -95,6 +110,7 @@ export function KioskView() {
         </div>
         <p className="mt-6 text-center text-xs text-white/30">PIN môžeš zadávať aj pomocou klávesnice tabletu.</p>
       </section>
+      {choosingRules ? <ScoringModeDialog busy={isVerifying} error={error} onCancel={() => { setChoosingRules(false); setPin('') }} onConfirm={(mode) => void activatePin(pin, mode)} /> : null}
     </main>
   )
 }

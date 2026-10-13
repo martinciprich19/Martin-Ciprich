@@ -52,6 +52,7 @@ export function MatchStatistics({ match, showAvatars = false, avatars }: { match
   ]
   return (
     <div className="match-statistics">
+      <p className="result-stat-scope">{t('Režim', 'Mode')}: {match.scoring_type === 'advantage' ? t('So zhodou (Výhoda)', 'Standard / Advantage') : 'Golden Point'}</p>
       <div className="result-stat-filter" role="group" aria-label={t('Vybrať štatistiky zápasu alebo setu', 'Choose match or set statistics')}>
         <button type="button" aria-pressed={selectedSet === null} aria-controls={panelId} onClick={() => setSelectedSet(null)}>{t('Celý zápas', 'Entire match')}</button>
         {match.completed_sets.map((set, index) => (

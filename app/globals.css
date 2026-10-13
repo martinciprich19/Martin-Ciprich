@@ -49,7 +49,7 @@ body:has(.live-court) { overflow: hidden; }
 main:has(.live-court) > header { display: none; }
 main:has(.live-court) > section { padding: 0; }
 .live-court > * { margin-top: 0; flex-shrink: 0; }
-.live-court > header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.live-court > header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
 .live-court > header a { margin: 0; font-size: 12px; }
 .live-court > header h1 { margin: 0; font-size: clamp(16px, 3vw, 28px); }
 .live-court > header p, .live-court > p:not(.court-status):not(.court-error) { display: none; }

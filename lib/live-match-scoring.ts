@@ -1,7 +1,12 @@
 export type Team = 'TEAM_A' | 'TEAM_B'
 export type GameScore = 0 | 15 | 30 | 40
+export type ScoringType = 'golden_point' | 'advantage'
+export type TiebreakScore = { a: number; b: number; first_team: Team; first_player: 1 | 2 }
 export type ServiceGameStatistics = { team_a_won: number; team_a_lost: number; team_b_won: number; team_b_lost: number }
 export type LiveScore = {
+  scoring_type?: ScoringType
+  advantage_team?: Team | null
+  tiebreak_score?: TiebreakScore | null
   team_a_game_score: GameScore
   team_b_game_score: GameScore
   team_a_games: number
@@ -73,12 +78,17 @@ export function parseRecordedMatchStatistics(value: unknown): RecordedMatchStati
     return text
   }
   if (!Array.isArray(row.completed_sets)) throw new Error('Chýbajú výsledky setov v štatistikách.')
+  if (row.scoring_type !== undefined && row.scoring_type !== 'golden_point' && row.scoring_type !== 'advantage') {
+    throw new Error('Neplatné uložené pravidlá bodovania.')
+  }
   const completedSets: [number, number][] = row.completed_sets.map((set: unknown) => {
     if (!Array.isArray(set) || set.length !== 2 || !set.every((n: unknown) => typeof n === 'number' && Number.isSafeInteger(n) && n >= 0)) throw new Error('Neplatné výsledky setov v štatistikách.')
     return [set[0], set[1]]
   })
   return {
     ...stats,
+    scoring_type: row.scoring_type ?? 'golden_point',
+    advantage_team: null,
     team_a_game_score: 0, team_b_game_score: 0, team_a_games: 0, team_b_games: 0,
     team_a_sets: count('team_a_sets'), team_b_sets: count('team_b_sets'),
     serving_team: null, serving_player: 1, initial_server_chosen: true,
@@ -172,7 +182,7 @@ export function getMatchWinner(score: Pick<LiveScore, 'team_a_sets' | 'team_b_se
   return score.team_a_sets >= 2 ? 'TEAM_A' : score.team_b_sets >= 2 ? 'TEAM_B' : null
 }
 
-export function rotateServer(score: LiveScore): { serving_team: Team; serving_player: 1 | 2 } {
+export function rotateServer(score: Pick<LiveScore, 'serving_team' | 'serving_player'>): { serving_team: Team; serving_player: 1 | 2 } {
   if (score.serving_team === null) throw new Error('Choose an initial server first.')
   return {
     serving_team: score.serving_team === 'TEAM_A' ? 'TEAM_B' : 'TEAM_A',
@@ -188,12 +198,50 @@ export function rotateServingPlayer(score: LiveScore): { serving_team: Team; ser
   }
 }
 
+export function isTiebreak(score: Pick<LiveScore, 'team_a_games' | 'team_b_games'>): boolean {
+  return score.team_a_games === 6 && score.team_b_games === 6
+}
+
+export function parseTiebreakScore(value: unknown): TiebreakScore | null {
+  if (value == null) return null
+  if (typeof value !== 'object') throw new Error('Neplatné skóre tajbrejku.')
+  const row = value as Record<string, unknown>
+  if (typeof row.a !== 'number' || !Number.isSafeInteger(row.a) || row.a < 0
+    || typeof row.b !== 'number' || !Number.isSafeInteger(row.b) || row.b < 0
+    || (row.first_team !== 'TEAM_A' && row.first_team !== 'TEAM_B')
+    || (row.first_player !== 1 && row.first_player !== 2)) {
+    throw new Error('Neplatné skóre tajbrejku.')
+  }
+  return { a: row.a, b: row.b, first_team: row.first_team, first_player: row.first_player }
+}
+
+export function getTiebreakScore(score: LiveScore): TiebreakScore {
+  if (score.tiebreak_score) return score.tiebreak_score
+  if (score.serving_team === null) throw new Error('Choose an initial server first.')
+  return { a: 0, b: 0, first_team: score.serving_team, first_player: score.serving_player }
+}
+
+export function tiebreakServer(state: TiebreakScore): { serving_team: Team; serving_player: 1 | 2 } {
+  const total = state.a + state.b
+  const rotations = total === 0 ? 0 : Math.ceil(total / 2) % 4
+  let server = { serving_team: state.first_team, serving_player: state.first_player }
+  for (let i = 0; i < rotations; i++) server = rotateServer(server)
+  return server
+}
+
+export function isGamePoint(score: LiveScore, team: Team): boolean {
+  if (isTiebreak(score)) return false
+  const own = score[team === 'TEAM_A' ? 'team_a_game_score' : 'team_b_game_score']
+  const opponent = score[team === 'TEAM_A' ? 'team_b_game_score' : 'team_a_game_score']
+  return own === 40 && (score.scoring_type !== 'advantage' || opponent < 40 || score.advantage_team === team)
+}
+
 function recordPointStatistics(next: SetStatistics, score: LiveScore, team: Team, pointAt: string) {
   if (score.serving_team === null) throw new Error('Choose an initial server first.')
   const outcome = team === score.serving_team ? 'won' : 'lost'
   const playerKey = serveStatKeys[score.serving_team][score.serving_player][outcome]
   next[playerKey]++
-  if (score[team === 'TEAM_A' ? 'team_a_game_score' : 'team_b_game_score'] === 40 && next.service_game_statistics) {
+  if (isGamePoint(score, team) && next.service_game_statistics) {
     const key = `${score.serving_team === 'TEAM_A' ? 'team_a' : 'team_b'}_${outcome}` as keyof ServiceGameStatistics
     next.service_game_statistics = { ...next.service_game_statistics, [key]: next.service_game_statistics[key] + 1 }
   }
@@ -208,8 +256,7 @@ function recordPointStatistics(next: SetStatistics, score: LiveScore, team: Team
   next[longestStreakKey] = Math.max(next[longestStreakKey], next.current_point_streak)
 
   const receiver = score.serving_team === 'TEAM_A' ? 'TEAM_B' : 'TEAM_A'
-  const receiverScore = score[receiver === 'TEAM_A' ? 'team_a_game_score' : 'team_b_game_score']
-  if (receiverScore === 40) {
+  if (isGamePoint(score, receiver)) {
     const keys = breakPointKeys[receiver]
     next[keys.chances]++
     if (team === receiver) next[keys.converted]++
@@ -242,12 +289,38 @@ export function awardLivePoint(score: LiveScore, team: Team, pointAt = new Date(
   }
   next.set_statistics = setStats
 
+  if (isTiebreak(score)) {
+    const state = { ...getTiebreakScore(score) }
+    state[team === 'TEAM_A' ? 'a' : 'b']++
+    next.team_a_game_score = 0
+    next.team_b_game_score = 0
+    next.advantage_team = null
+    if (Math.max(state.a, state.b) >= 7 && Math.abs(state.a - state.b) >= 2) {
+      next.completed_sets = [...score.completed_sets, team === 'TEAM_A' ? [7, 6] : [6, 7]]
+      const finishedSet = setStats[setIndex]
+      if (finishedSet) setStats[setIndex] = { ...finishedSet, finished_at: pointAt }
+      next[team === 'TEAM_A' ? 'team_a_sets' : 'team_b_sets']++
+      next.team_a_games = 0
+      next.team_b_games = 0
+      next.tiebreak_score = null
+      if (getMatchWinner(next)) next.finished_at = pointAt
+      return { ...next, ...rotateServer({ ...score, serving_team: state.first_team, serving_player: state.first_player }) }
+    }
+    next.tiebreak_score = state
+    return { ...next, ...tiebreakServer(state) }
+  }
+
   const pointKey = team === 'TEAM_A' ? 'team_a_game_score' : 'team_b_game_score'
   const points = score[pointKey]
   if (points !== 40) {
     next[pointKey] = points === 0 ? 15 : points === 15 ? 30 : 40
     return { ...next, ...rotateServingPlayer(score) }
   }
+  if (!isGamePoint(score, team)) {
+    next.advantage_team = score.advantage_team ? null : team
+    return { ...next, ...rotateServingPlayer(score) }
+  }
+  next.advantage_team = null
   next.team_a_game_score = 0
   next.team_b_game_score = 0
   const gameKey = team === 'TEAM_A' ? 'team_a_games' : 'team_b_games'
@@ -261,24 +334,37 @@ export function awardLivePoint(score: LiveScore, team: Team, pointAt = new Date(
     next.team_b_games = 0
   }
   if (getMatchWinner(next)) next.finished_at = pointAt
-  return { ...next, ...rotateServer(score) }
+  const result = { ...next, ...rotateServer(score) }
+  if (isTiebreak(result)) result.tiebreak_score = getTiebreakScore({ ...result, tiebreak_score: null })
+  return result
 }
 
 export function getPointAnnouncement(previous: LiveScore, updated: LiveScore): { sk: string; en: string } | null {
   if (!previous.initial_server_chosen || previous.serving_team === null || getMatchWinner(previous)) return null
   const scoreKeys = [
     'team_a_game_score', 'team_b_game_score', 'team_a_games',
-    'team_b_games', 'team_a_sets', 'team_b_sets',
+    'team_b_games', 'team_a_sets', 'team_b_sets', 'advantage_team',
   ] as const
   for (const team of ['TEAM_A', 'TEAM_B'] as const) {
     const expected = awardLivePoint(previous, team)
-    if (!scoreKeys.every((key) => expected[key] === updated[key])) continue
+    if (!scoreKeys.every((key) => (expected[key] ?? null) === (updated[key] ?? null))) continue
+    if ((expected.tiebreak_score?.a ?? 0) !== (updated.tiebreak_score?.a ?? 0)
+      || (expected.tiebreak_score?.b ?? 0) !== (updated.tiebreak_score?.b ?? 0)) continue
     const teamNumber = team === 'TEAM_A' ? 1 : 2
     const slovakTeam = team === 'TEAM_A' ? 'tím jedna' : 'tím dva'
-    const wonGame = previous[team === 'TEAM_A' ? 'team_a_game_score' : 'team_b_game_score'] === 40
+    const wonGame = isGamePoint(previous, team)
+    const gainedAdvantage = updated.advantage_team === team
+    const returnedToDeuce = Boolean(previous.advantage_team && !updated.advantage_team && !wonGame)
+    if (isTiebreak(previous)) {
+      const wonTiebreak = updated.team_a_sets + updated.team_b_sets > previous.team_a_sets + previous.team_b_sets
+      return {
+        sk: `Bod pre ${slovakTeam}${wonTiebreak ? `, tajbrejk a set pre ${slovakTeam}` : ''}.`,
+        en: `Point for Team ${teamNumber}${wonTiebreak ? `, tiebreak and set for Team ${teamNumber}` : ''}.`,
+      }
+    }
     return {
-      sk: `Bod pre ${slovakTeam}${wonGame ? `, gem pre ${slovakTeam}` : ''}.`,
-      en: `Point for Team ${teamNumber}${wonGame ? `, game for Team ${teamNumber}` : ''}.`,
+      sk: `Bod pre ${slovakTeam}${wonGame ? `, gem pre ${slovakTeam}` : gainedAdvantage ? `, výhoda pre ${slovakTeam}` : returnedToDeuce ? ', zhoda' : ''}.`,
+      en: `Point for Team ${teamNumber}${wonGame ? `, game for Team ${teamNumber}` : gainedAdvantage ? `, advantage for Team ${teamNumber}` : returnedToDeuce ? ', deuce' : ''}.`,
     }
   }
   return null

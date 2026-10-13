@@ -13,9 +13,12 @@ import { PlayerAvatar } from '@/components/player-avatar'
 import { parseMatchAvatars, type MatchAvatars } from '@/lib/live-match-avatars'
 import { speakMatchAnnouncement } from '@/lib/match-speech'
 import { MatchAudio, type MatchSpeechStatus } from '@/lib/match-audio'
+import { isTiebreak, getTiebreakScore, parseTiebreakScore } from '@/lib/live-match-scoring'
 import { awardLivePoint, getPointAnnouncement, getMatchWinner, getWinnerAnnouncement, parseSetStatistics, parseServiceGameStatistics, type LiveScore, type Team, type GameScore } from '@/lib/live-match-scoring'
 
 type MatchRow = LiveScore & {
+  scoring_type: 'golden_point' | 'advantage'
+  advantage_team: Team | null
   id: string | number
   challenge_id: string | null
   team_a_player1_name: string
@@ -104,8 +107,18 @@ function normalizeMatch(row: Record<string, unknown>): MatchRow {
     if (!Array.isArray(set) || set.length !== 2) throw new Error('Neplatné výsledky setov.')
     return [toCounter(set[0]), toCounter(set[1])]
   })
+  if (row.scoring_type !== 'golden_point' && row.scoring_type !== 'advantage') {
+    throw new Error('Chýbajú pravidlá bodovania. Spusti SQL migráciu 055.')
+  }
+  if (row.advantage_team !== null && row.advantage_team !== 'TEAM_A' && row.advantage_team !== 'TEAM_B') {
+    throw new Error('Neplatný stav výhody. Spusti SQL migráciu 055.')
+  }
+  if (!('tiebreak_score' in row)) throw new Error('Chýba stav tajbrejku. Spusti SQL migráciu 056.')
 
   return {
+    tiebreak_score: parseTiebreakScore(row.tiebreak_score),
+    scoring_type: row.scoring_type,
+    advantage_team: row.advantage_team,
     id: row.id,
     qr_created_by: row.qr_created_by === null ? null : String(row.qr_created_by),
     official_result_id: row.official_result_id,
@@ -155,6 +168,9 @@ function normalizeMatch(row: Record<string, unknown>): MatchRow {
 
 function snapshot(match: MatchRow): MatchSnapshot {
   return {
+    tiebreak_score: match.tiebreak_score,
+    scoring_type: match.scoring_type,
+    advantage_team: match.advantage_team,
     team_a_game_score: match.team_a_game_score,
     team_b_game_score: match.team_b_game_score,
     serving_team: match.serving_team,
@@ -226,7 +242,7 @@ function useBleClicker(onTeamAPoint: () => void, onTeamBPoint: () => void, onUnd
   }, [enabled, onTeamAPoint, onTeamBPoint, onUndo, onReset])
 }
 
-function formatScore(score: GameScore) {
+function formatScore(score: number) {
   return String(score)
 }
 
@@ -343,6 +359,11 @@ export function MatchView({ matchId }: { matchId: string }) {
     void audioRef.current?.speak(currentLanguage === 'sk' ? slovak : english, currentLanguage)
   }, [])
 
+  const celebrateWinner = useCallback((announcement: { sk: string; en: string }) => {
+    const currentLanguage = languageRef.current
+    void audioRef.current?.celebrate(announcement[currentLanguage], currentLanguage)
+  }, [])
+
   useEffect(() => {
     const supabase = createClient()
     supabaseRef.current = supabase
@@ -356,7 +377,7 @@ export function MatchView({ matchId }: { matchId: string }) {
         }
         const { data, error: queryError } = await supabase
           .from('live_matches')
-          .select(`${MATCH_COLUMNS}, service_game_statistics`)
+          .select(`${MATCH_COLUMNS}, service_game_statistics, scoring_type, advantage_team, tiebreak_score`)
           .eq('id', matchId)
           .maybeSingle()
         if (queryError) throw queryError
@@ -404,7 +425,7 @@ export function MatchView({ matchId }: { matchId: string }) {
               const winnerAnnouncement = previous && !getMatchWinner(previous) ? getWinnerAnnouncement(updated) : null
               const pointAnnouncement = previous ? getPointAnnouncement(previous, updated) : null
               if (winnerAnnouncement) {
-                announce(winnerAnnouncement.sk, winnerAnnouncement.en)
+                if (!writeInFlightRef.current) celebrateWinner(winnerAnnouncement)
               } else if (pointAnnouncement) {
                 announce(pointAnnouncement.sk, pointAnnouncement.en)
               } else if (!getMatchWinner(updated) && previous && (updated.serving_team !== previous.serving_team || updated.serving_player !== previous.serving_player) && updated.serving_team !== null) {
@@ -442,7 +463,7 @@ export function MatchView({ matchId }: { matchId: string }) {
       if (channel) void supabase.removeChannel(channel)
       if (supabaseRef.current === scoreClient) supabaseRef.current = null
     }
-  }, [matchId, announce])
+  }, [matchId, announce, celebrateWinner])
 
   const persist = useCallback((patch: MatchPatch, completionAnnouncement?: { sk: string; en: string }) => {
     const current = matchRef.current
@@ -480,8 +501,11 @@ export function MatchView({ matchId }: { matchId: string }) {
         .eq('team_b_sets', current.team_b_sets)
         .eq('team_a_game_score', current.team_a_game_score)
         .eq('team_b_game_score', current.team_b_game_score)
+        .eq('scoring_type', current.scoring_type)
+        .filter('advantage_team', current.advantage_team === null ? 'is' : 'eq', current.advantage_team ?? 'null')
+        .filter('tiebreak_score', current.tiebreak_score == null ? 'is' : 'eq', current.tiebreak_score == null ? 'null' : JSON.stringify(current.tiebreak_score))
         .eq('set_statistics', JSON.stringify(current.set_statistics))
-        .select(`${MATCH_COLUMNS}, service_game_statistics`)
+        .select(`${MATCH_COLUMNS}, service_game_statistics, scoring_type, advantage_team, tiebreak_score`)
         .single()
       if (updateError?.code === 'PGRST116') {
         throw new Error('Zápas sa medzičasom zmenil na inom zariadení. Obnov stránku a skús bod pridať znova.')
@@ -492,7 +516,7 @@ export function MatchView({ matchId }: { matchId: string }) {
       if (revision === writeRevisionRef.current) {
         matchRef.current = saved
         setMatch(saved)
-        if (completionAnnouncement) announce(completionAnnouncement.sk, completionAnnouncement.en)
+        if (completionAnnouncement) celebrateWinner(completionAnnouncement)
       }
     }).catch((saveError: unknown) => {
       const message = getErrorMessage(saveError, 'Zmenu zápasu sa nepodarilo uložiť.')
@@ -506,7 +530,7 @@ export function MatchView({ matchId }: { matchId: string }) {
       writeInFlightRef.current = false
       if (revision === writeRevisionRef.current) setIsSaving(false)
     })
-  }, [announce])
+  }, [celebrateWinner])
 
   const awardPoint = useCallback((team: Team) => {
     const current = matchRef.current
@@ -529,15 +553,26 @@ export function MatchView({ matchId }: { matchId: string }) {
     const previous = historyRef.current.pop()
     if (!previous) return
     persist(previous)
-    announce(`Posledná zmena bola vrátená. Skóre ${previous.team_a_game_score} ku ${previous.team_b_game_score}.`, `Last change undone. Score ${previous.team_a_game_score} to ${previous.team_b_game_score}.`)
+    if (isTiebreak(previous)) {
+      announce('Posledná zmena bola vrátená. Tajbrejk.', 'Last change undone. Tiebreak.')
+    } else if (previous.advantage_team) {
+      announce(`Posledná zmena bola vrátená. Výhoda pre tím ${previous.advantage_team === 'TEAM_A' ? 'jedna' : 'dva'}.`, `Last change undone. Advantage for Team ${previous.advantage_team === 'TEAM_A' ? 1 : 2}.`)
+    } else {
+      announce(`Posledná zmena bola vrátená. Skóre ${previous.team_a_game_score} ku ${previous.team_b_game_score}.`, `Last change undone. Score ${previous.team_a_game_score} to ${previous.team_b_game_score}.`)
+    }
   }, [persist, announce])
 
   const resetGame = useCallback(() => {
     const current = matchRef.current
-    if (!canEditRef.current || !current || writeInFlightRef.current || getMatchWinner(current) || (current.team_a_game_score === 0 && current.team_b_game_score === 0)) return
+    if (!canEditRef.current || !current || writeInFlightRef.current || getMatchWinner(current)) return
+    const tie = isTiebreak(current) ? getTiebreakScore(current) : null
+    if (tie ? tie.a + tie.b === 0 : current.team_a_game_score + current.team_b_game_score === 0) return
     historyRef.current.push(snapshot(current))
-    persist({ team_a_game_score: 0, team_b_game_score: 0 })
-    announce('Skóre gemu bolo vynulované.', 'Game score reset.')
+    persist({
+      team_a_game_score: 0, team_b_game_score: 0, advantage_team: null,
+      ...(tie ? { tiebreak_score: { ...tie, a: 0, b: 0 }, serving_team: tie.first_team, serving_player: tie.first_player } : {}),
+    })
+    announce(tie ? 'Skóre tajbrejku bolo vynulované.' : 'Skóre gemu bolo vynulované.', tie ? 'Tiebreak score reset.' : 'Game score reset.')
   }, [persist, announce])
 
   const drawServe = useCallback(() => {
@@ -551,7 +586,7 @@ export function MatchView({ matchId }: { matchId: string }) {
 
   function selectServer(team: Team, player: 1 | 2) {
     const current = matchRef.current
-    if (!canEditRef.current || !current || writeInFlightRef.current || getMatchWinner(current) || (current.challenge_id !== null && !current.is_pin_activated)) return
+    if (!canEditRef.current || !current || writeInFlightRef.current || getMatchWinner(current) || isTiebreak(current) || (current.challenge_id !== null && !current.is_pin_activated)) return
     if (current.initial_server_chosen) historyRef.current.push(snapshot(current))
     persist({ serving_team: team, serving_player: player, initial_server_chosen: true })
     announce(`Podáva Tím ${team === 'TEAM_A' ? 1 : 2}, hráč ${player}.`, `Team ${team === 'TEAM_A' ? 1 : 2}, player ${player} serves.`)
@@ -575,6 +610,7 @@ export function MatchView({ matchId }: { matchId: string }) {
 
   const scoreReady = canEdit && !isSaving && match.initial_server_chosen && (match.challenge_id === null || match.is_pin_activated)
   const winner = getMatchWinner(match)
+  const tie = isTiebreak(match) ? getTiebreakScore(match) : null
   const durationEnd = match.finished_at ? Date.parse(match.finished_at) : clockNow
   const durationSeconds = match.started_at && durationEnd !== null
     ? Math.floor((durationEnd - Date.parse(match.started_at)) / 1000)
@@ -617,6 +653,8 @@ export function MatchView({ matchId }: { matchId: string }) {
         <p className="text-xs font-bold uppercase tracking-[0.24em] text-[#a8e63c]">RIVA / LIVE SCORE</p>
         <h1 className="mt-3 text-3xl font-black tracking-tight sm:text-5xl">Priebeh zápasu</h1>
         <p className="mt-3 text-sm text-white/55">Sleduj skóre naživo a ovládaj ho priamo z kurtu.</p>
+        <span className="text-xs text-white/50">{t('Režim', 'Mode')}: {match.scoring_type === 'advantage' ? t('So zhodou', 'Advantage') : 'Golden Point'}</span>
+        {tie ? <strong className="text-xs text-[#a8e63c]">{t('Tajbrejk · do 7 bodov, rozdiel 2', 'Tiebreak · first to 7, win by 2')}</strong> : null}
       </header>
 
       {!match.initial_server_chosen ? <div className="court-toolbar mt-8 flex flex-wrap items-center justify-center gap-3">
@@ -636,12 +674,12 @@ export function MatchView({ matchId }: { matchId: string }) {
         <div><p className="text-sm text-white/60">{t('Trvanie zápasu', 'Match duration')}</p><p className="mt-2 text-3xl font-black" aria-live="off">{durationLabel}</p></div>
         <div><p className="text-sm text-white/60">{match.streak_team ? t(`Séria bodov – Tím ${match.streak_team === 'TEAM_A' ? '1' : '2'}`, `Point streak – Team ${match.streak_team === 'TEAM_A' ? '1' : '2'}`) : t('Séria bodov', 'Point streak')}</p><p className="mt-2 text-3xl font-black">{match.current_point_streak}</p></div>
       </div>
-      <p className="mt-2 text-center text-xs text-white/45">{t('Set do 6 gemov s rozdielom 2, bez tajbrejku.', 'First to at least 6 games with a two-game lead, no tie-break.')}</p>
+      <p className="mt-2 text-center text-xs text-white/45">{t('Pri 6:6 tajbrejk do 7 bodov s rozdielom 2.', 'At 6:6, tiebreak to 7 points, win by 2.')}</p>
 
       <div className="court-teams mt-8 grid gap-4 md:grid-cols-2">
         {([
-          { team: 'TEAM_A', label: t('Tím 1', 'Team 1'), players: [match.team_a_player1_name, match.team_a_player2_name], score: match.team_a_game_score },
-          { team: 'TEAM_B', label: t('Tím 2', 'Team 2'), players: [match.team_b_player1_name, match.team_b_player2_name], score: match.team_b_game_score },
+          { team: 'TEAM_A', label: t('Tím 1', 'Team 1'), players: [match.team_a_player1_name, match.team_a_player2_name], score: tie ? tie.a : match.team_a_game_score },
+          { team: 'TEAM_B', label: t('Tím 2', 'Team 2'), players: [match.team_b_player1_name, match.team_b_player2_name], score: tie ? tie.b : match.team_b_game_score },
         ] as const).map(({ team, label, players, score }) => {
           const serving = match.serving_team === team
           return (
@@ -654,7 +692,7 @@ export function MatchView({ matchId }: { matchId: string }) {
                   const playerServing = serving && match.serving_player === playerNumber
                   return (
                     <button key={playerNumber} type="button"
-                      disabled={!canEdit || isSaving || (match.challenge_id !== null && !match.is_pin_activated)}
+                      disabled={!canEdit || isSaving || Boolean(tie) || (match.challenge_id !== null && !match.is_pin_activated)}
                       onClick={() => selectServer(team, playerNumber)}
                       aria-pressed={playerServing}
                       aria-label={`${t('Nastaviť podanie', 'Set server')}: ${label}, ${t('Hráč', 'Player')} ${playerNumber}`}
@@ -668,8 +706,8 @@ export function MatchView({ matchId }: { matchId: string }) {
                   )
                 })}
               </div>
-              <p className="court-points-label mt-8 text-xs font-bold uppercase tracking-[0.18em] text-white/40">Body v geme</p>
-              <p className="court-points mt-3 text-center font-black leading-none tracking-tight text-white tabular-nums" aria-label={`${label}: ${formatScore(score)} bodov`}><span>{formatScore(score)}</span></p>
+              <p className="court-points-label mt-8 text-xs font-bold uppercase tracking-[0.18em] text-white/40">{tie ? t('Body v tajbrejku', 'Tiebreak points') : t('Body v geme', 'Game points')}</p>
+              <p className="court-points mt-3 text-center font-black leading-none tracking-tight text-white tabular-nums" aria-label={`${label}: ${match.advantage_team === team ? t('Výhoda', 'Advantage') : formatScore(score)}`}><span>{match.advantage_team === team ? 'AD' : formatScore(score)}</span></p>
               <button
                 type="button"
                 onClick={team === 'TEAM_A' ? addTeamAPoint : addTeamBPoint}
@@ -720,7 +758,7 @@ export function MatchView({ matchId }: { matchId: string }) {
         </div>
         <div className="flex flex-wrap justify-center gap-2">
           <button type="button" onClick={undo} disabled={!canEdit || isSaving || !historyRef.current.length} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-white/10 px-4 text-sm font-semibold text-white/75 transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40"><Undo2 size={16} aria-hidden="true" /> Späť <kbd className="ml-1 rounded border border-white/15 px-1.5 py-0.5 text-[10px]">Z</kbd></button>
-          <button type="button" onClick={resetGame} disabled={!canEdit || isSaving || (match.team_a_game_score === 0 && match.team_b_game_score === 0)} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-white/10 px-4 text-sm font-semibold text-white/75 transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40"><RotateCcw size={16} aria-hidden="true" /> Reset gemu <kbd className="ml-1 rounded border border-white/15 px-1.5 py-0.5 text-[10px]">M</kbd></button>
+          <button type="button" onClick={resetGame} disabled={!canEdit || isSaving || (tie ? tie.a + tie.b === 0 : match.team_a_game_score + match.team_b_game_score === 0)} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-white/10 px-4 text-sm font-semibold text-white/75 transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40"><RotateCcw size={16} aria-hidden="true" /> {tie ? t('Reset tajbrejku', 'Reset tiebreak') : t('Reset gemu', 'Reset game')} <kbd className="ml-1 rounded border border-white/15 px-1.5 py-0.5 text-[10px]">M</kbd></button>
         </div>
       </div>
 

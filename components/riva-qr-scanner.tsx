@@ -13,6 +13,8 @@ import { filterArenas } from '@/lib/arena-search'
 import useSWR from 'swr'
 import { createQrDeviceToken, saveQrDeviceToken } from '@/lib/qr-match-device'
 import { getQrScanRegion, QR_VIEWFINDER_RATIO } from '@/lib/qr-scan-region'
+import { ScoringModeDialog } from '@/components/scoring-mode-dialog'
+import type { ScoringType } from '@/lib/live-match-scoring'
 
 type ScannedPlayer = { id: string; name: string }
 const slots = [
@@ -53,6 +55,7 @@ export function RivaQrScanner({ onClose }: { onClose: () => void }) {
   const [decodedText, setDecodedText] = useState<string | null>(null)
   const [isStarting, setIsStarting] = useState(false)
   const [attempt, setAttempt] = useState(0)
+  const [choosingRules, setChoosingRules] = useState(false)
 
   useEffect(() => {
     if (arenasError) console.error('Načítanie zoznamu arén zlyhalo:', arenasError)
@@ -95,7 +98,7 @@ export function RivaQrScanner({ onClose }: { onClose: () => void }) {
     }
   }
 
-  const createMatch = useCallback(async () => {
+  const createMatch = useCallback(async (scoringType: ScoringType) => {
     const roster = playersRef.current
     if (roster.length !== 4 || creationRef.current) return
     creationRef.current = true
@@ -103,7 +106,8 @@ export function RivaQrScanner({ onClose }: { onClose: () => void }) {
     setError('')
     scannerRef.current?.stop()
     try {
-      const { data, error: creationError } = await createClient().rpc('create_qr_device_match', {
+      const { data, error: creationError } = await createClient().rpc('create_qr_device_match_with_rules', {
+        p_scoring_type: scoringType,
         p_live_match_id: liveMatchIdRef.current,
         p_team_a_player1_id: roster[0].id,
         p_team_a_player2_id: roster[1].id,
@@ -113,7 +117,7 @@ export function RivaQrScanner({ onClose }: { onClose: () => void }) {
         p_device_token: deviceTokenRef.current,
       })
       if (creationError?.code === 'PGRST202') {
-        throw new Error(tRef.current('V Supabase spusti SQL migráciu 052 pre QR zápasy bez prihlásenia.', 'Apply SQL migration 052 in Supabase for QR matches without login.'))
+        throw new Error(tRef.current('V Supabase spusti SQL migráciu 055 pre pravidlá bodovania.', 'Apply SQL migration 055 in Supabase for scoring rules.'))
       }
       if (creationError) throw creationError
       if (typeof data !== 'string' || !/^[0-9a-f-]{36}$/i.test(data)) {
@@ -175,7 +179,7 @@ export function RivaQrScanner({ onClose }: { onClose: () => void }) {
               setError('')
               if (next.length === 4) {
                 finishTimer = window.setTimeout(() => {
-                  if (isActive) void createMatch()
+                  if (isActive) { scannerRef.current?.stop(); setChoosingRules(true) }
                 }, 450)
               }
             } catch (scanError) {
@@ -307,12 +311,13 @@ export function RivaQrScanner({ onClose }: { onClose: () => void }) {
             <pre role="status" className="mt-2 whitespace-pre-wrap break-all text-white">{decodedText === null ? t('Zatiaľ nebol rozpoznaný žiadny QR kód.', 'No QR code detected yet.') : decodedText}</pre>
           </div>
           {!isStarting && !isCreating && !isResolving && !(players.length === 4 && lastScannedPlayer) ? <div className="mt-4 flex flex-wrap gap-3">
-            {players.length === 4 ? <button type="button" onClick={() => void createMatch()} className="min-h-11 rounded-xl bg-[#a8e63c] px-4 font-bold text-[#061016]">{t('Skúsiť vytvoriť zápas znova', 'Retry creating match')}</button> : <button type="button" onClick={() => setAttempt((current) => current + 1)} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-white/15 px-4 text-sm"><Camera size={17} aria-hidden="true" />{t('Skenovať znova', 'Scan again')}</button>}
+            {players.length === 4 ? <button type="button" onClick={() => setChoosingRules(true)} className="min-h-11 rounded-xl bg-[#a8e63c] px-4 font-bold text-[#061016]">{t('Vybrať pravidlá a začať', 'Choose rules and start')}</button> : <button type="button" onClick={() => setAttempt((current) => current + 1)} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-white/15 px-4 text-sm"><Camera size={17} aria-hidden="true" />{t('Skenovať znova', 'Scan again')}</button>}
             {players.length > 0 ? <button type="button" onClick={removeLastPlayer} className="min-h-11 rounded-xl border border-white/15 px-4 text-sm">{t('Odobrať posledného hráča', 'Remove last player')}</button> : null}
           </div> : null}
         </>}
         {error ? <p role="alert" className="mt-4 rounded-xl bg-red-400/10 p-3 text-sm text-red-200">{error}</p> : null}
       </div>
+      {choosingRules ? <ScoringModeDialog busy={isCreating} error={error} onCancel={() => setChoosingRules(false)} onConfirm={(mode) => void createMatch(mode)} /> : null}
     </section>
   )
 }

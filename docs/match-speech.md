@@ -1,10 +1,13 @@
 # Match announcements
 
-Match announcements use the configured ElevenLabs voice (`2bNrEsM0omyhLiEyOwqY`) through
+Match announcements use the Slovak ElevenLabs voice (`2bNrEsM0omyhLiEyOwqY`)
+or English voice (`wAGzRVkxKEs8La0lmdrE`) through
 `POST /api/match-speech`, with `eleven_multilingual_v2`, stability `0.95`,
 similarity boost `0.75`, speed `0.80` and style exaggeration `0` for slower,
 more even announcements with less expressive variation.
-Slovak/English selection still controls the spoken text.
+Slovak/English selection controls both spoken text and the server-selected voice.
+Requests without a language retain the Slovak voice for older clients. Unsupported
+language values are rejected. The audio cache is separated by voice and text.
 The browser receives MP3 audio, not the provider API key.
 Text is trimmed before allowlist validation, cache lookup and synthesis;
 unrecognized invisible characters are rejected rather than sent to ElevenLabs.
@@ -17,6 +20,14 @@ both player names, for example "Zápas vyhral tím jedna. Víťazná dvojica: Ma
 a Peter.". The scoring device waits for a successful save; spectators announce
 the transition to a finished match through Realtime. Loading an already finished
 match does not replay it. Mute and language selection still apply.
+Winner announcements use the dedicated ElevenLabs voice `z2Zs6alQTcDzcMWLuK0e`
+in both languages, without a synthesized fanfare. Ordinary Slovak and English
+announcer voices are unchanged. It does not run at the end of an ordinary set or while loading a saved result.
+Both the scoring device's successful save and a spectator's unfinished-to-finished
+Realtime transition use the same once-per-mounted-match celebration guard.
+SpeechSynthesis remains the device fallback; Slovak/English text and names are
+preserved. Mute, navigation and language changes cancel speech.
+No external sound file, dependency or SQL migration is required.
 The server verifies winner text against the finished match and its roster in
 Supabase rather than allowing arbitrary name-bearing synthesis.
 Standalone Slovak scores `0`, `15`, `30`, `40` are normalized to "Nula.",
@@ -25,11 +36,19 @@ These standalone inputs accept an omitted final period and gain one before
 synthesis. Other phrases must already end with a period. Standalone game
 announcements use "Gem pre tím jedna." or "Gem pre tím dva.".
 This does not add standalone playback to the scoreboard or change its scoring
-rules (no 45-point score or new advantage/deuce rule). Punctuation and stability
+rules (no 45-point score). With migration 055, advantage-mode point announcements
+also identify advantage or a return to deuce; undo can announce the restored
+advantage. Golden Point and ordinary point phrases remain unchanged. Punctuation and stability
 encourage consistent delivery but cannot guarantee falling intonation.
+With migration 056, a tiebreak-winning point announces the tiebreak and set,
+unless it finishes the match (the existing winning-pair announcement takes
+priority). Tiebreak reset and undo have distinct localized phrases.
 
-Configure `ELEVENLABS_API_KEY` and `ELEVENLABS_VOICE_ID` in `.env.local` and in
-the production server environment. Restart the development server after changing
+Configure `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID` (Slovak) and optionally
+`ELEVENLABS_VOICE_ID_EN` (English, defaults to `wAGzRVkxKEs8La0lmdrE`) in `.env.local` and in
+the production server environment. Optionally override the winner voice with
+`ELEVENLABS_VOICE_ID_WINNER` (defaults to `z2Zs6alQTcDzcMWLuK0e`).
+Restart the development server after changing
 these values. Never prefix the secret key with `NEXT_PUBLIC_`; rotate any key
 that has been shared in a chat or exposed in browser bundles. The voice must be
 available to that ElevenLabs account and the key needs text-to-speech permission.

@@ -9,6 +9,61 @@ import { getWinnerAnnouncement } from '../lib/live-match-scoring.ts'
 
 const id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
 
+test('winner speech runs once and respects mute without a fanfare', async () => {
+  const original = { fetch: globalThis.fetch, Audio: globalThis.Audio, context: globalThis.AudioContext, create: URL.createObjectURL, revoke: URL.revokeObjectURL }
+  const requests = []
+  const fallbacks = []
+  let muted = false
+  class AudioMock {
+    async play() {}
+    pause() {}
+    removeAttribute() {}
+    load() {}
+  }
+  globalThis.AudioContext = class {
+    constructor() { assert.fail('Winner speech must not create a fanfare AudioContext') }
+  }
+  globalThis.Audio = AudioMock
+  URL.createObjectURL = () => 'blob:victory'
+  URL.revokeObjectURL = () => {}
+  globalThis.fetch = async (url, options) => {
+    requests.push(JSON.parse(options.body))
+    return new Response('mp3', { headers: { 'Content-Type': 'audio/mpeg' } })
+  }
+  const makeAudio = () => new MatchAudio({
+    matchId: id, isMuted: () => muted, onStatus() {}, stopFallback() {},
+    fallback: (text, language) => fallbacks.push({ text, language }),
+  })
+  const speech = makeAudio()
+  const silent = makeAudio()
+  const unavailable = makeAudio()
+  try {
+    const text = 'Zápas vyhral tím jedna. Víťazná dvojica: Martin a Peter.'
+    await Promise.all([speech.celebrate(text, 'sk'), speech.celebrate(text, 'sk')])
+    assert.equal(requests.length, 1)
+    assert.equal(requests[0].text, text)
+    assert.equal(requests[0].language, 'sk')
+    speech.stop()
+    muted = true
+    await silent.celebrate(text, 'sk')
+    assert.equal(requests.length, 1)
+    muted = false
+    await silent.celebrate(text, 'sk')
+    assert.equal(requests.length, 1)
+    globalThis.AudioContext = undefined
+    globalThis.fetch = async () => new Response('failed', { status: 502 })
+    await unavailable.celebrate('Team 2 won the match. Winning pair.', 'en')
+    assert.deepEqual(fallbacks, [{ text: 'Team 2 won the match. Winning pair.', language: 'en' }])
+  } finally {
+    speech.stop(); silent.stop(); unavailable.stop()
+    globalThis.fetch = original.fetch
+    globalThis.Audio = original.Audio
+    globalThis.AudioContext = original.context
+    URL.createObjectURL = original.create
+    URL.revokeObjectURL = original.revoke
+  }
+})
+
 test('audio respects mute, cleans up URLs and falls back only for current announcements', async () => {
   const original = { fetch: globalThis.fetch, Audio: globalThis.Audio, create: URL.createObjectURL, revoke: URL.revokeObjectURL }
   let muted = false
@@ -34,6 +89,7 @@ test('audio respects mute, cleans up URLs and falls back only for current announ
     requests++
     assert.equal(url, '/api/match-speech')
     assert.equal(JSON.parse(options.body).matchId, id)
+    assert.equal(JSON.parse(options.body).language, requests === 1 ? 'sk' : 'en')
     return new Response('mp3', { headers: { 'Content-Type': 'audio/mpeg' } })
   }
   const speech = new MatchAudio({
@@ -141,15 +197,60 @@ async function loadRoute() {
     return dependency
   })
   await module.evaluate()
-  const post = (text, { origin = 'https://riva.test', matchId = id, host = 'riva.test', url = 'https://riva.test/api/match-speech' } = {}) => module.namespace.POST(new Request(url, {
+  const post = (text, { origin = 'https://riva.test', matchId = id, host = 'riva.test', url = 'https://riva.test/api/match-speech', language } = {}) => module.namespace.POST(new Request(url, {
     method: 'POST',
     headers: { Origin: origin, Host: host, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text, matchId }),
+    body: JSON.stringify({ text, matchId, language }),
   }))
   return { post, calls, errors, context, setVisible: (value) => { visible = value },
     setMatch: (value) => { match = { ...match, ...value } },
     setFailure: (status = 401, text = 'Provider rejected key server-secret-test') => { providerFailure = { status, text } } }
 }
+
+test('language selects separate voices and caches without changing Slovak delivery settings', async () => {
+  const route = await loadRoute()
+  const text = 'Team 1 serves.'
+  assert.equal((await route.post(text, { language: 'de' })).status, 400)
+  assert.equal(route.calls.length, 0)
+  assert.equal((await route.post(text, { language: 'en' })).status, 200)
+  assert.equal(route.calls[0].url, 'https://api.elevenlabs.io/v1/text-to-speech/wAGzRVkxKEs8La0lmdrE')
+  assert.equal((await route.post(text, { language: 'sk' })).status, 200)
+  assert.equal(route.calls[1].url, 'https://api.elevenlabs.io/v1/text-to-speech/2bNrEsM0omyhLiEyOwqY')
+  assert.deepEqual(JSON.parse(route.calls[0].options.body).voice_settings, JSON.parse(route.calls[1].options.body).voice_settings)
+  await route.post(text, { language: 'en' })
+  await route.post(text)
+  assert.equal(route.calls.length, 2)
+  route.context.process.env.ELEVENLABS_VOICE_ID_EN = 'invalid'
+  assert.equal((await route.post(text, { language: 'en' })).status, 503)
+  assert.equal((await route.post(text, { language: 'sk' })).status, 200)
+  route.context.process.env.ELEVENLABS_VOICE_ID_EN = 'abcdefghijklmnopqrst'
+  assert.equal((await route.post(text, { language: 'en' })).status, 200)
+  assert.equal(route.calls.at(-1).url, 'https://api.elevenlabs.io/v1/text-to-speech/abcdefghijklmnopqrst')
+})
+
+test('advantage, deuce and undo phrases are accepted for both announcement languages', async () => {
+  const route = await loadRoute()
+  for (const team of [1, 2]) {
+    const word = team === 1 ? 'jedna' : 'dva'
+    for (const text of [
+      `Bod pre tím ${word}, výhoda pre tím ${word}.`, `Bod pre tím ${word}, zhoda.`,
+      `Bod pre tím ${word}, tajbrejk a set pre tím ${word}.`,
+      `Posledná zmena bola vrátená. Výhoda pre tím ${word}.`,
+    ]) assert.equal((await route.post(text, { language: 'sk' })).status, 200)
+    for (const text of [
+      `Point for Team ${team}, advantage for Team ${team}.`, `Point for Team ${team}, deuce.`,
+      `Point for Team ${team}, tiebreak and set for Team ${team}.`,
+      `Last change undone. Advantage for Team ${team}.`,
+    ]) assert.equal((await route.post(text, { language: 'en' })).status, 200)
+  }
+  for (const text of ['Skóre tajbrejku bolo vynulované.', 'Posledná zmena bola vrátená. Tajbrejk.']) {
+    assert.equal((await route.post(text, { language: 'sk' })).status, 200)
+  }
+  for (const text of ['Tiebreak score reset.', 'Last change undone. Tiebreak.']) {
+    assert.equal((await route.post(text, { language: 'en' })).status, 200)
+  }
+  assert.ok(route.calls.every(call => JSON.parse(call.options.body).text.endsWith('.')))
+})
 
 test('server uses private key, configured voice settings, audio caching and input/access validation', async () => {
   const route = await loadRoute()
@@ -271,14 +372,25 @@ test('winner speech names only the actual winning pair of a finished match', asy
   assert.equal((await route.post(first)).status, 400)
   route.setMatch({ team_a_sets: 2, team_b_sets: 1 })
   assert.equal((await route.post(first)).status, 200)
+  assert.equal(route.calls.at(-1).url, 'https://api.elevenlabs.io/v1/text-to-speech/z2Zs6alQTcDzcMWLuK0e')
   assert.equal(JSON.parse(route.calls.at(-1).options.body).text, first)
   assert.equal((await route.post(second)).status, 400)
   assert.equal((await route.post(first.replace('Martin', 'Someone else'))).status, 400)
-  assert.equal((await route.post('Team 1 won the match. The winning pair: Martin and Peter.')).status, 200)
+  assert.equal((await route.post('Team 1 won the match. The winning pair: Martin and Peter.', { language: 'en' })).status, 200)
+  assert.equal(route.calls.at(-1).url, 'https://api.elevenlabs.io/v1/text-to-speech/z2Zs6alQTcDzcMWLuK0e')
   route.setMatch({ team_a_sets: 1, team_b_sets: 2 })
   assert.equal((await route.post(second)).status, 200)
   assert.equal(JSON.parse(route.calls.at(-1).options.body).text, second)
   assert.equal(route.calls.length, 3)
+  route.context.process.env.ELEVENLABS_VOICE_ID_WINNER = '12345678901234567890'
+  assert.equal((await route.post(second)).status, 200)
+  assert.equal(route.calls.at(-1).url, 'https://api.elevenlabs.io/v1/text-to-speech/12345678901234567890')
+  route.context.process.env.ELEVENLABS_VOICE_ID_WINNER = 'invalid'
+  assert.equal((await route.post(second)).status, 503)
+  assert.equal((await route.post('Bod pre tím jedna.', { language: 'sk' })).status, 200)
+  assert.equal(route.calls.at(-1).url, 'https://api.elevenlabs.io/v1/text-to-speech/2bNrEsM0omyhLiEyOwqY')
+  assert.equal((await route.post('Point for Team 1.', { language: 'en' })).status, 200)
+  assert.equal(route.calls.at(-1).url, 'https://api.elevenlabs.io/v1/text-to-speech/wAGzRVkxKEs8La0lmdrE')
 })
 
 test('provider 403 returns the entire original error body and status without truncation', async () => {

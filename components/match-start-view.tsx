@@ -6,6 +6,8 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { ArrowRight, Keyboard, LoaderCircle, ScanQrCode, Zap } from 'lucide-react'
 import { useLanguage } from '@/components/language-provider'
 import { MatchView } from '@/components/match-view'
+import { ScoringModeDialog } from '@/components/scoring-mode-dialog'
+import type { ScoringType } from '@/lib/live-match-scoring'
 import { RivaQrScanner } from '@/components/riva-qr-scanner'
 import { getErrorMessage } from '@/lib/errors'
 import { createClient } from '@/lib/supabase/client'
@@ -19,8 +21,9 @@ export function MatchStartView() {
   const [error, setError] = useState('')
   const [isScanning, setIsScanning] = useState(false)
   const creatingRef = useRef(false)
+  const [choosingRules, setChoosingRules] = useState(false)
 
-  async function startQuickGame() {
+  async function startQuickGame(scoringType: ScoringType) {
     if (creatingRef.current) return
     creatingRef.current = true
     setIsCreating(true)
@@ -30,6 +33,7 @@ export function MatchStartView() {
         .from('live_matches')
         .insert({
           challenge_id: null,
+          scoring_type: scoringType,
           match_pin: null,
           is_pin_activated: false,
           team_a_player1_name: 'Hráč 1',
@@ -73,7 +77,7 @@ export function MatchStartView() {
       {error ? <p role="alert" className="mt-6 rounded-xl border border-red-400/25 bg-red-400/10 p-4 text-center text-sm text-red-200">{error}</p> : null}
 
       <div className="mt-10 grid gap-5 lg:grid-cols-3">
-        <button type="button" onClick={() => void startQuickGame()} disabled={isCreating} aria-busy={isCreating} className={`${cardClass} border-[#a8e63c]/25 hover:border-[#a8e63c]/70 hover:shadow-[0_16px_45px_rgba(168,230,60,0.12)] disabled:cursor-wait disabled:opacity-60`}>
+        <button type="button" onClick={() => { setError(''); setChoosingRules(true) }} disabled={isCreating} aria-busy={isCreating} className={`${cardClass} border-[#a8e63c]/25 hover:border-[#a8e63c]/70 hover:shadow-[0_16px_45px_rgba(168,230,60,0.12)] disabled:cursor-wait disabled:opacity-60`}>
           <span className="flex h-20 w-20 items-center justify-center rounded-2xl bg-[#a8e63c]/10 text-[#c1fa66]">{isCreating ? <LoaderCircle size={38} className="animate-spin" aria-hidden="true" /> : <Zap size={38} aria-hidden="true" />}</span>
           <span className="mt-6 text-2xl font-black">{t('Rýchla hra', 'Quick game')}</span>
           <span className="mt-3 text-sm leading-6 text-white/55">{t('Tréning alebo neoficiálny zápas. Začni ihneď bez PIN-u a bez vplyvu na ligové ELO.', 'Practice or play a friendly match. Start without a PIN or any effect on league ELO.')}</span>
@@ -94,6 +98,7 @@ export function MatchStartView() {
           <span className="mt-auto flex items-center gap-2 pt-6 text-sm font-bold text-violet-200">{t('Spustiť skener', 'Start scanner')}<ArrowRight size={18} aria-hidden="true" className="transition-transform group-hover:translate-x-1" /></span>
         </button>
       </div>
+      {choosingRules ? <ScoringModeDialog busy={isCreating} error={error} onCancel={() => setChoosingRules(false)} onConfirm={(mode) => void startQuickGame(mode)} /> : null}
     </section>
   )
 }

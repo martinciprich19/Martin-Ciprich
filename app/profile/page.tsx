@@ -84,11 +84,11 @@ type ChallengeTargetPair = { player1Id: string; player1Name: string; player2Id: 
 const navItems = [
   { label: 'Prehľad', href: '/profile', icon: LayoutDashboard },
   { label: 'Môj profil', href: '/profile?view=profile', icon: UserRound },
+  { label: 'Začať zápas', href: '/match', icon: Play },
+  { label: 'Výsledky', href: '#matches', icon: Crosshair },
   { label: 'Rebríčky', href: '/profile?view=rankings', icon: Trophy },
   { label: 'Nájsť hráčov', href: '#players', icon: UserSearch },
   { label: 'Vyzvať dvojicu', href: '#challenges', icon: Swords },
-  { label: 'Výsledky', href: '#matches', icon: Crosshair },
-  { label: 'Začať zápas', href: '/match', icon: Play },
   { label: 'Turnaje', href: '/profile?view=tournaments', icon: Shield },
   { label: 'Arény', href: '#arenas', icon: Users },
   { label: 'Správy', href: '#messages', icon: MessageSquare },
