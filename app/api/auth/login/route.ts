@@ -3,7 +3,11 @@ import { createClient } from '@/lib/supabase/server'
 
 export async function POST(request: Request) {
   const origin = request.headers.get('origin')
-  if (origin && origin !== new URL(request.url).origin) {
+  const requestUrl = new URL(request.url)
+  // Next dev normalizes request.url to localhost even for LAN requests.
+  const host = request.headers.get('host') ?? requestUrl.host
+  const expectedOrigin = `${requestUrl.protocol}//${host}`
+  if (origin && origin !== expectedOrigin) {
     return NextResponse.json({ error: 'Neplatný pôvod prihlasovacej požiadavky.' }, { status: 403 })
   }
 
