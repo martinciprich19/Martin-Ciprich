@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { deliverPush, getAdminMessaging, createPushAdminClient } from '@/lib/firebase-admin'
+import { createPrivateKey } from 'node:crypto'
 
 export const runtime = 'nodejs'
 
@@ -25,6 +26,16 @@ export async function POST(request: Request) {
         error: `Push sa nedá odoslať. Chýbajú serverové premenné: ${missingVariables.join(', ')}. Doplň ich do .env.local alebo nastavení nasadenia a reštartuj server. SQL migrácia tieto hodnoty nenahrádza.`,
         code: 'PUSH_CONFIG_MISSING',
         missingVariables,
+      }, { status: 503, headers: { 'Cache-Control': 'no-store' } })
+    }
+    try {
+      const key = createPrivateKey((process.env.FIREBASE_PRIVATE_KEY ?? '').replace(/\\n/g, '\n'))
+      if (key.asymmetricKeyType !== 'rsa') throw new Error('Expected RSA private key')
+    } catch {
+      console.error('Push test configuration invalid: FIREBASE_PRIVATE_KEY is not a valid RSA PEM key.')
+      return NextResponse.json({
+        error: 'FIREBASE_PRIVATE_KEY nie je platný súkromný RSA kľúč. V nastaveniach servera vlož kompletnú hodnotu private_key zo service-account JSON vrátane BEGIN/END PRIVATE KEY. Nevkladaj celý JSON ani vonkajšie úvodzovky. Po oprave znovu nasaď aplikáciu.',
+        code: 'PUSH_PRIVATE_KEY_INVALID',
       }, { status: 503, headers: { 'Cache-Control': 'no-store' } })
     }
     getAdminMessaging()

@@ -4,6 +4,7 @@ import test from 'node:test'
 import vm from 'node:vm'
 import { stripTypeScriptTypes } from 'node:module'
 import { PGlite } from '@electric-sql/pglite'
+import { createPrivateKey, generateKeyPairSync } from 'node:crypto'
 
 const alice = '11111111-1111-4111-8111-111111111111'
 const bob = '22222222-2222-4222-8222-222222222222'
@@ -179,6 +180,7 @@ test('service worker displays exactly once, handles foreground and keeps clicks 
 })
 
 test('test API requires same-origin authentication and sends only reserved account tokens', async () => {
+  const privateKey = generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey.export({ type: 'pkcs8', format: 'pem' })
   let signedIn = true
   let delivered
   let reserveError = null
@@ -187,7 +189,7 @@ test('test API requires same-origin authentication and sends only reserved accou
   let reservations = 0
   const env = {
     FIREBASE_PROJECT_ID: 'test-project', FIREBASE_CLIENT_EMAIL: 'test@example.invalid',
-    FIREBASE_PRIVATE_KEY: 'test-private-key', NEXT_PUBLIC_SUPABASE_URL: 'https://supabase.example',
+    FIREBASE_PRIVATE_KEY: privateKey, NEXT_PUBLIC_SUPABASE_URL: 'https://supabase.example',
     SUPABASE_SERVICE_ROLE_KEY: 'test-service-key',
   }
   const rpc = async (name) => {
@@ -196,6 +198,7 @@ test('test API requires same-origin authentication and sends only reserved accou
     return { data: tokens, error: reserveError }
   }
   const route = await loadModule('../app/api/push/test/route.ts', {
+    'node:crypto': { createPrivateKey },
     'next/server': { NextResponse: Response },
     '@/lib/supabase/server': { createClient: async () => ({ auth: { getUser: async () => ({ data: { user: signedIn ? { id: alice } : null }, error: null }) }, rpc }) },
     '@/lib/firebase-admin': {
@@ -220,10 +223,18 @@ test('test API requires same-origin authentication and sends only reserved accou
   assert.equal(reservations, 0)
   env.FIREBASE_CLIENT_EMAIL = 'test@example.invalid'
   env.FIREBASE_PRIVATE_KEY = 'test-private-key'
+  const invalid = await route.POST(request())
+  assert.equal(invalid.status, 503)
+  const invalidBody = await invalid.json()
+  assert.equal(invalidBody.code, 'PUSH_PRIVATE_KEY_INVALID')
+  assert.ok(!JSON.stringify(invalidBody).includes('test-private-key'))
+  assert.equal(reservations, 0)
+  env.FIREBASE_PRIVATE_KEY = privateKey.replaceAll('\n', '\\n')
   const result = await route.POST(request())
   assert.equal(result.status, 200)
   assert.equal((await result.json()).sent, 1)
   assert.equal(delivered[0], tokenA)
+  env.FIREBASE_PRIVATE_KEY = privateKey
   reserveError = { code: 'P0001', message: 'Wait a minute' }
   assert.equal((await route.POST(request())).status, 429)
   reserveError = null
@@ -237,6 +248,16 @@ test('test API requires same-origin authentication and sends only reserved accou
   tokens = [tokenA]
   failed = 1
   assert.equal((await route.POST(request())).status, 502)
+})
+
+test('send-push exposes the same authenticated and validated webhook handler', async () => {
+  const handler = async () => Response.json({ sent: 1, failed: 0 })
+  const route = await loadModule('../app/api/send-push/route.ts', {
+    '@/app/api/push/webhook/route': { POST: handler },
+  })
+  assert.equal(route.runtime, 'nodejs')
+  assert.equal(route.POST, handler)
+  assert.equal((await route.POST(new Request('https://riva.example/api/send-push', { method: 'POST' }))).status, 200)
 })
 
 test('webhook rejects unauthorized/invalid events and uses stored content and recipients', async () => {

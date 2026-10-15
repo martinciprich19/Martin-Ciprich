@@ -21,7 +21,8 @@
    on Vercel use environment settings. Redeploy after changing public variables.
 6. For existing league alerts, create a Supabase **Database Webhook** for
    `public.notifications`, **INSERT**, method **POST**, URL
-   `https://YOUR-APP-DOMAIN/api/push/webhook`. Add headers
+   `https://YOUR-APP-DOMAIN/api/send-push`. The existing `/api/push/webhook`
+   remains a compatible alias; configure only one webhook to avoid duplicate sends. Add headers
    `Content-Type: application/json` and
    `Authorization: Bearer YOUR_PUSH_WEBHOOK_SECRET`. Set the same long random
    secret as `PUSH_WEBHOOK_SECRET` on the app server. No webhook is required for
@@ -29,6 +30,12 @@
    other tables (e.g. chat rows without a notification) are not push sources.
 
 ## User flow and verification
+
+The mobile notification panel shows enable/disable controls without the generic
+lock-screen explanation or a test-notification button. Installation requirements,
+unsupported-browser warnings and action errors remain visible. The authenticated
+test endpoint remains available for developer diagnostics, not as a user-facing
+action.
 
 ### Local development without Firebase
 
@@ -54,7 +61,7 @@ Restart dev after adding real values; public values require a rebuild for deploy
   **before** enabling. Android: use a Web Push capable browser.
 - Production requires HTTPS. Localhost is allowed for desktop development;
   an HTTP LAN address is not sufficient for a phone.
-- Send a test, background the PWA/lock the phone, and verify a single system
+- Send a test through the authenticated diagnostic endpoint, background the PWA/lock the phone, and verify a single system
   notification. Clicking opens the local profile messages page.
 - Test sending is authenticated, same-origin and limited to once per minute
   per account with registered tokens. It only targets the signed-in account.
@@ -86,6 +93,11 @@ automated local tests do not prove lock-screen delivery.
 
 The authenticated test endpoint returns HTTP 503 with `PUSH_CONFIG_MISSING`
 and missing environment variable names (never values) before reserving tokens.
+Malformed/non-RSA `FIREBASE_PRIVATE_KEY` returns `PUSH_PRIVATE_KEY_INVALID`
+before reservation. The server accepts PEM newlines or escaped `\n`, not a full
+JSON object, truncated key or JSON wrapping quotes. Copy the entire `private_key`
+value from a newly generated service-account key into the production environment
+and redeploy. Never send the private key in chat or commit it; revoke exposed keys.
 Creating `user_push_tokens` alone is insufficient: migration 049 also installs
 `register_push_token` and `reserve_push_test`. Recognized missing-schema errors
 return `PUSH_SCHEMA_MISSING`. Registration derives the auth UUID on the server;

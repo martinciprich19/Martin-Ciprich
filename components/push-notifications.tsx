@@ -1,14 +1,14 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Bell, BellOff, Send } from 'lucide-react'
+import { Bell, BellOff } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { getErrorMessage } from '@/lib/errors'
 import { useLanguage } from '@/components/language-provider'
 import { InstallAppButton } from '@/components/install-app-button'
 import { installationPlatform } from '@/lib/pwa-installation'
-import { isLocalNotificationMode, localNotificationsEnabled, enableLocalNotifications, disableLocalNotifications, testLocalNotification } from '@/lib/local-notifications'
-import { disablePushNotifications, enablePushNotifications, getPushDevice, refreshPushToken, sendTestPushNotification } from '@/lib/notifications'
+import { isLocalNotificationMode, localNotificationsEnabled, enableLocalNotifications, disableLocalNotifications } from '@/lib/local-notifications'
+import { disablePushNotifications, enablePushNotifications, getPushDevice, refreshPushToken } from '@/lib/notifications'
 
 export function PushNotificationListener() {
   useEffect(() => {
@@ -103,7 +103,7 @@ export function PushNotificationSettings({ visible = true, pushAllowed = true, o
     }
   }, [userId, pushAllowed])
 
-  async function run(action: 'enable' | 'disable' | 'test') {
+  async function run(action: 'enable' | 'disable') {
     if (!userId) return
     setBusy(true)
     setError('')
@@ -119,9 +119,6 @@ export function PushNotificationSettings({ visible = true, pushAllowed = true, o
           disableLocalNotifications(userId)
           setEnabled(false)
           setMessage(t('Lokálne notifikácie sú vypnuté.', 'Local notifications are disabled.'))
-        } else {
-          testLocalNotification(userId, t('Test lokálnej prehliadačovej notifikácie.', 'Local browser notification test.'))
-          setMessage(t('Prehliadaču bol odovzdaný lokálny test. Zobrazenie riadia nastavenia systému.', 'A local test was passed to the browser. Display is controlled by system settings.'))
         }
         return
       }
@@ -136,9 +133,6 @@ export function PushNotificationSettings({ visible = true, pushAllowed = true, o
         setEnabled(false)
         window.dispatchEvent(new Event('riva-push-enabled'))
         setMessage(t('Notifikácie sú vypnuté na tomto zariadení.', 'Notifications are disabled on this device.'))
-      } else {
-        const sent = await sendTestPushNotification()
-        setMessage(t(`Test bol odoslaný na ${sent} zariadení.`, `Test sent to ${sent} devices.`))
       }
     } catch (error) {
       console.error('Push notifikácie:', error)
@@ -150,14 +144,13 @@ export function PushNotificationSettings({ visible = true, pushAllowed = true, o
   return (
     <section className="mx-auto my-4 max-w-[1120px] rounded-2xl border border-white/10 bg-[#131924] p-5">
       <h2 className="flex items-center gap-2 text-sm font-black"><Bell size={18} className="text-[#ccff00]" />{localMode ? t('Lokálne notifikácie · vývoj', 'Local notifications · development') : t('Notifikácie na mobile', 'Mobile notifications')}</h2>
-      <p className="mt-2 text-sm text-white/60">{localMode ? t('Bez Firebase môžeš povoliť a otestovať prehliadačové notifikácie na localhoste. Nejde o vzdialený push; pri zatvorenej aplikácii sa upozornenia nedoručujú.', 'Without Firebase you can allow and test browser notifications on localhost. This is not remote push; alerts are not delivered when the app is closed.') : t('Upozornenia aj pri zatvorenej aplikácii. Ich zobrazenie na uzamknutej obrazovke riadia nastavenia mobilu.', 'Alerts even when the app is closed. Lock-screen display is controlled by your phone settings.')}</p>
+      {localMode ? <p className="mt-2 text-sm text-white/60">{t('Nejde o vzdialený push; pri zatvorenej aplikácii sa upozornenia nedoručujú.', 'This is not remote push; alerts are not delivered when the app is closed.')}</p> : null}
       {needsInstall ? <div className="mt-3"><p className="mb-3 text-sm text-amber-200">{t('Na iPhone/iPade (iOS 16.4+) pridaj RIVA Padel na plochu a otvor ju z jej ikony.', 'On iPhone/iPad (iOS 16.4+), add RIVA Padel to your home screen and open it from its icon.')}</p><InstallAppButton /></div> : !supported ? <p className="mt-3 text-sm text-amber-200">{t('Použi HTTPS a prehliadač s podporou Web Push.', 'Use HTTPS and a browser that supports Web Push.')}</p> : (
         <div className="mt-4 flex flex-wrap gap-3">
           <button type="button" disabled={busy || !userId} onClick={() => void run(enabled ? 'disable' : 'enable')} className="inline-flex items-center gap-2 rounded-lg bg-[#ccff00] px-4 py-3 text-xs font-black text-[#10150d] disabled:opacity-50">
             {enabled ? <BellOff size={16} /> : <Bell size={16} />}
             {busy ? t('Spracúvam…', 'Processing…') : enabled ? t('Vypnúť na tomto zariadení', 'Disable on this device') : localMode ? t('Zapnúť lokálne notifikácie', 'Enable local notifications') : t('Zapnúť notifikácie na uzamknutej obrazovke', 'Enable lock-screen notifications')}
           </button>
-          {enabled ? <button type="button" disabled={busy} onClick={() => void run('test')} className="inline-flex items-center gap-2 rounded-lg border border-white/15 px-4 py-3 text-xs font-bold disabled:opacity-50"><Send size={15} />{t('Odoslať testovaciu notifikáciu', 'Send test notification')}</button> : null}
         </div>
       )}
       {message ? <p role="status" className="mt-3 text-sm text-[#ccff00]">{message}</p> : null}

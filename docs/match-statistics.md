@@ -90,6 +90,21 @@ Photo load failures have an explicit retry notice and do not block scoring.
 Apply [052_qr_matches_without_login.sql](../scripts/052_qr_matches_without_login.sql)
 after 048, 050 and 051 to scan all four players without logging into the scanner.
 Scanning identifies profiles, not account authentication. The creating browser
+can also use "Zadať manuálne" inside any empty player card.
+Manual search pauses the camera and queries only profile IDs, display names and
+avatars after at least two characters (300 ms debounce, at most 20 results).
+Names, surnames and nicknames use the existing `proffiles.full_name` display-name
+field; there is no separate nickname column. Stale queries are aborted/ignored,
+selected profiles are excluded, and errors offer retry. The dropdown supports
+arrow keys, Enter and Escape. Search expands inside the selected card and closes
+after selection. Manual selection fills that exact slot, even out of order;
+QR scans fill the first empty slot. Removing the last player undoes the most
+recent assignment without shifting teams. Both inputs share the duplicate guard
+and open the scoring-rules dialog only once all four slots are filled.
+"Skenovať znova" returns to camera input without losing the roster.
+No new SQL migration or authentication bypass is added; existing profile RLS
+and match creation/approval checks still apply.
+The creating browser
 stores a random device capability in localStorage before creation; only its hash
 is stored in the database. Score writes include the capability in a request
 header, never the match URL. Other devices can view these scoreboards and avatars

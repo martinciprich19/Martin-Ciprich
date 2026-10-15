@@ -15,6 +15,8 @@ import { createQrDeviceToken, saveQrDeviceToken } from '@/lib/qr-match-device'
 import { getQrScanRegion, QR_VIEWFINDER_RATIO } from '@/lib/qr-scan-region'
 import { ScoringModeDialog } from '@/components/scoring-mode-dialog'
 import type { ScoringType } from '@/lib/live-match-scoring'
+import { QrPlayerSearch } from '@/components/qr-player-search'
+import { assignQrPlayer, type QrRoster } from '@/lib/qr-roster'
 
 type ScannedPlayer = { id: string; name: string }
 const slots = [
@@ -32,12 +34,13 @@ export function RivaQrScanner({ onClose }: { onClose: () => void }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const viewfinderRef = useRef<HTMLDivElement>(null)
   const scannerRef = useRef<QrScanner | null>(null)
-  const playersRef = useRef<ScannedPlayer[]>([])
+  const playersRef = useRef<QrRoster>([null, null, null, null])
+  const assignmentHistoryRef = useRef<number[]>([])
   const processingRef = useRef(false)
   const creationRef = useRef(false)
   const liveMatchIdRef = useRef<string | null>(null)
   const deviceTokenRef = useRef<string | null>(null)
-  const [players, setPlayers] = useState<ScannedPlayer[]>([])
+  const [players, setPlayers] = useState<QrRoster>([null, null, null, null])
   const [lastScannedPlayer, setLastScannedPlayer] = useState<ScannedPlayer | null>(null)
   const [arena, setArena] = useState('')
   const { data: arenas = [], error: arenasError, isLoading: arenasLoading, mutate: reloadArenas } = useSWR('arenas', fetchArenas)
@@ -56,6 +59,9 @@ export function RivaQrScanner({ onClose }: { onClose: () => void }) {
   const [isStarting, setIsStarting] = useState(false)
   const [attempt, setAttempt] = useState(0)
   const [choosingRules, setChoosingRules] = useState(false)
+  const [manualSlot, setManualSlot] = useState<number | null>(null)
+  const manualSearch = manualSlot !== null
+  const playerCount = players.filter(Boolean).length
 
   useEffect(() => {
     if (arenasError) console.error('Načítanie zoznamu arén zlyhalo:', arenasError)
@@ -100,7 +106,7 @@ export function RivaQrScanner({ onClose }: { onClose: () => void }) {
 
   const createMatch = useCallback(async (scoringType: ScoringType) => {
     const roster = playersRef.current
-    if (roster.length !== 4 || creationRef.current) return
+    if (!roster[0] || !roster[1] || !roster[2] || !roster[3] || creationRef.current) return
     creationRef.current = true
     setIsCreating(true)
     setError('')
@@ -133,11 +139,31 @@ export function RivaQrScanner({ onClose }: { onClose: () => void }) {
     }
   }, [router])
 
+  const addPlayer = useCallback((player: ScannedPlayer, slot = playersRef.current.findIndex((entry) => entry === null)) => {
+    if (creationRef.current || playersRef.current.every(Boolean)) return
+    if (playersRef.current.some((existing) => existing?.id === player.id)) {
+      throw new Error(tRef.current('Tento hráč je už v zápase. Vyber iného hráča.', 'This player is already in the match. Choose another player.'))
+    }
+    const next = assignQrPlayer(playersRef.current, player, slot)
+    assignmentHistoryRef.current.push(slot)
+    playersRef.current = next
+    setPlayers(next)
+    setLastScannedPlayer(player)
+    if (typeof navigator.vibrate === 'function') navigator.vibrate(60)
+    setError('')
+  }, [])
+
   useEffect(() => {
-    if (!setupReady) return
+    if (playerCount !== 4) return
+    scannerRef.current?.stop()
+    const timer = window.setTimeout(() => setChoosingRules(true), 450)
+    return () => window.clearTimeout(timer)
+  }, [playerCount])
+
+  useEffect(() => {
+    if (!setupReady || manualSearch || playersRef.current.every(Boolean)) return
     let isActive = true
     let scanner: QrScanner | null = null
-    let finishTimer: number | undefined
     let lastDecodedText: string | null = null
 
     async function startCamera() {
@@ -151,7 +177,7 @@ export function RivaQrScanner({ onClose }: { onClose: () => void }) {
         const { default: Scanner } = await import('qr-scanner')
         if (!isActive || !videoRef.current || !viewfinderRef.current) return
         scanner = new Scanner(videoRef.current, (result) => {
-          if (!isActive || processingRef.current || playersRef.current.length === 4 || lastDecodedText === result.data) return
+          if (!isActive || processingRef.current || playersRef.current.every(Boolean) || lastDecodedText === result.data) return
           setDecodedText(result.data)
           lastDecodedText = result.data
           console.log('RIVA QR: detekovaný obsah:', result.data)
@@ -160,7 +186,7 @@ export function RivaQrScanner({ onClose }: { onClose: () => void }) {
           void (async () => {
             try {
               const id = getRivaProfilePath(result.data, window.location.origin).split('/')[2]
-              if (playersRef.current.some((player) => player.id === id)) {
+              if (playersRef.current.some((player) => player?.id === id)) {
                 throw new Error(tRef.current('Tento hráč je už v zápase. Naskenuj iného hráča.', 'This player is already in the match. Scan another player.'))
               }
               const { data, error: lookupError } = await createClient()
@@ -168,27 +194,17 @@ export function RivaQrScanner({ onClose }: { onClose: () => void }) {
               if (lookupError) throw lookupError
               if (!data) throw new Error(tRef.current('Hráč z QR kódu sa nenašiel.', 'The QR player was not found.'))
               if (!isActive) return
-              const next = [...playersRef.current, {
+              addPlayer({
                 id,
                 name: typeof data.full_name === 'string' && data.full_name.trim() ? data.full_name.trim() : tRef.current(`Hráč ${id}`, `Player ${id}`),
-              }]
-              playersRef.current = next
-              setPlayers(next)
-              setLastScannedPlayer(next[next.length - 1])
-              if (typeof navigator.vibrate === 'function') navigator.vibrate(60)
-              setError('')
-              if (next.length === 4) {
-                finishTimer = window.setTimeout(() => {
-                  if (isActive) { scannerRef.current?.stop(); setChoosingRules(true) }
-                }, 450)
-              }
+              })
             } catch (scanError) {
               if (!isActive) return
               console.error('Priradenie QR hráča zlyhalo:', scanError)
               setError(getErrorMessage(scanError, tRef.current('Hráča sa nepodarilo pridať.', 'Could not add the player.')))
             } finally {
               processingRef.current = false
-              if (isActive) setIsResolving(false)
+              setIsResolving(false)
             }
           })()
         }, {
@@ -218,22 +234,25 @@ export function RivaQrScanner({ onClose }: { onClose: () => void }) {
     void startCamera()
     return () => {
       isActive = false
-      if (finishTimer !== undefined) window.clearTimeout(finishTimer)
       scanner?.destroy()
       if (scannerRef.current === scanner) scannerRef.current = null
     }
-  }, [attempt, setupReady, createMatch])
+  }, [attempt, setupReady, manualSearch, addPlayer])
 
   function removeLastPlayer() {
     if (processingRef.current || creationRef.current) return
-    const next = playersRef.current.slice(0, -1)
+    const index = assignmentHistoryRef.current.pop()
+    if (index === undefined) return
+    const next: QrRoster = [...playersRef.current]
+    next[index] = null
     playersRef.current = next
     setPlayers(next)
     setLastScannedPlayer(null)
     setAttempt((current) => current + 1)
   }
 
-  const currentSlot = slots[players.length]
+  const activeSlot = manualSlot ?? players.findIndex((player) => player === null)
+  const currentSlot = slots[activeSlot]
   return (
     <section className="mx-auto max-w-xl">
       <button type="button" onClick={onClose} disabled={isCreating} className="inline-flex min-h-11 items-center gap-2 text-sm text-white/60 hover:text-[#a8e63c]"><ArrowLeft size={17} aria-hidden="true" />{t('Späť na výber hry', 'Back to game selection')}</button>
@@ -287,14 +306,29 @@ export function RivaQrScanner({ onClose }: { onClose: () => void }) {
           <button type="submit" disabled={isChecking} className="min-h-12 rounded-xl bg-[#a8e63c] px-5 font-bold text-[#061016]">{isChecking ? t('Pripravujem skener…', 'Preparing scanner…') : t('Začať skenovanie', 'Start scanning')}</button>
         </form> : <>
           <div className="mt-5 grid grid-cols-2 gap-3">
-            {slots.map((slot, index) => <div key={index} className={`rounded-xl border p-3 transition-colors duration-300 motion-reduce:transition-none ${index === players.length ? 'border-[#a8e63c] bg-[#a8e63c]/10' : players[index] ? 'border-[#a8e63c]/35 bg-[#a8e63c]/5' : 'border-white/15'}`}>
+            {slots.map((slot, index) => <div key={index} className={`min-w-0 rounded-xl border p-3 transition-colors duration-300 motion-reduce:transition-none ${index === activeSlot ? 'border-[#a8e63c] bg-[#a8e63c]/10' : players[index] ? 'border-[#a8e63c]/35 bg-[#a8e63c]/5' : 'border-white/15'}`}>
               <p className="text-xs text-white/65">{t('Tím', 'Team')} {slot.team} · {t('Hráč', 'Player')} {slot.player}</p>
               <p key={players[index]?.id ?? 'empty'} className={`mt-1 font-bold ${players[index] ? 'qr-player-arrival' : ''}`}>{players[index] ? <Check size={16} className="mr-1 inline text-[#a8e63c]" aria-hidden="true" /> : null}{players[index]?.name ?? t('Čaká na QR kód', 'Waiting for QR code')}</p>
+              {!players[index] ? <button type="button" disabled={isResolving || isCreating}
+                aria-expanded={manualSlot === index}
+                aria-label={`${t('Zadať manuálne', 'Enter manually')}: ${t('Tím', 'Team')} ${slot.team} · ${t('Hráč', 'Player')} ${slot.player}`}
+                onClick={() => { setManualSlot((current) => current === index ? null : index); setIsStarting(false); setError('') }}
+                className="mt-2 min-h-9 text-xs font-semibold text-[#a8e63c] hover:underline disabled:opacity-50">
+                {manualSlot === index ? t('Zavrieť vyhľadávanie', 'Close search') : t('Zadať manuálne', 'Enter manually')}
+              </button> : null}
+              {manualSlot === index ? <QrPlayerSearch key={index} excludedIds={players.flatMap((player) => player ? [player.id] : [])} disabled={isResolving || isCreating}
+                onSelect={(player) => {
+                  if (processingRef.current) return
+                  try { addPlayer(player, index); setManualSlot(null) } catch (selectionError) {
+                    console.error('Manuálne priradenie QR hráča zlyhalo:', selectionError)
+                    setError(getErrorMessage(selectionError, t('Hráča sa nepodarilo pridať.', 'Could not add the player.')))
+                  }
+                }} /> : null}
             </div>)}
           </div>
-          <h2 role="status" className="mt-5 text-center text-xl font-bold text-[#a8e63c]">{currentSlot ? `${t('Skenuj', 'Scan')}: ${t('Tím', 'Team')} ${currentSlot.team} · ${t('Hráč', 'Player')} ${currentSlot.player}` : t('Všetci hráči sú pridaní', 'All players added')}</h2>
-          <p role="status" className="mt-2 min-h-6 text-center text-sm text-white/70">{lastScannedPlayer ? `${lastScannedPlayer.name} — ${t('hráč pridaný', 'player added')}` : t('Umiestni celý QR kód do zeleného rámčeka.', 'Place the entire QR code inside the green frame.')}</p>
-          <div className={`relative mt-4 aspect-square overflow-hidden rounded-2xl border border-white/10 bg-black transition-opacity duration-300 motion-reduce:transition-none ${players.length === 4 && !lastScannedPlayer ? 'hidden' : ''} ${isCreating ? 'opacity-0' : 'opacity-100'}`}>
+          <h2 role="status" className="mt-5 text-center text-xl font-bold text-[#a8e63c]">{currentSlot ? `${manualSearch ? t('Vyber hráča', 'Select player') : t('Skenuj', 'Scan')}: ${t('Tím', 'Team')} ${currentSlot.team} · ${t('Hráč', 'Player')} ${currentSlot.player}` : t('Všetci hráči sú pridaní', 'All players added')}</h2>
+          <p role="status" className="mt-2 min-h-6 text-center text-sm text-white/70">{lastScannedPlayer ? `${lastScannedPlayer.name} — ${t('hráč pridaný', 'player added')}` : manualSearch ? t('Vyhľadaj a vyber hráča pre zvýraznené miesto.', 'Find and select a player for the highlighted slot.') : t('Umiestni celý QR kód do zeleného rámčeka.', 'Place the entire QR code inside the green frame.')}</p>
+          <div className={`relative mt-4 aspect-square overflow-hidden rounded-2xl border border-white/10 bg-black transition-opacity duration-300 motion-reduce:transition-none ${manualSearch || (playerCount === 4 && !lastScannedPlayer) ? 'hidden' : ''} ${isCreating ? 'opacity-0' : 'opacity-100'}`}>
             <video ref={videoRef} autoPlay playsInline muted aria-label={t('Kamera QR skenera', 'QR scanner camera')} className="h-full w-full object-cover" />
             <div ref={viewfinderRef} aria-hidden="true" className={`qr-viewfinder ${lastScannedPlayer ? 'qr-viewfinder-success' : ''}`}
               style={{ left: `${(1 - QR_VIEWFINDER_RATIO) * 50}%`, top: `${(1 - QR_VIEWFINDER_RATIO) * 50}%`, width: `${QR_VIEWFINDER_RATIO * 100}%`, height: `${QR_VIEWFINDER_RATIO * 100}%` }}>
@@ -310,9 +344,9 @@ export function RivaQrScanner({ onClose }: { onClose: () => void }) {
             <p className="font-semibold text-white/65">{t('Diagnostika QR – prečítaný obsah', 'QR diagnostics – decoded content')}</p>
             <pre role="status" className="mt-2 whitespace-pre-wrap break-all text-white">{decodedText === null ? t('Zatiaľ nebol rozpoznaný žiadny QR kód.', 'No QR code detected yet.') : decodedText}</pre>
           </div>
-          {!isStarting && !isCreating && !isResolving && !(players.length === 4 && lastScannedPlayer) ? <div className="mt-4 flex flex-wrap gap-3">
-            {players.length === 4 ? <button type="button" onClick={() => setChoosingRules(true)} className="min-h-11 rounded-xl bg-[#a8e63c] px-4 font-bold text-[#061016]">{t('Vybrať pravidlá a začať', 'Choose rules and start')}</button> : <button type="button" onClick={() => setAttempt((current) => current + 1)} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-white/15 px-4 text-sm"><Camera size={17} aria-hidden="true" />{t('Skenovať znova', 'Scan again')}</button>}
-            {players.length > 0 ? <button type="button" onClick={removeLastPlayer} className="min-h-11 rounded-xl border border-white/15 px-4 text-sm">{t('Odobrať posledného hráča', 'Remove last player')}</button> : null}
+          {!isStarting && !isCreating && !isResolving && !(playerCount === 4 && lastScannedPlayer) ? <div className="mt-4 flex flex-wrap gap-3">
+            {playerCount === 4 ? <button type="button" onClick={() => setChoosingRules(true)} className="min-h-11 rounded-xl bg-[#a8e63c] px-4 font-bold text-[#061016]">{t('Vybrať pravidlá a začať', 'Choose rules and start')}</button> : <button type="button" onClick={() => { setManualSlot(null); setAttempt((current) => current + 1) }} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-white/15 px-4 text-sm"><Camera size={17} aria-hidden="true" />{t('Skenovať znova', 'Scan again')}</button>}
+            {playerCount > 0 ? <button type="button" onClick={removeLastPlayer} className="min-h-11 rounded-xl border border-white/15 px-4 text-sm">{t('Odobrať posledného hráča', 'Remove last player')}</button> : null}
           </div> : null}
         </>}
         {error ? <p role="alert" className="mt-4 rounded-xl bg-red-400/10 p-3 text-sm text-red-200">{error}</p> : null}
