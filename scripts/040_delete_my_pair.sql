@@ -1,4 +1,5 @@
--- Run in the Supabase SQL editor before using "Moje dvojice" deletion.
+-- Run in the Supabase SQL editor before deleting from "Moje dvojice"
+-- or using "Zrusit dvojicu" in the player-pairs directory.
 -- Only a pair member may delete it. Challenges and results reference players,
 -- not the pair, and are intentionally preserved.
 begin;

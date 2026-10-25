@@ -2,9 +2,13 @@
 
 Match announcements use the Slovak ElevenLabs voice (`2bNrEsM0omyhLiEyOwqY`)
 or English voice (`wAGzRVkxKEs8La0lmdrE`) through
-`POST /api/match-speech`, with `eleven_multilingual_v2`, stability `0.95`,
-similarity boost `0.75`, speed `0.80` and style exaggeration `0` for slower,
-more even announcements with less expressive variation.
+`POST /api/match-speech`, with `eleven_flash_v2_5` for Slovak and
+`eleven_multilingual_v2` for English, stability `0.8`, similarity boost `0.75`,
+speed `0.9` and style exaggeration `0` for more natural pacing and less
+monotonous announcements. Slovak game scores are sent as words (for example,
+"Pätnásť", not `15`); exact pronunciation and accent still depend on the
+configured voice. Completed game scores that are tied omit the team attribution
+(for example, "Stav gemov: jeden jeden.") in both languages.
 Slovak/English selection controls both spoken text and the server-selected voice.
 Requests without a language retain the Slovak voice for older clients. Unsupported
 language values are rejected. The audio cache is separated by voice and text.

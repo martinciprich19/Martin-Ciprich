@@ -67,10 +67,10 @@ export default function SignUpPage() {
         return
       }
 
-      // E-mail confirmation is required: no session until the user clicks the link in the e-mail.
+      // Require explicit OTP verification before the user can continue in the app.
       if (!data.session || !data.user?.email_confirmed_at) {
         if (data.session) await supabase.auth.signOut({ scope: 'local' })
-        router.replace(`/auth/sign-up-success?email=${encodeURIComponent(email)}`)
+        router.replace(`/auth/verify?email=${encodeURIComponent(email)}`)
         return
       }
 
@@ -105,8 +105,8 @@ export default function SignUpPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#061016] px-4 sm:px-6 py-8 text-white flex flex-col items-center justify-center">
-      <div className="w-full max-w-sm md:max-w-md bg-[#0b1922] p-6 sm:p-8 rounded-2xl border border-white/10 shadow-xl">
+    <main className="min-h-screen bg-app-ink px-4 sm:px-6 py-8 text-app-fg flex flex-col items-center justify-center">
+      <div className="w-full max-w-sm md:max-w-md bg-app-auth p-6 sm:p-8 rounded-2xl border border-app-line/10 shadow-xl">
         <div className="flex justify-center mb-6">
           <RivaLogo />
         </div>
@@ -126,14 +126,14 @@ export default function SignUpPage() {
               required
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
-              className="mt-1 w-full rounded-lg border border-white/10 bg-[#061016] px-4 py-2.5 text-white focus:outline-none focus:border-green-400"
+              className="mt-1 w-full rounded-lg border border-app-line/10 bg-app-ink px-4 py-2.5 text-app-fg focus:outline-none focus:border-green-400"
               placeholder="Zadaj svoje meno"
             />
           </div>
 
           <div>
             <label htmlFor="sign-up-gender" className="text-sm text-gray-400">Pohlavie</label>
-            <select id="sign-up-gender" name="gender" required value={form.gender} onChange={(event) => setForm({ ...form, gender: event.target.value as Gender | '' })} className="mt-1 w-full rounded-lg border border-white/10 bg-[#061016] px-4 py-2.5 text-white focus:outline-none focus:border-green-400">
+            <select id="sign-up-gender" name="gender" required value={form.gender} onChange={(event) => setForm({ ...form, gender: event.target.value as Gender | '' })} className="mt-1 w-full rounded-lg border border-app-line/10 bg-app-ink px-4 py-2.5 text-app-fg focus:outline-none focus:border-green-400">
               <option value="" disabled>Vyber pohlavie</option>
               <option value="male">Muž</option>
               <option value="female">Žena</option>
@@ -145,7 +145,7 @@ export default function SignUpPage() {
             <select
               value={form.region}
               onChange={(e) => setForm({ ...form, region: e.target.value })}
-              className="mt-1 w-full rounded-lg border border-white/10 bg-[#061016] px-4 py-2.5 text-white focus:outline-none focus:border-green-400"
+              className="mt-1 w-full rounded-lg border border-app-line/10 bg-app-ink px-4 py-2.5 text-app-fg focus:outline-none focus:border-green-400"
             >
               <option value="">Vyber svoj kraj</option>
               <option value="Bratislavský">Bratislavský kraj</option>
@@ -164,7 +164,7 @@ export default function SignUpPage() {
             <select
               value={form.level}
               onChange={(e) => setForm({ ...form, level: e.target.value })}
-              className="mt-1 w-full rounded-lg border border-white/10 bg-[#061016] px-4 py-2.5 text-white focus:outline-none focus:border-green-400"
+              className="mt-1 w-full rounded-lg border border-app-line/10 bg-app-ink px-4 py-2.5 text-app-fg focus:outline-none focus:border-green-400"
             >
               <option value="">Vyber úroveň</option>
               <option value="Začiatočník">Začiatočník</option>
@@ -179,7 +179,7 @@ export default function SignUpPage() {
             <select
               value={form.dominantHand}
               onChange={(e) => setForm({ ...form, dominantHand: e.target.value as DominantHand })}
-              className="mt-1 w-full rounded-lg border border-white/10 bg-[#061016] px-4 py-2.5 text-white focus:outline-none focus:border-green-400"
+              className="mt-1 w-full rounded-lg border border-app-line/10 bg-app-ink px-4 py-2.5 text-app-fg focus:outline-none focus:border-green-400"
             >
               <option value="right">Pravák</option>
               <option value="left">Ľavák</option>
@@ -192,13 +192,13 @@ export default function SignUpPage() {
             <select
               value={form.homeVenueId}
               onChange={(e) => setForm({ ...form, homeVenueId: e.target.value })}
-              className="mt-1 w-full rounded-lg border border-white/10 bg-[#061016] px-4 py-2.5 text-white focus:outline-none focus:border-green-400"
+              className="mt-1 w-full rounded-lg border border-app-line/10 bg-app-ink px-4 py-2.5 text-app-fg focus:outline-none focus:border-green-400"
             >
               <option value="">Vyber domovskú arénu</option>
               {arenas.map((arena) => <option key={arena.id} value={arena.id}>{arena.name}</option>)}
             </select>
             <p className="mt-1 text-xs text-gray-500">Domovský klub sa automaticky upraví podľa najnavštevovanejšieho klubu.</p>
-            {arenasError ? <p role="status" className="mt-1 text-xs text-amber-300">Zoznam arén sa nepodarilo načítať.</p> : null}
+            {arenasError ? <p role="status" className="mt-1 text-xs text-app-amber-300">Zoznam arén sa nepodarilo načítať.</p> : null}
           </div>
 
           <div>
@@ -208,7 +208,7 @@ export default function SignUpPage() {
               required
               value={form.email}
               onChange={(e) => setForm({ ...form, email: e.target.value })}
-              className="mt-1 w-full rounded-lg border border-white/10 bg-[#061016] px-4 py-2.5 text-white focus:outline-none focus:border-green-400"
+              className="mt-1 w-full rounded-lg border border-app-line/10 bg-app-ink px-4 py-2.5 text-app-fg focus:outline-none focus:border-green-400"
               placeholder="vas@email.sk"
             />
           </div>
@@ -220,7 +220,7 @@ export default function SignUpPage() {
               required
               value={form.password}
               onChange={(e) => setForm({ ...form, password: e.target.value })}
-              className="mt-1 w-full rounded-lg border border-white/10 bg-[#061016] px-4 py-2.5 text-white focus:outline-none focus:border-green-400"
+              className="mt-1 w-full rounded-lg border border-app-line/10 bg-app-ink px-4 py-2.5 text-app-fg focus:outline-none focus:border-green-400"
               placeholder="••••••••"
             />
           </div>
@@ -232,7 +232,7 @@ export default function SignUpPage() {
               required
               value={form.confirmPassword}
               onChange={(e) => setForm({ ...form, confirmPassword: e.target.value })}
-              className="mt-1 w-full rounded-lg border border-white/10 bg-[#061016] px-4 py-2.5 text-white focus:outline-none focus:border-green-400"
+              className="mt-1 w-full rounded-lg border border-app-line/10 bg-app-ink px-4 py-2.5 text-app-fg focus:outline-none focus:border-green-400"
               placeholder="••••••••"
             />
           </div>
@@ -248,7 +248,7 @@ export default function SignUpPage() {
 
         <p className="text-center text-sm text-gray-400 mt-6">
           Už máš účet?{' '}
-          <Link href="/auth/login" className="text-[#b5ef33] hover:underline">
+          <Link href="/auth/login" className="text-app-lime hover:underline">
             Prihlásiť sa
           </Link>
         </p>

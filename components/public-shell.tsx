@@ -4,39 +4,45 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { Menu, X } from 'lucide-react'
 import { RivaLogo } from '@/components/riva-logo'
+import { useLanguage } from '@/components/language-provider'
 
 const navItems = [
-  { label: 'Ako to funguje', href: '/how-it-works' },
-  { label: 'Rebríčky', href: '/rankings' },
-  { label: 'Turnaje', href: '/tournaments' },
+  { label: 'Ako to funguje', englishLabel: 'How it works', href: '/how-it-works' },
+  { label: 'Prebiehajúce zápasy', englishLabel: 'Live matches', href: '/live-matches' },
+  { label: 'Rebríčky', englishLabel: 'Rankings', href: '/rankings' },
+  { label: 'Turnaje', englishLabel: 'Tournaments', href: '/tournaments' },
 ]
 
-export function PublicShell({ children, showAuthLinks = true, logoHref = '/' }: {
+export function PublicShell({ children, showAuthLinks = true, showMenuButton = true, logoHref = '/', kioskMode = false }: {
   children: React.ReactNode
   showAuthLinks?: boolean
+  showMenuButton?: boolean
   logoHref?: string
+  kioskMode?: boolean
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
+  const { t } = useLanguage()
+  const brandHref = kioskMode ? '/match' : logoHref
 
   return (
-    <main className="relative isolate min-h-screen bg-[#061016] text-white">
+    <main className="photo-layout relative isolate min-h-screen text-app-fg">
       <div className="fixed inset-0 -z-20 bg-[url('/padel-hero.png')] bg-cover bg-[position:68%_center] opacity-35" />
-      <div className="fixed inset-0 -z-10 bg-[linear-gradient(90deg,#061016_0%,rgba(6,16,22,.85)_40%,rgba(6,16,22,.6)_100%)]" />
-      <header className="relative mx-auto flex w-full max-w-[1260px] items-center justify-between gap-3 px-4 py-6 sm:px-6 lg:px-10 lg:py-8">
-        <Link href={logoHref} aria-label={logoHref === '/' ? 'RIVA Padel domov' : 'RIVA Padel prehľad'}><RivaLogo size="header" /></Link>
+      <div className="public-backdrop fixed inset-0 -z-10" />
+      <header className="photo-navigation theme-surface relative mx-auto flex w-full max-w-[1260px] flex-wrap items-center justify-between gap-3 px-4 py-6 sm:flex-nowrap sm:px-6 lg:px-10 lg:py-8">
+        <Link href={brandHref} aria-label={kioskMode ? 'RIVA Padel kiosk' : brandHref === '/' ? 'RIVA Padel domov' : 'RIVA Padel prehľad'}><RivaLogo size="header" /></Link>
         <nav className="hidden items-center gap-7 lg:absolute lg:left-1/2 lg:flex lg:-translate-x-1/2" aria-label="Hlavná navigácia">
-          {navItems.map((item) => <Link key={item.label} href={item.href} className="text-[11px] font-medium text-white/70 transition hover:text-[#a8e63c]">{item.label}</Link>)}
+          {navItems.map((item) => <Link key={item.href} href={item.href} className="text-[11px] font-medium text-app-fg/70 transition hover:text-app-accent">{t(item.label, item.englishLabel)}</Link>)}
         </nav>
         <div className="flex shrink-0 items-center gap-2 lg:gap-3">
-          {showAuthLinks ? <>
-          <Link href="/auth/login" className="whitespace-nowrap rounded-lg border border-white/15 px-3 py-2 text-[10px] font-semibold text-white transition hover:border-white/35 sm:px-4 sm:py-2.5 sm:text-[11px]">Prihlásiť sa</Link>
+          {showAuthLinks && !kioskMode ? <>
+          <Link href="/auth/login" className="whitespace-nowrap rounded-lg border border-app-line/15 px-3 py-2 text-[10px] font-semibold text-app-fg transition hover:border-app-line/35 sm:px-4 sm:py-2.5 sm:text-[11px]">Prihlásiť sa</Link>
           <Link href="/auth/sign-up" className="whitespace-nowrap rounded-lg bg-[#a8e63c] px-3 py-2 text-[10px] font-bold text-[#061016] transition hover:bg-[#c1fa66] sm:px-4 sm:py-2.5 sm:text-[11px]">Registrovať sa</Link>
           </> : null}
-          <button className="rounded-lg border border-white/15 p-1.5 text-white sm:p-2.5 lg:hidden" aria-expanded={menuOpen} onClick={() => setMenuOpen(!menuOpen)} aria-label={menuOpen ? 'Zavrieť menu' : 'Otvoriť menu'}>{menuOpen ? <X size={20} /> : <Menu size={20} />}</button>
+          {showMenuButton ? <button className="rounded-lg border border-app-line/15 p-1.5 text-app-fg sm:p-2.5 lg:hidden" aria-expanded={menuOpen} onClick={() => setMenuOpen(!menuOpen)} aria-label={menuOpen ? 'Zavrieť menu' : 'Otvoriť menu'}>{menuOpen ? <X size={20} /> : <Menu size={20} />}</button> : null}
         </div>
       </header>
 
-      {menuOpen && <div className="mx-6 rounded-2xl border border-white/10 bg-[#0b1b22]/95 p-5 backdrop-blur lg:hidden"><nav className="flex flex-col gap-4">{navItems.map((item) => <Link onClick={() => setMenuOpen(false)} key={item.label} href={item.href} className="text-sm text-white/80">{item.label}</Link>)}</nav></div>}
+      {showMenuButton && menuOpen && <div className="mx-6 rounded-2xl border border-app-line/10 bg-app-court/95 p-5 backdrop-blur lg:hidden"><nav className="flex flex-col gap-4">{navItems.map((item) => <Link onClick={() => setMenuOpen(false)} key={item.href} href={item.href} className="text-sm text-app-fg/80">{t(item.label, item.englishLabel)}</Link>)}</nav></div>}
 
       <section className="px-6 pb-20 pt-6 lg:px-10 lg:pb-28">{children}</section>
     </main>

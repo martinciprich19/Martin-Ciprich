@@ -1,0 +1,96 @@
+:root {
+  --app-ink: #061016;
+  --app-canvas: #0b0f17;
+  --app-panel: #131924;
+  --app-surface: #111722;
+  --app-court: #0b1b22;
+  --app-auth: #0b1922;
+  --app-raised: #161f30;
+  --app-selected: #1d2b44;
+  --app-sunken: #0f141d;
+  --app-hover: #151c29;
+  --app-navigation: #0d121a;
+  --app-slate: #111827;
+  --app-muted: #1f2937;
+  --app-green: #10150d;
+  --app-fg: #ffffff;
+  --app-line: #ffffff;
+  --app-overlay: #ffffff;
+  --app-accent: #a8e63c;
+  --app-league: #ccff00;
+  --app-lime: #b5ef33;
+  --app-highlight: #c1fa66;
+  --app-olive: #9acc00;
+  --app-success: #35d6a2;
+  --app-sky-400: #38bdf8;
+  --app-amber-200: #fde68a;
+  --lime: #a8e63c;
+  --ink: var(--app-ink);
+  --panel: var(--app-court);
+  --foreground: #f5f7f6;
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-app-ink: var(--app-ink);
+  --color-app-canvas: var(--app-canvas);
+  --color-app-panel: var(--app-panel);
+  --color-app-surface: var(--app-surface);
+  --color-app-court: var(--app-court);
+  --color-app-auth: var(--app-auth);
+  --color-app-raised: var(--app-raised);
+  --color-app-selected: var(--app-selected);
+  --color-app-sunken: var(--app-sunken);
+  --color-app-hover: var(--app-hover);
+  --color-app-navigation: var(--app-navigation);
+  --color-app-slate: var(--app-slate);
+  --color-app-muted: var(--app-muted);
+  --color-app-green: var(--app-green);
+  --color-app-fg: var(--app-fg);
+  --color-app-line: var(--app-line);
+  --color-app-overlay: var(--app-overlay);
+  --color-app-accent: var(--app-accent);
+  --color-app-league: var(--app-league);
+  --color-app-lime: var(--app-lime);
+  --color-app-highlight: var(--app-highlight);
+  --color-app-olive: var(--app-olive);
+  --color-app-success: var(--app-success);
+  --color-app-red-200: var(--app-red-200, var(--color-red-200));
+  --color-app-red-300: var(--app-red-300, var(--color-red-300));
+  --color-app-red-400: var(--app-red-400, var(--color-red-400));
+  --color-app-rose-200: var(--app-rose-200, var(--color-rose-200));
+  --color-app-rose-300: var(--app-rose-300, var(--color-rose-300));
+  --color-app-rose-400: var(--app-rose-400, var(--color-rose-400));
+  --color-app-amber-200: var(--app-amber-200, var(--color-amber-200));
+  --color-app-amber-300: var(--app-amber-300, var(--color-amber-300));
+  --color-app-amber-400: var(--app-amber-400, var(--color-amber-400));
+  --color-app-emerald-200: var(--app-emerald-200, var(--color-emerald-200));
+  --color-app-emerald-300: var(--app-emerald-300, var(--color-emerald-300));
+  --color-app-emerald-400: var(--app-emerald-400, var(--color-emerald-400));
+  --color-app-green-200: var(--app-green-200, var(--color-green-200));
+  --color-app-green-300: var(--app-green-300, var(--color-green-300));
+  --color-app-green-400: var(--app-green-400, var(--color-green-400));
+  --color-app-sky-200: var(--app-sky-200, var(--color-sky-200));
+  --color-app-sky-300: var(--app-sky-300, var(--color-sky-300));
+  --color-app-sky-400: var(--app-sky-400, var(--color-sky-400));
+  --color-app-blue-200: var(--app-blue-200, var(--color-blue-200));
+  --color-app-blue-300: var(--app-blue-300, var(--color-blue-300));
+  --color-app-blue-400: var(--app-blue-400, var(--color-blue-400));
+  --color-app-violet-200: var(--app-violet-200, var(--color-violet-200));
+  --color-app-violet-300: var(--app-violet-300, var(--color-violet-300));
+  --color-app-violet-400: var(--app-violet-400, var(--color-violet-400));
+  --color-app-cyan-200: var(--app-cyan-200, var(--color-cyan-200));
+  --color-app-cyan-300: var(--app-cyan-300, var(--color-cyan-300));
+  --color-app-cyan-400: var(--app-cyan-400, var(--color-cyan-400));
+  --color-app-yellow-200: var(--app-yellow-200, var(--color-yellow-200));
+  --color-app-yellow-300: var(--app-yellow-300, var(--color-yellow-300));
+  --color-app-yellow-400: var(--app-yellow-400, var(--color-yellow-400));
+}
+
+.public-backdrop {
+  background-image: linear-gradient(90deg, #061016 0%, rgb(6 16 22 / .85) 40%, rgb(6 16 22 / .6) 100%);
+}
+.photo-layout { background-color: #061016; }
+.profile-photo-shade {
+  background-image: linear-gradient(to bottom, rgb(11 15 23 / .2), rgb(11 15 23 / .4), rgb(11 15 23 / .7));
+}

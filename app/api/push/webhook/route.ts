@@ -40,8 +40,10 @@ export async function POST(request: Request) {
     if (!tokens.length) return NextResponse.json({ sent: 0, failed: 0 })
     const titles: Record<string, string> = {
       friend_request: 'Žiadosť o priateľstvo',
+      pair_invitation: 'Pozvanie do dvojice',
       pair_challenge: 'Nová výzva na zápas',
       challenge_request: 'Nová výzva na zápas',
+      match_result: 'Potvrď výsledok',
       message: 'Nová správa',
       new_message: 'Nová správa',
       direct_message: 'Nová správa',

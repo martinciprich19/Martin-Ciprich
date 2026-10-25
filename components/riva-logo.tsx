@@ -14,7 +14,7 @@ export function RivaLogo({ size = 'md', className }: RivaLogoProps) {
   return (
     <span
       className={[
-        'relative block shrink-0 overflow-hidden rounded-[24%] border border-[#a8e63c]/70 bg-[#061016] shadow-[0_0_16px_rgba(168,230,60,0.3)] motion-safe:transition-shadow hover:shadow-[0_0_24px_rgba(168,230,60,0.45)]',
+        'relative block shrink-0 overflow-hidden rounded-[24%] border border-[#a8e63c]/70 bg-app-ink shadow-[0_0_16px_rgba(168,230,60,0.3)] motion-safe:transition-shadow hover:shadow-[0_0_24px_rgba(168,230,60,0.45)]',
         sizes[size],
         className,
       ].filter(Boolean).join(' ')}

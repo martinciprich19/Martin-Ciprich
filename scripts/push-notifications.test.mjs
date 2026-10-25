@@ -263,13 +263,14 @@ test('send-push exposes the same authenticated and validated webhook handler', a
 test('webhook rejects unauthorized/invalid events and uses stored content and recipients', async () => {
   let delivered
   let bulk = false
+  let notification = { type: 'challenge_request', message: 'Stored challenge' }
   const ranges = []
   const route = await loadModule('../app/api/push/webhook/route.ts', {
     'node:crypto': await import('node:crypto'),
     'next/server': { NextResponse: Response },
     '@/lib/firebase-admin': {
       createPushAdminClient: () => ({
-        from: () => ({ select: () => ({ eq: () => ({ single: async () => ({ data: { type: 'challenge_request', message: 'Stored challenge' }, error: null }) }) }) }),
+        from: () => ({ select: () => ({ eq: () => ({ single: async () => ({ data: notification, error: null }) }) }) }),
         rpc: () => ({ range: async (start) => {
           ranges.push(start)
           return { data: bulk && start === 0 ? Array.from({ length: 1000 }, (_, index) => `device-${index}`) : [tokenA], error: null }
@@ -287,10 +288,94 @@ test('webhook rejects unauthorized/invalid events and uses stored content and re
   assert.equal((await route.POST(request(event))).status, 200)
   assert.equal(delivered.tokens[0], tokenA)
   assert.equal(delivered.data.body, 'Stored challenge')
+  notification = { type: 'match_result', message: 'Potvrď výsledok 2:0' }
+  assert.equal((await route.POST(request(event))).status, 200)
+  assert.equal(delivered.data.title, 'Potvrď výsledok')
+  assert.equal(delivered.data.body, notification.message)
+  notification = { type: 'friend_request', message: 'Alice ti poslala žiadosť.' }
+  assert.equal((await route.POST(request(event))).status, 200)
+  assert.equal(delivered.data.title, 'Žiadosť o priateľstvo')
+  notification = { type: 'message', message: 'Alice ti poslala novú správu.' }
+  assert.equal((await route.POST(request(event))).status, 200)
+  assert.equal(delivered.data.title, 'Nová správa')
+  notification = { type: 'pair_invitation', message: 'Alice ťa pozýva vytvoriť dvojicu.' }
+  assert.equal((await route.POST(request(event))).status, 200)
+  assert.equal(delivered.data.title, 'Pozvanie do dvojice')
   bulk = true
   assert.equal((await route.POST(request(event))).status, 200)
   assert.equal(delivered.tokens.length, 1001)
   assert.equal(ranges.at(-1), 1000)
+})
+
+test('match-result notifications have a readable title and preserve the approval result ID', async () => {
+  const notification = {
+    id: 'notice-1', user_id: 1, sender_id: 1, type: 'match_result', message: 'Potvrď výsledok',
+    is_read: false, match_id: '63', challenge_id: null, created_at: '2026-10-18T20:00:00Z',
+  }
+  const module = await loadModule('../lib/notifications.ts', {
+    '@/lib/supabase/client': { createClient: () => ({
+      from: () => ({ select: () => ({ or: () => ({ order: () => ({
+        limit: async () => ({ data: [notification], error: null }),
+      }) }) }) }),
+    }) },
+    '@/lib/firebase-client': { getFirebasePushConfig: () => ({}) },
+  })
+  const result = await module.fetchNotifications(1)
+  assert.equal(result.length, 1)
+  assert.equal(result[0].title, 'Potvrď výsledok')
+  assert.equal(result[0].matchId, '63')
+  assert.equal(result[0].challenge_id, null)
+  assert.equal(result[0].read, false)
+})
+
+test('communication notifications use profile sender IDs even with UUID legacy senders', async () => {
+  const rows = ['friend_request', 'message', 'pair_invitation'].map((type, index) => ({
+    id: `notice-${index}`, user_id: 2, sender_id: alice, sender_profile_id: 1, type,
+    message: 'Alice', is_read: false, created_at: '2026-10-18T20:00:00Z',
+  }))
+  const module = await loadModule('../lib/notifications.ts', {
+    '@/lib/supabase/client': { createClient: () => ({
+      from: () => ({ select: () => ({ or: () => ({ order: () => ({
+        limit: async () => ({ data: rows, error: null }),
+      }) }) }) }),
+    }) },
+    '@/lib/firebase-client': { getFirebasePushConfig: () => ({}) },
+  })
+  const result = await module.fetchNotifications(2)
+  assert.equal(result[0].title, 'Žiadosť o priateľstvo')
+  assert.equal(result[1].title, 'Nová správa')
+  assert.equal(result[2].title, 'Pozvanie do dvojice')
+  assert.ok(result.every(row => row.senderId === '1' && !row.read))
+})
+
+test('friend request and message clients write only the source, leaving atomic alerts to SQL', async () => {
+  const writes = []
+  let insertError = null
+  const createClient = () => ({
+    from: table => {
+      assert.ok(['friendships', 'messages'].includes(table), `Unexpected client write to ${table}`)
+      return {
+        select: () => ({ or: () => ({ limit: async () => ({ data: [], error: null }) }) }),
+        insert: async data => { writes.push({ table, data }); return { error: insertError } },
+      }
+    },
+  })
+  const friends = await loadModule('../lib/friendships.ts', {
+    '@/lib/supabase/client': { createClient },
+    '@/lib/profile-gender-query': { withProfileGender: () => { throw new Error('Unexpected profile lookup') } },
+  })
+  const messages = await loadModule('../lib/messages.ts', {
+    '@/lib/supabase/client': { createClient },
+  })
+  await friends.sendFriendRequest(1, 2)
+  await messages.sendMessage(1, 2, ' Hello ')
+  assert.equal(writes.length, 2)
+  assert.equal(writes[0].table, 'friendships')
+  assert.equal(writes[1].table, 'messages')
+  assert.equal(writes[1].data.content, 'Hello')
+  insertError = new Error('Notification failure')
+  await assert.rejects(friends.sendFriendRequest(1, 2), /Notification failure/)
+  await assert.rejects(messages.sendMessage(1, 2, 'Retry'), /Notification failure/)
 })
 
 test('client permission, token persistence, refresh errors and device opt-out', async () => {

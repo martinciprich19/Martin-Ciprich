@@ -7,18 +7,18 @@ import { loadBindings, transform } from 'next/dist/build/swc/index.js'
 const readSource = (path) => readFile(new URL(path, import.meta.url), 'utf8')
 
 test('settings and layout no longer switch themes; dark colors are unconditional', async () => {
-  const [layout, profile, css] = await Promise.all([
+  const [layout, profile, globals, themeCss] = await Promise.all([
     readSource('../app/layout.tsx'),
     readSource('../app/profile/page.tsx'),
     readSource('../app/globals.css'),
+    readSource('../app/themes.css'),
   ])
-  assert.doesNotMatch(layout + profile, /ThemeProvider|ThemeToggle|useTheme|riva-theme/)
+  assert.doesNotMatch(layout + profile + globals + themeCss, /ThemeProvider|ThemeToggle|useTheme|riva-theme|html\.light|color-scheme: light/)
   assert.match(layout, /className=\{`\$\{inter.variable\} dark`\}/)
   assert.match(layout, /statusBarStyle: 'black'/)
   assert.match(layout, /themeColor: '#0b0f17'/)
   assert.match(layout, /colorScheme: 'dark'/)
-  assert.match(css, /:root \{[^}]*--ink: #061016;[^}]*--foreground: #f5f7f6;[^}]*color-scheme: dark;/)
-  assert.doesNotMatch(css, /color-scheme: light/)
+  assert.match(themeCss, /:root \{[^}]*--ink: var\(--app-ink\);[^}]*--foreground: #f5f7f6;[^}]*color-scheme: dark;/)
 })
 
 test('manifest references the new artwork in correctly sized standalone app icons', async () => {

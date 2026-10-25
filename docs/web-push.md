@@ -29,6 +29,91 @@
    the test button. Only events inserted into `notifications` trigger this hook;
    other tables (e.g. chat rows without a notification) are not push sources.
 
+Completed registered live matches insert a `match_result` notification for each
+participant immediately with the final point (migration 063, after 062).
+The same webhook delivers these as "Potvrď výsledok"; no separate kiosk-exit
+request or additional webhook is needed. The in-app alert opens Results for
+approval. Quick games and early termination without a result do not send alerts.
+
+## Messages, friend requests, pair invitations and challenges
+
+Run the entire [066_repair_activity_notifications.sql](../scripts/066_repair_activity_notifications.sql)
+in Supabase SQL Editor with the existing league schema and migration 049 installed.
+It includes the communication functionality from 064; 064 need not be run
+separately. It replaces the older challenge notifier, which wrote numeric profile
+IDs into the potentially UUID-typed legacy sender column. Do not rerun 021, 025
+or 064 afterward: they would reinstall the older triggers.
+
+Each new pending friend request, incoming message and pending pair invitation
+inserts one private recipient notification. Each pending challenge notifies the
+challenger's teammate and both opponents, but not its creator. These inserts
+happen in the same transaction as the action. No browser-side notification insert is
+needed. A failed notification insert rolls back the action and surfaces its
+database error to the sender, rather than leaving an unnotified successful request.
+Updates, invitation responses and read receipts do not produce new alerts.
+Re-running the migration does not replay historical activities. Existing rows
+are not deleted or backfilled, so testing requires new actions after installation.
+The final SQL query should report four triggers, one per source table.
+
+The migration requires numeric `notifications.user_id` profile IDs (the schema
+used by the application's notification queries) and stops explicitly if the
+recipient column is incompatible, rather than converting old data or broadcasting
+private alerts. It populates both title/body and type/message, supporting legacy
+required titles while keeping the application's existing notification format.
+The trigger derives its challenge-link variable from the actual
+`notifications.challenge_id` column type, preserving existing bigint, UUID or text
+columns and their foreign keys. If an earlier version of 066 reported
+`column "challenge_id" is of type bigint but expression is of type text` when
+sending a request, rerun the entire updated 066 file, then send the request again.
+The failed action was rolled back; rerunning the migration does not replay alerts.
+
+These inserts use the same notifications INSERT webhook described above; no
+additional webhook, Firebase credentials or e-mail service is needed. Each
+recipient still needs to enable push on their own device. The profile receives
+the in-app notification independently of push permissions. Message pushes contain
+the sender's name, not the private chat text. `sender_profile_id` records numeric
+profile IDs for conversation navigation and read receipts; nullable legacy
+`sender_id` columns can remain UUID or numeric without changing existing data.
+Per-source IDs prevent the installed triggers from inserting duplicate alerts.
+The migration installs `notify_friend_request`, `notify_chat_message`,
+`notify_pair_invitation` and `notify_pair_challenge_recipients_after_insert`; if
+custom notification-writing triggers were installed outside this repository,
+remove those redundant triggers before enabling the new ones.
+
+### Checking automatic activity notifications
+
+1. Deploy the updated app. Keep the existing single INSERT webhook on
+   `public.notifications`; do not create webhooks on the four source tables.
+   Supabase must be able to reach the deployed HTTPS URL, not `localhost`.
+2. Use separate accounts/devices with push enabled. Send a new friend request,
+   accept it, send a message, invite the friend into a pair, and create a challenge
+   between two pairs.
+3. Check `notifications`: the first three actions should create one row each for
+   the recipient; a challenge creates three rows linked by `challenge_id`.
+   `user_id` must be the recipient's numeric profile ID, never NULL for these
+   actions; `sender_profile_id` identifies the sender.
+4. Check notification INSERT webhook delivery logs if rows exist but no push
+   arrives. A successful manually inserted global alert does not verify private
+   recipient mapping: each recipient needs a saved device token associated with
+   their auth account, a matching profile email, and push alerts enabled.
+5. Open the alert to reach profile messages. Pair invitations use the existing
+   invitations list with accept/decline controls; challenge alerts retain their
+   participation controls. The profile badge counts each pending pair invitation
+   only once, not again as a notification. Senders and unrelated accounts must not
+   receive alerts.
+
+Run the focused regression suite with:
+
+```sh
+node --experimental-vm-modules --test scripts/activity-notifications.test.mjs scripts/communication-notifications.test.mjs scripts/push-notifications.test.mjs
+```
+
+This covers source inserts/RPCs through private push-token resolution, both
+UUID/numeric legacy sender columns, an installation without 064, required titles,
+bigint/UUID challenge links with preserved foreign keys, repeat installation,
+recipient isolation and transactional notification failures.
+It does not contact production Supabase or FCM.
+
 ## User flow and verification
 
 The mobile notification panel shows enable/disable controls without the generic

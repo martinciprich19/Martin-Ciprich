@@ -1,10 +1,10 @@
 'use client'
 
-import { Activity, Target, Trophy, Users } from 'lucide-react'
+import { Activity, ChevronDown, Target, Trophy, Users } from 'lucide-react'
 import { useId, useState } from 'react'
 import { useLanguage } from '@/components/language-provider'
 import { getMatchStatistics, scoreForSet, type pointSuccess } from '@/lib/match-statistics'
-import type { LiveScore } from '@/lib/live-match-scoring'
+import type { LiveScore, PointHistoryEntry } from '@/lib/live-match-scoring'
 import { PlayerAvatar } from '@/components/player-avatar'
 import type { MatchAvatars } from '@/lib/live-match-avatars'
 
@@ -37,7 +37,7 @@ function ComparisonRow({ label, a, b, aLabel = String(a), bLabel = String(b) }: 
   )
 }
 
-export function MatchStatistics({ match, showAvatars = false, avatars }: { match: StatisticsMatch; showAvatars?: boolean; avatars?: MatchAvatars | null }) {
+export function MatchStatistics({ match, showAvatars = false, avatars, showRules = true }: { match: StatisticsMatch; showAvatars?: boolean; avatars?: MatchAvatars | null; showRules?: boolean }) {
   const { t } = useLanguage()
   const [selectedSet, setSelectedSet] = useState<number | null>(null)
   const panelId = useId()
@@ -46,13 +46,34 @@ export function MatchStatistics({ match, showAvatars = false, avatars }: { match
   const scopeLabel = selectedSet === null
     ? t('Celý zápas · všetky sety spolu', 'Entire match · all sets combined')
     : `${t('Set', 'Set')} ${selectedSet + 1}`
+  const pointGroups: { set: number; game: number; tiebreak: boolean; superTiebreak: boolean; entries: PointHistoryEntry[] }[] = []
+  for (const entry of (match.point_history ?? []).filter((point) => selectedSet === null || point.set === selectedSet + 1)) {
+    const lastGroup = pointGroups.at(-1)
+    if (!lastGroup || lastGroup.set !== entry.set || lastGroup.game !== entry.game
+      || lastGroup.tiebreak !== entry.tiebreak || lastGroup.superTiebreak !== entry.super_tiebreak) {
+      pointGroups.push({
+        set: entry.set, game: entry.game, tiebreak: entry.tiebreak,
+        superTiebreak: entry.super_tiebreak, entries: [],
+      })
+    }
+    pointGroups.at(-1)?.entries.push(entry)
+  }
   const names = [
     [match.team_a_player1_name, match.team_a_player2_name],
     [match.team_b_player1_name, match.team_b_player2_name],
   ]
   return (
     <div className="match-statistics">
-      <p className="result-stat-scope">{t('Režim', 'Mode')}: {match.scoring_type === 'advantage' ? t('So zhodou (Výhoda)', 'Standard / Advantage') : 'Golden Point'}</p>
+      {showRules ? <p className="result-stat-scope">
+        {match.scoring_type === 'advantage' ? t('Klasické výhody (Ad)', 'Classic advantage (Ad)') : t('Zlatá loptička (Punto de Oro)', 'Golden point (Punto de Oro)')}
+        {' · '}
+        {match.set_format === 'pro_set'
+          ? t('Historický Pro-Set · tajbrejk za 8:8', 'Legacy Pro-Set · tiebreak at 8:8')
+          : match.set_format === 'seven_games_no_tiebreak'
+            ? t('Set do 7 gemov · bez tajbrejku', 'Set to 7 games · no tiebreak')
+            : t('Klasický set · tajbrejk za 6:6', 'Standard set · tiebreak at 6:6')}
+        {match.set_format !== 'pro_set' ? ` · ${t('3. set', 'Deciding set')}: ${match.third_set_format === 'full_set' ? t('plnohodnotný set', 'full set') : t('Super Tiebreak', 'Super Tiebreak')}` : ''}
+      </p> : null}
       <div className="result-stat-filter" role="group" aria-label={t('Vybrať štatistiky zápasu alebo setu', 'Choose match or set statistics')}>
         <button type="button" aria-pressed={selectedSet === null} aria-controls={panelId} onClick={() => setSelectedSet(null)}>{t('Celý zápas', 'Entire match')}</button>
         {match.completed_sets.map((set, index) => (
@@ -61,7 +82,71 @@ export function MatchStatistics({ match, showAvatars = false, avatars }: { match
       </div>
       <div id={panelId} className="match-statistics">
       <p className="result-stat-scope" role="status">{scopeLabel}</p>
-      {!selectedScore ? <p className="court-stat-warning text-amber-200" role="status">{t('Štatistiky tohto setu neboli zaznamenané. Staršie zápasy sa nedajú spätne presne rozdeliť na sety. Celkové štatistiky nájdeš pod „Celý zápas“.', 'Statistics for this set were not recorded. Older matches cannot be accurately split into sets retrospectively. Overall statistics are available under “Entire match”.')}</p> : <>
+      <details className="result-point-history">
+        <summary>
+          <span>{t('Priebeh bod po bode', 'Point-by-point timeline')}</span>
+          <span>{pointGroups.reduce((count, group) => count + group.entries.filter((entry) => entry.type === 'point').length, 0)} {t('bodov', 'points')}</span>
+          <ChevronDown size={18} aria-hidden="true" />
+        </summary>
+        <div className="result-point-history-content">
+          {match.point_history_complete === false ? <p className="result-point-history-note" role="note">{t('Presný priebeh je dostupný len od zapnutia sledovania bodov. Predchádzajúce body tohto zápasu sa nedajú spätne obnoviť.', 'The exact timeline is available only from when point tracking was enabled. Earlier points in this match cannot be recovered.')}</p> : null}
+          {pointGroups.length === 0 ? <p className="result-point-history-note" role="status">{t('V tomto období zatiaľ nie sú zaznamenané body.', 'No points have been recorded for this period yet.')}</p> : (
+            <div className="result-point-history-groups">
+              {pointGroups.map((group, groupIndex) => {
+                const lastEntry = group.entries.at(-1)
+                return (
+                  <section key={`${group.set}-${group.game}-${groupIndex}`} className="result-point-history-game">
+                  <h3>
+                    {t('Set', 'Set')} {group.set}
+                    {' · '}
+                    {group.superTiebreak
+                      ? t('Super Tiebreak', 'Super tiebreak')
+                      : group.tiebreak
+                        ? t('Tajbrejk', 'Tiebreak')
+                        : `${t('Gem', 'Game')} ${group.game}`}
+                  </h3>
+                  <ol>
+                    {group.entries.map((entry, entryIndex) => entry.type === 'reset' ? (
+                      <li key={`reset-${entryIndex}`} className="result-point-history-reset">
+                        {entry.super_tiebreak ? t('Super Tiebreak vynulovaný', 'Super tiebreak reset')
+                          : entry.tiebreak ? t('Tajbrejk vynulovaný', 'Tiebreak reset')
+                            : t('Skóre gemu vynulované', 'Game score reset')}
+                      </li>
+                    ) : (
+                      <li key={`point-${entryIndex}`} className="result-point-history-point">
+                        <span className={`result-point-history-winner ${entry.team === 'TEAM_A' ? 'team-a' : 'team-b'}`}>
+                          {entry.team === 'TEAM_A' ? t('Tím 1', 'Team 1') : t('Tím 2', 'Team 2')}
+                        </span>
+                        <strong className="result-point-history-score">{entry.score_a} – {entry.score_b}</strong>
+                        {entry.game_winner ? <span className="result-point-history-outcome">
+                          {entry.super_tiebreak ? t('Super Tiebreak', 'Super tiebreak')
+                            : entry.tiebreak ? t('Tajbrejk', 'Tiebreak')
+                              : t('Gem', 'Game')}
+                          {' · '}
+                          {entry.team === 'TEAM_A' ? t('Tím 1', 'Team 1') : t('Tím 2', 'Team 2')}
+                        </span> : null}
+                        {entry.set_winner ? <span className="result-point-history-outcome">
+                          {t('Set', 'Set')} {entry.team === 'TEAM_A' ? t('Tím 1', 'Team 1') : t('Tím 2', 'Team 2')}
+                        </span> : null}
+                      </li>
+                    ))}
+                  </ol>
+                  {lastEntry?.type === 'point' && lastEntry.game_winner ? (
+                    <p className="result-point-history-game-score">
+                      {group.superTiebreak ? t('Výsledok Super Tiebreaku', 'Super tiebreak score')
+                        : group.tiebreak ? t('Výsledok setu', 'Set score')
+                          : t('Stav gemov', 'Game score')}
+                      : {lastEntry.games_a} – {lastEntry.games_b}
+                    </p>
+                  ) : null}
+                  </section>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </details>
+      {!selectedScore ? <p className="court-stat-warning text-app-amber-200" role="status">{t('Štatistiky tohto setu neboli zaznamenané. Staršie zápasy sa nedajú spätne presne rozdeliť na sety. Celkové štatistiky nájdeš pod „Celý zápas“.', 'Statistics for this set were not recorded. Older matches cannot be accurately split into sets retrospectively. Overall statistics are available under “Entire match”.')}</p> : <>
       <section className="result-comparison" aria-label={`${t('Porovnanie tímov', 'Team comparison')} · ${scopeLabel}`}>
         <div className="result-section-title"><Activity size={17} aria-hidden="true" /><div><h2>{t('Štatistiky tímov', 'Team statistics')}</h2><p>{scopeLabel}</p></div></div>
         <div role="table" aria-label={t('Štatistiky tímov', 'Team statistics')}>

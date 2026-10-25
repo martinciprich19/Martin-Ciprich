@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { createHash } from 'node:crypto'
-import { getWinnerAnnouncement } from '@/lib/live-match-scoring'
+import { getWinnerAnnouncement, isPointAnnouncement } from '@/lib/live-match-scoring'
 
 export const runtime = 'nodejs'
 
@@ -27,6 +27,8 @@ const allowedAnnouncements = new Set<string>([
 ])
 for (const team of [1, 2]) {
   const slovakTeam = team === 1 ? 'jedna' : 'dva'
+  allowedAnnouncements.add(`Posledný bod tímu ${team} bol odobratý.`)
+  allowedAnnouncements.add(`Team ${team}'s last point was removed.`)
   allowedAnnouncements.add(`Bod pre tím ${slovakTeam}.`)
   allowedAnnouncements.add(`Bod pre tím ${slovakTeam}, gem pre tím ${slovakTeam}.`)
   allowedAnnouncements.add(`Bod pre tím ${slovakTeam}, tajbrejk a set pre tím ${slovakTeam}.`)
@@ -71,14 +73,15 @@ class ElevenLabsApiError extends Error {
   }
 }
 
-async function synthesize(text: string, voice: string, apiKey: string): Promise<ArrayBuffer> {
+async function synthesize(text: string, voice: string, apiKey: string, language: 'sk' | 'en'): Promise<ArrayBuffer> {
   const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voice}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'xi-api-key': apiKey, Accept: 'audio/mpeg' },
     body: JSON.stringify({
       text,
-      model_id: 'eleven_multilingual_v2',
-      voice_settings: { stability: 0.95, similarity_boost: 0.75, speed: 0.80, style: 0 },
+      model_id: language === 'sk' ? 'eleven_flash_v2_5' : 'eleven_multilingual_v2',
+      ...(language === 'sk' ? { language_code: 'sk' } : {}),
+      voice_settings: { stability: 0.8, similarity_boost: 0.75, speed: 0.9, style: 0 },
     }),
     signal: AbortSignal.timeout(8000),
     cache: 'no-store',
@@ -123,12 +126,15 @@ export async function POST(request: Request) {
     || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.matchId)) {
     return Response.json({ error: 'Neplatné hlásenie alebo zápas.' }, { status: 400 })
   }
-  const language = 'language' in body ? body.language : 'sk'
+  const language = 'language' in body && body.language === 'en' ? 'en' : 'sk'
   const trimmedText = body.text.trim()
   const scoreToken = trimmedText.endsWith('.') ? trimmedText.slice(0, -1) : trimmedText
   const text = standaloneScores.get(scoreToken) ?? trimmedText
   const isWinnerAnnouncement = text.startsWith('Zápas vyhral tím ') || text.startsWith('Team 1 won the match.') || text.startsWith('Team 2 won the match.')
-  if (!text.endsWith('.') || (!allowedAnnouncements.has(text) && !isWinnerAnnouncement)) {
+  const isCombinedWinnerAnnouncement = (winnerText: string) => text.startsWith(`${winnerText} `)
+    && isPointAnnouncement(text.slice(winnerText.length + 1))
+  if (!text.endsWith('.')
+    || (!allowedAnnouncements.has(text) && !isPointAnnouncement(text) && !isWinnerAnnouncement)) {
     return Response.json({ error: 'Neplatné hlásenie alebo zápas.' }, { status: 400 })
   }
   const voice = isWinnerAnnouncement
@@ -153,11 +159,12 @@ export async function POST(request: Request) {
     if (!data) return Response.json({ error: 'Zápas nie je dostupný.' }, { status: 404 })
     if (isWinnerAnnouncement) {
       const announcement = getWinnerAnnouncement(data)
-      if (!announcement || (text !== announcement.sk && text !== announcement.en)) {
+      if (!announcement || (text !== announcement.sk && text !== announcement.en
+        && !isCombinedWinnerAnnouncement(announcement.sk) && !isCombinedWinnerAnnouncement(announcement.en))) {
         return Response.json({ error: 'Neplatné hlásenie víťaza zápasu.' }, { status: 400 })
       }
     }
-    const cacheKey = `${voice}:${text}`
+    const cacheKey = `${language}:${voice}:${text}`
     let audio = audioCache.get(cacheKey)
     if (!audio) {
       let pending = pendingAudio.get(cacheKey)
@@ -168,7 +175,7 @@ export async function POST(request: Request) {
           return Response.json({ error: 'Hlasová služba je vyťažená.' }, { status: 429 })
         }
         synthesisCount++
-        pending = synthesize(text, voice, apiKey).then((result) => {
+        pending = synthesize(text, voice, apiKey, language).then((result) => {
           if (audioCache.size >= 128) audioCache.clear()
           audioCache.set(cacheKey, result)
           return result

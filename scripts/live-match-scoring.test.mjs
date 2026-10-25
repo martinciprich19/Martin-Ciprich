@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { awardLivePoint, getPointAnnouncement, getMatchWinner, getWinnerAnnouncement, rotateServer, rotateServingPlayer, isTiebreak, tiebreakServer, parseTiebreakScore } from '../lib/live-match-scoring.ts'
+import { awardLivePoint, removeLastTeamPoint, resetLiveGame, getPointAnnouncement, getMatchWinner, getWinnerAnnouncement, isPointAnnouncement, rotateServer, rotateServingPlayer, isTiebreak, tiebreakServer, parsePointHistory, parseTiebreakScore } from '../lib/live-match-scoring.ts'
 
 const initial = {
   team_a_game_score: 0, team_b_game_score: 0,
@@ -19,6 +19,62 @@ const initial = {
   started_at: null, finished_at: null,
   completed_sets: [],
 }
+
+test('team correction removes its last point, keeps opponent points and rebuilds persisted history/statistics', () => {
+  const at = '2026-10-24T12:00:00.000Z'
+  const before = { ...initial, advantage_team: null, tiebreak_score: null, service_game_statistics: { team_a_won: 0, team_a_lost: 0, team_b_won: 0, team_b_lost: 0 }, point_history_complete: true }
+  let score = { ...before, point_history: [] }
+  score = awardLivePoint(score, 'TEAM_A', at)
+  score = awardLivePoint(score, 'TEAM_B', at)
+  score = awardLivePoint(score, 'TEAM_B', at)
+  score = { ...score, point_history: parsePointHistory(JSON.parse(JSON.stringify(score.point_history))) }
+  const corrected = removeLastTeamPoint(score, 'TEAM_A')
+  const expected = awardLivePoint(awardLivePoint(before, 'TEAM_B', at), 'TEAM_B', at)
+  assert.deepEqual(corrected, expected)
+  assert.equal(score.team_a_game_score, 15, 'original state is immutable')
+  assert.equal(corrected.point_history.length, 2)
+  assert.throws(() => removeLastTeamPoint(corrected, 'TEAM_A'), /nemá v histórii bod/)
+})
+
+test('team correction unwinds games, sets, advantages and tiebreaks using the existing scoring rules', () => {
+  const at = '2026-10-24T12:00:00.000Z'
+  for (const baseline of [
+    { ...initial, team_a_game_score: 40, team_a_games: 5 },
+    { ...initial, scoring_type: 'advantage', team_a_game_score: 40, team_b_game_score: 40, advantage_team: 'TEAM_A' },
+    { ...initial, team_a_games: 6, team_b_games: 6, tiebreak_score: { a: 6, b: 5, first_team: 'TEAM_A', first_player: 1 } },
+    { ...initial, team_a_sets: 1, team_b_sets: 1, third_set_format: 'super_tiebreak', tiebreak_score: { a: 8, b: 8, first_team: 'TEAM_A', first_player: 1 } },
+  ]) {
+    const before = { ...baseline, point_history: [] }
+    const first = awardLivePoint(before, 'TEAM_A', at)
+    const current = awardLivePoint(first, 'TEAM_B', at)
+    const expected = awardLivePoint(before, 'TEAM_B', at)
+    assert.deepEqual(removeLastTeamPoint(current, 'TEAM_A', [before, first]), expected)
+  }
+})
+
+test('corrections preserve manual serve selections and resets, including after reload', () => {
+  const at = '2026-10-24T12:00:00.000Z'
+  const before = { ...initial, advantage_team: null, tiebreak_score: null, service_game_statistics: { team_a_won: 0, team_a_lost: 0, team_b_won: 0, team_b_lost: 0 }, point_history_complete: true }
+  const first = awardLivePoint(before, 'TEAM_A', at)
+  const manual = { ...first, serving_team: 'TEAM_B', serving_player: 2 }
+  const second = awardLivePoint(manual, 'TEAM_B', at)
+  const reset = resetLiveGame(second)
+  const current = awardLivePoint(reset, 'TEAM_B', at)
+  const expected = awardLivePoint(resetLiveGame(awardLivePoint({ ...before, serving_team: 'TEAM_B', serving_player: 2 }, 'TEAM_B', at)), 'TEAM_B', at)
+  assert.deepEqual(removeLastTeamPoint(current, 'TEAM_A'), expected)
+  const selectedAfterPoint = { ...current, serving_team: 'TEAM_A', serving_player: 1 }
+  assert.deepEqual(removeLastTeamPoint(selectedAfterPoint, 'TEAM_A'), { ...expected, serving_team: 'TEAM_A', serving_player: 1 })
+})
+
+test('correction refuses incomplete legacy or conflicting history rather than guessing a score', () => {
+  const current = awardLivePoint(initial, 'TEAM_A')
+  assert.throws(() => removeLastTeamPoint(current, 'TEAM_A'), /chýba úplná história/)
+  assert.throws(() => removeLastTeamPoint({ ...current, point_history_complete: true, team_a_game_score: 30 }, 'TEAM_A'), /nesúhlasí/)
+  const legacy = { ...current, point_history: current.point_history.map(({ server, played_at, ...entry }) => entry) }
+  assert.deepEqual(removeLastTeamPoint(legacy, 'TEAM_A', [{ ...initial, point_history: [] }]), { ...initial, point_history: [] })
+  assert.throws(() => parsePointHistory([{ ...current.point_history[0], server: { team: 'wrong', player: 1 } }]), /podanie/)
+  assert.throws(() => parsePointHistory([{ ...current.point_history[0], played_at: 'invalid' }]), /čas bodu/)
+})
 
 test('Golden Point wins at deuce; advantage needs two consecutive points for either team', () => {
   for (const team of ['TEAM_A', 'TEAM_B']) {
@@ -40,18 +96,18 @@ test('Golden Point wins at deuce; advantage needs two consecutive points for eit
     assert.equal(advantage.team_b_break_points, 0)
     assert.deepEqual(advantage.service_game_statistics, deuce.service_game_statistics)
     assert.ok(!getPointAnnouncement(deuce, advantage).en.includes('game for'))
-    assert.ok(getPointAnnouncement(deuce, advantage).en.includes('advantage for'))
+    assert.match(getPointAnnouncement(deuce, advantage).en, /advantage for/i)
     const equal = awardLivePoint(advantage, opponent)
     assert.equal(equal.advantage_team, null)
     assert.equal(equal.team_a_games + equal.team_b_games, 0)
-    assert.ok(getPointAnnouncement(advantage, equal).en.includes('deuce'))
+    assert.match(getPointAnnouncement(advantage, equal).en, /deuce/i)
     assert.equal(deuce.advantage_team, null)
     const won = awardLivePoint(advantage, team)
     assert.equal(won[gameKey], 1)
     assert.equal(won.advantage_team, null)
     assert.equal(won.team_a_game_score + won.team_b_game_score, 0)
     assert.equal(won.service_game_statistics[team === 'TEAM_A' ? 'team_a_won' : 'team_a_lost'], 1)
-    assert.ok(getPointAnnouncement(advantage, won).en.includes('game for'))
+    assert.match(getPointAnnouncement(advantage, won).en, /game for/i)
     if (team === 'TEAM_B') {
       assert.equal(equal.team_b_break_points_missed, 1)
       assert.equal(won.team_b_break_points_converted, 1)
@@ -104,6 +160,37 @@ test('points advance to a game without changing the original snapshot', () => {
   assert.equal(score.team_b_game_score, 0)
   assert.equal(score.team_a_games, 1)
   assert.equal(initial.team_a_game_score, 0)
+})
+
+test('point history records each score, game winner and set result in order', () => {
+  let score = { ...initial }
+  for (const team of ['TEAM_A', 'TEAM_A', 'TEAM_B', 'TEAM_B', 'TEAM_A', 'TEAM_A']) {
+    score = awardLivePoint(score, team)
+  }
+  assert.equal(score.point_history.length, 6)
+  assert.deepEqual(score.point_history.slice(0, 5).map(({ score_a, score_b }) => [score_a, score_b]), [
+    ['15', '0'], ['30', '0'], ['30', '15'], ['30', '30'], ['40', '30'],
+  ])
+  assert.deepEqual(score.point_history.at(-1), {
+    played_at: score.point_history.at(-1).played_at, server: { team: 'TEAM_A', player: 2 },
+    type: 'point', set: 1, game: 1, team: 'TEAM_A', tiebreak: false,
+    super_tiebreak: false, score_a: '40', score_b: '30', games_a: 1, games_b: 0,
+    game_winner: 'TEAM_A', set_winner: null,
+  })
+  assert.equal(initial.point_history, undefined)
+  assert.deepEqual(parsePointHistory(score.point_history), score.point_history)
+})
+
+test('point history records tiebreak progression and point reset markers', () => {
+  let score = { ...initial, team_a_games: 6, team_b_games: 6 }
+  score = awardLivePoint(score, 'TEAM_A')
+  assert.deepEqual(score.point_history[0], {
+    played_at: score.point_history[0].played_at, server: { team: 'TEAM_A', player: 1 },
+    type: 'point', set: 1, game: 13, team: 'TEAM_A', tiebreak: true,
+    super_tiebreak: false, score_a: '1', score_b: '0', games_a: 6, games_b: 6,
+    game_winner: null, set_winner: null,
+  })
+  assert.throws(() => parsePointHistory([{ type: 'point', team: 'OTHER' }]), /Neplatn/)
 })
 
 test('each point alternates serving teammates regardless of who wins the point', () => {
@@ -209,7 +296,8 @@ test('6:6 enters a numerical tiebreak and 7:5 ends the set 7:6', () => {
   score = awardLivePoint(score, 'TEAM_A')
   assert.equal(score.tiebreak_score.a, 1)
   assert.equal(score.team_a_game_score, 0)
-  assert.equal(getPointAnnouncement({ ...score, tiebreak_score: { ...score.tiebreak_score, a: 0 } }, score).en, 'Point for Team 1.')
+  assert.equal(getPointAnnouncement({ ...score, tiebreak_score: { ...score.tiebreak_score, a: 0 } }, score).en,
+    'Point for Team 1. One zero.')
   for (let i = 0; i < 5; i++) score = awardLivePoint(awardLivePoint(score, 'TEAM_B'), 'TEAM_A')
   assert.equal(score.team_a_sets, 0)
   const previous = score
@@ -218,7 +306,82 @@ test('6:6 enters a numerical tiebreak and 7:5 ends the set 7:6', () => {
   assert.equal(score.team_a_games, 0)
   assert.deepEqual(score.completed_sets, [[7, 6]])
   assert.equal(score.tiebreak_score, null)
-  assert.match(getPointAnnouncement(previous, score).en, /tiebreak and set/)
+  assert.match(getPointAnnouncement(previous, score).en, /tiebreak and set/i)
+})
+
+test('sets to 7 games use a regular 13th game at 6:6 without starting a tiebreak', () => {
+  let score = {
+    ...initial,
+    set_format: 'seven_games_no_tiebreak',
+    team_a_games: 6,
+    team_b_games: 6,
+  }
+  assert.equal(isTiebreak(score), false)
+  assert.equal(score.team_a_sets, 0)
+  score = awardLivePoint(score, 'TEAM_A')
+  assert.equal(score.team_a_game_score, 15)
+  assert.equal(score.tiebreak_score, undefined)
+  for (let point = 0; point < 3; point++) score = awardLivePoint(score, 'TEAM_A')
+  assert.equal(score.team_a_sets, 1)
+  assert.equal(score.team_a_games, 0)
+  assert.equal(score.team_b_games, 0)
+  assert.deepEqual(score.completed_sets, [[7, 6]])
+  assert.equal(getMatchWinner(score), null)
+})
+
+test('the no-tiebreak format also ends at 7:5', () => {
+  let score = {
+    ...initial,
+    set_format: 'seven_games_no_tiebreak',
+    team_a_games: 6,
+    team_b_games: 5,
+  }
+  for (let point = 0; point < 4; point++) score = awardLivePoint(score, 'TEAM_A')
+  assert.equal(score.team_a_sets, 1)
+  assert.deepEqual(score.completed_sets, [[7, 5]])
+})
+
+test('legacy Pro-Set matches retain their 8:8 tiebreak behavior', () => {
+  const base = {
+    ...initial,
+    set_format: 'pro_set',
+    third_set_format: 'super_tiebreak',
+    team_a_games: 8,
+    team_b_games: 7,
+    team_b_game_score: 40,
+  }
+  const tie = awardLivePoint(base, 'TEAM_B')
+  assert.deepEqual(tie.tiebreak_score, { a: 0, b: 0, first_team: 'TEAM_B', first_player: 1 })
+  let score = tie
+  for (let point = 0; point < 7; point++) score = awardLivePoint(score, 'TEAM_A')
+  assert.equal(score.team_a_sets, 1)
+  assert.equal(score.finished_at !== null, true)
+  assert.equal(getMatchWinner(score), 'TEAM_A')
+  assert.deepEqual(score.completed_sets, [[9, 8]])
+})
+
+test('Super Tiebreak starts at 1:1 sets and wins the third set at 10 by two', () => {
+  let score = {
+    ...initial,
+    third_set_format: 'super_tiebreak',
+    team_a_sets: 1,
+    team_b_sets: 0,
+    completed_sets: [[6, 3]],
+    team_a_games: 5,
+    team_b_games: 6,
+    team_b_game_score: 40,
+  }
+  score = awardLivePoint(score, 'TEAM_B')
+  assert.equal(score.team_a_sets, 1)
+  assert.equal(score.team_b_sets, 1)
+  assert.equal(score.team_a_games + score.team_b_games, 0)
+  assert.deepEqual(score.tiebreak_score, { a: 0, b: 0, first_team: 'TEAM_B', first_player: 1 })
+
+  const decidingPoints = Array.from({ length: 8 }, () => ['TEAM_A', 'TEAM_B']).flat().concat(['TEAM_A', 'TEAM_A'])
+  for (const team of decidingPoints) score = awardLivePoint(score, team)
+  assert.equal(getMatchWinner(score), 'TEAM_A')
+  assert.equal(score.finished_at !== null, true)
+  assert.deepEqual(score.completed_sets, [[6, 3], [5, 7], [10, 8]])
 })
 
 test('tiebreak extended scores, both modes/teams, stats and server sequence survive snapshots', () => {
@@ -274,21 +437,23 @@ test('team 2 sets accumulate and undo snapshot restores games, sets and server',
   assert.throws(() => awardLivePoint({ ...initial, initial_server_chosen: false }, 'TEAM_A'))
 })
 
-test('ordinary points announce only the winning team in Slovak and English', () => {
+test('ordinary points announce the current game score in Slovak and English', () => {
   for (const [team, number] of [['TEAM_A', 1], ['TEAM_B', 2]]) {
     let score = { ...initial }
     for (let point = 0; point < 3; point++) {
       const next = awardLivePoint(score, team)
+      const pointScoreSk = ['Pätnásť', 'Tridsať', 'Štyridsať'][point]
+      const pointScoreEn = ['Fifteen', 'Thirty', 'Forty'][point]
       assert.deepEqual(getPointAnnouncement(score, next), {
-        sk: `Bod pre tím ${number === 1 ? 'jedna' : 'dva'}.`,
-        en: `Point for Team ${number}.`,
+        sk: `Bod pre tím ${number === 1 ? 'jedna' : 'dva'}. ${number === 1 ? pointScoreSk : 'Nula'} ${number === 1 ? 'Nula' : pointScoreSk}.`,
+        en: `Point for Team ${number}. ${number === 1 ? pointScoreEn : 'Love'} ${number === 1 ? 'Love' : pointScoreEn}.`,
       })
       score = next
     }
   }
 })
 
-test('game and set winners announce point plus game, without statistics', () => {
+test('game and set winners announce the completed game score', () => {
   for (const [team, number] of [['TEAM_A', 1], ['TEAM_B', 2]]) {
     for (const games of [0, 5]) {
       const before = {
@@ -296,12 +461,73 @@ test('game and set winners announce point plus game, without statistics', () => 
         [team === 'TEAM_A' ? 'team_a_game_score' : 'team_b_game_score']: 40,
         [team === 'TEAM_A' ? 'team_a_games' : 'team_b_games']: games,
       }
-      assert.deepEqual(getPointAnnouncement(before, awardLivePoint(before, team)), {
-        sk: `Bod pre tím ${number === 1 ? 'jedna' : 'dva'}, gem pre tím ${number === 1 ? 'jedna' : 'dva'}.`,
-        en: `Point for Team ${number}, game for Team ${number}.`,
+      const updated = awardLivePoint(before, team)
+      const winner = number === 1 ? 'tím jedna' : 'tím dva'
+      const gamesA = team === 'TEAM_A' ? games + 1 : 0
+      const gamesB = team === 'TEAM_B' ? games + 1 : 0
+      assert.deepEqual(getPointAnnouncement(before, updated), {
+        sk: `Gem ${winner}. Stav gemov: ${gamesA === 1 ? 'jeden' : gamesA === 6 ? 'šesť' : 'nula'} ${gamesB === 1 ? 'jeden' : gamesB === 6 ? 'šesť' : 'nula'} pre ${winner}.`,
+        en: `Game for Team ${number}. Game score: ${gamesA === 1 ? 'one' : gamesA === 6 ? 'six' : 'zero'} ${gamesB === 1 ? 'one' : gamesB === 6 ? 'six' : 'zero'} for Team ${number}.`,
       })
     }
   }
+})
+
+test('tied completed game scores are announced without assigning them to either team', () => {
+  for (const winner of ['TEAM_A', 'TEAM_B']) {
+    for (const games of [1, 2, 3, 4, 5]) {
+      const before = {
+        ...initial,
+        team_a_games: winner === 'TEAM_A' ? games - 1 : games,
+        team_b_games: winner === 'TEAM_B' ? games - 1 : games,
+        [winner === 'TEAM_A' ? 'team_a_game_score' : 'team_b_game_score']: 40,
+      }
+      const updated = awardLivePoint(before, winner)
+      const announcement = getPointAnnouncement(before, updated)
+      const scoreSk = ['nula', 'jeden', 'dva', 'tri', 'štyri', 'päť'][games]
+      const scoreEn = ['zero', 'one', 'two', 'three', 'four', 'five'][games]
+      assert.deepEqual(announcement, {
+        sk: `Gem ${winner === 'TEAM_A' ? 'tím jedna' : 'tím dva'}. Stav gemov: ${scoreSk} ${scoreSk}.`,
+        en: `Game for Team ${winner === 'TEAM_A' ? 1 : 2}. Game score: ${scoreEn} ${scoreEn}.`,
+      })
+      assert.equal(isPointAnnouncement(announcement.sk), true)
+      assert.equal(isPointAnnouncement(announcement.en), true)
+    }
+  }
+})
+
+test('deuce, golden point, advantage and tiebreak announcements include the score', () => {
+  const evenScore = { ...initial, team_a_game_score: 30, team_b_game_score: 40 }
+  const goldenDeuce = awardLivePoint({ ...evenScore, scoring_type: 'golden_point' }, 'TEAM_A')
+  assert.equal(getPointAnnouncement(evenScore, goldenDeuce).sk, 'Bod pre tím jedna. Zlatá loptička.')
+  const advantageDeuce = awardLivePoint({ ...evenScore, scoring_type: 'advantage' }, 'TEAM_A')
+  assert.equal(getPointAnnouncement(evenScore, advantageDeuce).sk, 'Bod pre tím jedna. Zhoda.')
+  const advantage = awardLivePoint({ ...initial, scoring_type: 'advantage', team_a_game_score: 40, team_b_game_score: 40 }, 'TEAM_A')
+  assert.equal(getPointAnnouncement({ ...initial, scoring_type: 'advantage', team_a_game_score: 40, team_b_game_score: 40 }, advantage).sk,
+    'Bod pre tím jedna. Výhoda pre tím jedna.')
+
+  const tiebreak = {
+    ...initial, team_a_games: 6, team_b_games: 6,
+    tiebreak_score: { a: 3, b: 1, first_team: 'TEAM_A', first_player: 1 },
+  }
+  assert.equal(getPointAnnouncement(tiebreak, awardLivePoint(tiebreak, 'TEAM_A')).sk,
+    'Bod pre tím jedna. Štyri jeden.')
+  const tiebreakPoint = {
+    ...tiebreak,
+    tiebreak_score: { ...tiebreak.tiebreak_score, a: 6, b: 5 },
+  }
+  assert.equal(getPointAnnouncement(tiebreakPoint, awardLivePoint(tiebreakPoint, 'TEAM_A')).sk,
+    'Tajbrejk a set pre tím jedna. Sedem päť.')
+  for (const phrase of [
+    'Bod pre tím jedna. Pätnásť nula.',
+    'Gem tím jedna. Stav gemov: tri dva pre tím jedna.',
+    'Gem tím jedna. Stav gemov: jeden jeden.',
+    'Tajbrejk a set pre tím dva. Sedem päť.',
+    'Point for Team 1. Fifteen love.',
+    'Game for Team 1. Game score: three two for Team 1.',
+    'Game for Team 1. Game score: one one.',
+  ]) assert.equal(isPointAnnouncement(phrase), true, phrase)
+  assert.equal(isPointAnnouncement('Bod pre tím jedna. Niečo iné.'), false)
 })
 
 test('Realtime echoes, undo and reset are not announced as awarded points', () => {

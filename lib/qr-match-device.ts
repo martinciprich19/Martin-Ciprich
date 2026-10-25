@@ -17,6 +17,10 @@ export function getQrDeviceToken(matchId: string): string | null {
   return token
 }
 
+export function clearQrDeviceToken(matchId: string): void {
+  window.localStorage.removeItem(`riva-qr-match-${matchId}`)
+}
+
 export function createQrDeviceClient(token: string) {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,

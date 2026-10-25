@@ -67,15 +67,15 @@ function LoginForm() {
   }
 
   return (
-    <main className="min-h-screen bg-[#061016] px-4 sm:px-6 py-8 text-white flex flex-col items-center justify-center">
-      <div className="w-full max-w-sm md:max-w-md bg-[#0b1922] p-6 sm:p-8 rounded-2xl border border-white/10 shadow-xl">
+    <main className="min-h-screen bg-app-ink px-4 sm:px-6 py-8 text-app-fg flex flex-col items-center justify-center">
+      <div className="w-full max-w-sm md:max-w-md bg-app-auth p-6 sm:p-8 rounded-2xl border border-app-line/10 shadow-xl">
         <div className="flex justify-center mb-6">
           <RivaLogo />
         </div>
         <h1 className="text-xl sm:text-2xl font-bold mb-6 text-center">PRIHLÁSENIE</h1>
 
         {notice && !error && (
-          <div role="status" className={`p-3 rounded-lg mb-4 text-sm text-center border ${notice.ok ? 'bg-[#b5ef33]/10 border-[#b5ef33]/50 text-[#b5ef33]' : 'bg-amber-500/10 border-amber-500/60 text-amber-300'}`}>
+          <div role="status" className={`p-3 rounded-lg mb-4 text-sm text-center border ${notice.ok ? 'bg-[#b5ef33]/10 border-[#b5ef33]/50 text-app-lime' : 'bg-amber-500/10 border-amber-500/60 text-app-amber-300'}`}>
             {notice.text}
           </div>
         )}
@@ -100,7 +100,7 @@ function LoginForm() {
               required
               value={form.email}
               onChange={(e) => setForm({ ...form, email: e.target.value })}
-              className="mt-1 w-full rounded-lg border border-white/10 bg-[#061016] px-4 py-2.5 text-white focus:outline-none focus:border-green-400"
+              className="mt-1 w-full rounded-lg border border-app-line/10 bg-app-ink px-4 py-2.5 text-app-fg focus:outline-none focus:border-green-400"
               placeholder="vas@email.sk"
             />
           </div>
@@ -114,7 +114,7 @@ function LoginForm() {
               required
               value={form.password}
               onChange={(e) => setForm({ ...form, password: e.target.value })}
-              className="mt-1 w-full rounded-lg border border-white/10 bg-[#061016] px-4 py-2.5 text-white focus:outline-none focus:border-green-400"
+              className="mt-1 w-full rounded-lg border border-app-line/10 bg-app-ink px-4 py-2.5 text-app-fg focus:outline-none focus:border-green-400"
               placeholder="••••••••"
             />
           </div>
@@ -130,7 +130,7 @@ function LoginForm() {
 
         <p className="text-center text-sm text-gray-400 mt-6">
           Nemáš účet?{' '}
-          <Link href="/auth/sign-up" className="text-[#b5ef33] hover:underline">
+          <Link href="/auth/sign-up" className="text-app-lime hover:underline">
             Registrovať sa
           </Link>
         </p>

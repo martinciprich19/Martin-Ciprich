@@ -12,6 +12,7 @@ export type LeagueNotification = {
   read: boolean
   createdAt: string
   challenge_id: string | null
+  matchId: string | null
   challengeResponse: ChallengeResponse
 }
 
@@ -89,12 +90,13 @@ export async function fetchNotifications(userId: string | number): Promise<Leagu
   return (data ?? []).map((row) => ({
     id: String(row.id),
     type: String(row.type ?? ''),
-    senderId: row.sender_id == null ? null : String(row.sender_id),
-    title: row.type === 'friend_request' ? 'Žiadosť o priateľstvo' : ['pair_challenge', 'challenge_request'].includes(String(row.type)) ? 'Nová výzva na zápas' : String(row.type ?? 'Notifikácia'),
+    senderId: row.sender_profile_id != null ? String(row.sender_profile_id) : row.sender_id == null ? null : String(row.sender_id),
+    title: row.type === 'match_result' ? 'Potvrď výsledok' : row.type === 'friend_request' ? 'Žiadosť o priateľstvo' : row.type === 'pair_invitation' ? 'Pozvanie do dvojice' : ['message', 'new_message', 'direct_message'].includes(String(row.type)) ? 'Nová správa' : ['pair_challenge', 'challenge_request'].includes(String(row.type)) ? 'Nová výzva na zápas' : String(row.type ?? 'Notifikácia'),
     body: row.message ?? null,
     read: Boolean(row.is_read) || globallyReadIds.has(String(row.id)),
     createdAt: String(row.created_at ?? ''),
     challenge_id: row.challenge_id == null ? null : String(row.challenge_id).trim(),
+    matchId: row.match_id == null ? null : String(row.match_id),
     challengeResponse: challengeResponses.get(String(row.challenge_id ?? '').trim()) ?? 'unavailable',
   }))
 }

@@ -8,6 +8,7 @@ import { createClient } from '@/lib/supabase/client'
 import type { Arena } from '@/lib/arenas'
 import { getErrorMessage } from '@/lib/errors'
 import { deletePair, fetchPairs, type PairPlayer, type PlayerPair } from '@/lib/pairs'
+import { getPairEloBand, PAIR_ELO_BANDS } from '@/lib/pair-elo'
 import {
   cancelPairChallenge,
   fetchPairChallenge,
@@ -18,15 +19,15 @@ import {
 
 const statusLabel: Record<PairChallengeStatus, string> = { pending: 'Čaká na odpoveď', accepted: 'Potvrdené', confirmed: 'Potvrdené', declined: 'Odmietnutá', cancelled: 'Zrušená' }
 const statusStyle: Record<PairChallengeStatus, string> = {
-  pending: 'bg-[#ccff00]/10 text-[#ccff00]',
-  accepted: 'bg-emerald-400/10 text-emerald-300',
-  confirmed: 'bg-emerald-400/10 text-emerald-300',
-  declined: 'bg-red-400/10 text-red-300',
-  cancelled: 'bg-white/5 text-white/40',
+  pending: 'bg-[#ccff00]/10 text-app-league',
+  accepted: 'bg-emerald-400/10 text-app-emerald-300',
+  confirmed: 'bg-emerald-400/10 text-app-emerald-300',
+  declined: 'bg-red-400/10 text-app-red-300',
+  cancelled: 'bg-app-overlay/5 text-app-fg/40',
 }
 
-const inputClass = 'w-full rounded-lg border border-white/10 bg-[#0d121a] px-3 py-2.5 text-sm text-white outline-none transition focus:border-[#ccff00]/60 focus:ring-2 focus:ring-[#ccff00]/15'
-const labelClass = 'mb-1.5 block text-[11px] font-bold uppercase tracking-[0.14em] text-white/45'
+const inputClass = 'w-full rounded-lg border border-app-line/10 bg-app-navigation px-3 py-2.5 text-sm text-app-fg outline-none transition focus:border-[#ccff00]/60 focus:ring-2 focus:ring-[#ccff00]/15'
+const labelClass = 'mb-1.5 block text-[11px] font-bold uppercase tracking-[0.14em] text-app-fg/45'
 
 type PairChallengeViewProps = {
   userId: string
@@ -44,6 +45,7 @@ const pairElo = (pair: PlayerPair) => Math.round((pair.player_1.elo + pair.playe
 export function PairChallengeView({ userId, arenas, initialArena, onOpenPairs, initialChallengedPair, onInitialPairApplied }: PairChallengeViewProps) {
   const { language, t } = useLanguage()
   const [region, setRegion] = useState('')
+  const [eloBand, setEloBand] = useState('')
   const [target, setTarget] = useState<PlayerPair | null>(null)
   const [feedback, setFeedback] = useState<{ tone: 'success' | 'error'; message: string } | null>(null)
   const [showMyPairs, setShowMyPairs] = useState(false)
@@ -59,7 +61,9 @@ export function PairChallengeView({ userId, arenas, initialArena, onOpenPairs, i
   const myPairs = allPairs.filter((pair) => pair.player_1_id === userId || pair.player_2_id === userId)
   const regions = Array.from(new Set(allPairs.flatMap((pair) => [pair.player_1.region, pair.player_2.region]).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'sk'))
   const opponentPairs = allPairs
-    .filter((pair) => !myPairs.includes(pair) && (!region || pair.player_1.region === region || pair.player_2.region === region))
+    .filter((pair) => !myPairs.includes(pair)
+      && (!region || pair.player_1.region === region || pair.player_2.region === region)
+      && (!eloBand || getPairEloBand(pairElo(pair)) === eloBand))
     .sort((a, b) => pairElo(b) - pairElo(a))
   const visiblePairs = showMyPairs ? myPairs : opponentPairs
 
@@ -116,13 +120,13 @@ export function PairChallengeView({ userId, arenas, initialArena, onOpenPairs, i
     <div className="mx-auto max-w-[1120px]">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#ccff00]">RIVA /</p>
+          <p className="text-xs font-bold uppercase tracking-[0.22em] text-app-league">RIVA /</p>
           <h1 className="mt-2 text-3xl font-black text-balance">{t('Vyzvať dvojicu')}</h1>
-          <p className="mt-2 text-sm leading-relaxed text-white/45 text-pretty">{t('Vyber súperiacu dvojicu vo svojom okolí a navrhni termín zápasu.')}</p>
+          <p className="mt-2 text-sm leading-relaxed text-app-fg/45 text-pretty">{t('Vyber súperiacu dvojicu vo svojom okolí a navrhni termín zápasu.')}</p>
         </div>
         <div className="flex flex-wrap gap-3">
-          <button type="button" aria-pressed={showMyPairs} onClick={() => { setShowMyPairs((current) => !current); setFeedback(null) }} className="inline-flex items-center gap-2 rounded-lg border border-[#ccff00]/30 px-4 py-2.5 text-sm font-bold text-[#ccff00] transition hover:bg-[#ccff00]/10"><Users size={16} />{t(showMyPairs ? 'Súperiace dvojice' : 'Moje dvojice')}</button>
-          <button type="button" onClick={onOpenPairs} className="inline-flex items-center gap-2 rounded-lg border border-[#ccff00]/30 px-4 py-2.5 text-sm font-bold text-[#ccff00] transition hover:bg-[#ccff00]/10"><Users size={16} />{t('Pridať dvojicu')}</button>
+          <button type="button" aria-pressed={showMyPairs} onClick={() => { setShowMyPairs((current) => !current); setFeedback(null) }} className="inline-flex items-center gap-2 rounded-lg border border-[#ccff00]/30 px-4 py-2.5 text-sm font-bold text-app-league transition hover:bg-[#ccff00]/10"><Users size={16} />{t(showMyPairs ? 'Súperiace dvojice' : 'Moje dvojice')}</button>
+          <button type="button" onClick={onOpenPairs} className="inline-flex items-center gap-2 rounded-lg border border-[#ccff00]/30 px-4 py-2.5 text-sm font-bold text-app-league transition hover:bg-[#ccff00]/10"><Users size={16} />{t('Pridať dvojicu')}</button>
         </div>
       </header>
 
@@ -134,65 +138,72 @@ export function PairChallengeView({ userId, arenas, initialArena, onOpenPairs, i
             {regions.map((item) => <option key={item} value={item}>{item}</option>)}
           </select>
         </label>}
-        <p className="text-xs text-white/40">{visiblePairs.length} {t('dvojíc')}</p>
+        {!showMyPairs ? <label className="block w-full sm:w-72">
+          <span className="sr-only">{t('Filtrovať podľa úrovne ELO')}</span>
+          <select aria-label={t('Filtrovať podľa úrovne ELO')} value={eloBand} onChange={(event) => setEloBand(event.target.value)} className={inputClass}>
+            <option value="">{t('Všetky úrovne ELO')}</option>
+            {PAIR_ELO_BANDS.map((band) => <option key={band.value} value={band.value}>{t(band.label)}</option>)}
+          </select>
+        </label> : null}
+        <p className="text-xs text-app-fg/40">{visiblePairs.length} {t('dvojíc')}</p>
       </div>
 
-      {feedback ? <p role="status" className={`mt-4 rounded-lg px-3 py-2 text-sm font-semibold ${feedback.tone === 'success' ? 'bg-emerald-400/10 text-emerald-300' : 'bg-red-400/10 text-red-300'}`}>{feedback.message}</p> : null}
-      {pairs.error ? <p role="alert" className="mt-6 rounded-lg border border-red-400/30 bg-red-500/10 p-4 text-sm text-red-200">{getErrorMessage(pairs.error, t('Dvojice sa nepodarilo načítať.'))}</p> : null}
-      {pairs.isLoading ? <p role="status" className="py-12 text-center text-sm text-white/50">{t('Načítavam dvojice…')}</p> : null}
-      {!pairs.isLoading && !pairs.error && !myPairs.length ? <p className="mt-4 rounded-lg border border-[#ccff00]/20 bg-[#ccff00]/5 px-3 py-2 text-sm text-white/70">{t('Aby si mohol vyzývať, najprv si vytvor dvojicu so spoluhráčom.')}</p> : null}
-      {!pairs.isLoading && !pairs.error && !visiblePairs.length ? <div className="mt-6 rounded-xl border border-white/10 bg-[#111722] p-8 text-center text-sm text-white/55">{t(showMyPairs ? 'Zatiaľ nemáš vytvorenú žiadnu dvojicu.' : 'Žiadne dvojice v tomto kraji.')}</div> : null}
+      {feedback ? <p role="status" className={`mt-4 rounded-lg px-3 py-2 text-sm font-semibold ${feedback.tone === 'success' ? 'bg-emerald-400/10 text-app-emerald-300' : 'bg-red-400/10 text-app-red-300'}`}>{feedback.message}</p> : null}
+      {pairs.error ? <p role="alert" className="mt-6 rounded-lg border border-red-400/30 bg-red-500/10 p-4 text-sm text-app-red-200">{getErrorMessage(pairs.error, t('Dvojice sa nepodarilo načítať.'))}</p> : null}
+      {pairs.isLoading ? <p role="status" className="py-12 text-center text-sm text-app-fg/50">{t('Načítavam dvojice…')}</p> : null}
+      {!pairs.isLoading && !pairs.error && !myPairs.length ? <p className="mt-4 rounded-lg border border-[#ccff00]/20 bg-[#ccff00]/5 px-3 py-2 text-sm text-app-fg/70">{t('Aby si mohol vyzývať, najprv si vytvor dvojicu so spoluhráčom.')}</p> : null}
+      {!pairs.isLoading && !pairs.error && !visiblePairs.length ? <div className="mt-6 rounded-xl border border-app-line/10 bg-app-surface p-8 text-center text-sm text-app-fg/55">{t(showMyPairs ? 'Zatiaľ nemáš vytvorenú žiadnu dvojicu.' : 'Žiadne dvojice v tomto kraji.')}</div> : null}
 
       <ul className="mt-6 grid gap-4 md:grid-cols-2">
         {visiblePairs.map((pair) => (
-          <li key={pair.id} className="flex flex-col rounded-2xl border border-white/[0.08] bg-[#131924] p-5">
+          <li key={pair.id} className="flex flex-col rounded-2xl border border-app-line/[0.08] bg-app-panel p-5">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="truncate font-black">{pair.player_1.full_name} <span className="text-white/40">&</span> {pair.player_2.full_name}</p>
-                <p className="mt-1 text-xs text-white/45">{[pair.player_1.region, pair.player_2.region].filter((item, index, list) => item && list.indexOf(item) === index).join(' · ') || '—'}</p>
+                <p className="truncate font-black">{pair.player_1.full_name} <span className="text-app-fg/40">&</span> {pair.player_2.full_name}</p>
+                <p className="mt-1 text-xs text-app-fg/45">{[pair.player_1.region, pair.player_2.region].filter((item, index, list) => item && list.indexOf(item) === index).join(' · ') || '—'}</p>
               </div>
-              <div className="shrink-0 text-right"><p className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/35">{t('Priem. ELO')}</p><p className="text-xl font-bold text-[#ccff00]">{pairElo(pair)}</p></div>
+              <div className="shrink-0 text-right"><p className="text-[10px] font-bold uppercase tracking-[0.16em] text-app-fg/35">{t('Priem. ELO')}</p><p className="text-xl font-bold text-app-league">{pairElo(pair)}</p></div>
             </div>
             <div className="mt-4 grid grid-cols-2 gap-3">
               {[pair.player_1, pair.player_2].map((player, index) => (
-                <div key={index} className="rounded-xl border border-white/10 bg-[#0b0f17] p-3">
+                <div key={index} className="rounded-xl border border-app-line/10 bg-app-canvas p-3">
                   <p className="truncate text-xs font-bold">{player.full_name}</p>
-                  <dl className="mt-2 space-y-1 text-xs text-white/50">
-                    <div className="flex justify-between"><dt>ELO</dt><dd className="font-bold text-white">{player.elo}</dd></div>
-                    <div className="flex justify-between"><dt>{t('Zápasy')}</dt><dd className="font-bold text-white">{player.matches_played}</dd></div>
-                    <div className="flex justify-between"><dt>{t('Úspešnosť')}</dt><dd className="font-bold text-white">{winRate(player)}%</dd></div>
+                  <dl className="mt-2 space-y-1 text-xs text-app-fg/50">
+                    <div className="flex justify-between"><dt>ELO</dt><dd className="font-bold text-app-fg">{player.elo}</dd></div>
+                    <div className="flex justify-between"><dt>{t('Zápasy')}</dt><dd className="font-bold text-app-fg">{player.matches_played}</dd></div>
+                    <div className="flex justify-between"><dt>{t('Úspešnosť')}</dt><dd className="font-bold text-app-fg">{winRate(player)}%</dd></div>
                   </dl>
                 </div>
               ))}
             </div>
             {showMyPairs
-              ? <button type="button" onClick={() => { setDeleteError(''); setFeedback(null); setPairToDelete(pair) }} className="mt-4 inline-flex items-center justify-center gap-2 rounded-lg border border-red-400/30 px-4 py-3 text-xs font-black text-red-300 transition hover:bg-red-400/10"><Trash2 size={15} />{t('Odstrániť dvojicu')}</button>
+              ? <button type="button" onClick={() => { setDeleteError(''); setFeedback(null); setPairToDelete(pair) }} className="mt-4 inline-flex items-center justify-center gap-2 rounded-lg border border-red-400/30 px-4 py-3 text-xs font-black text-app-red-300 transition hover:bg-red-400/10"><Trash2 size={15} />{t('Odstrániť dvojicu')}</button>
               : <button type="button" disabled={!myPairs.length} onClick={() => { setFeedback(null); setTarget(pair) }} className="mt-4 inline-flex items-center justify-center gap-2 rounded-lg bg-[#ccff00] px-4 py-3 text-xs font-black text-[#10150d] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"><Swords size={15} />{t('Vyzvať dvojicu')}</button>}
           </li>
         ))}
       </ul>
 
-      <section className="mt-10 rounded-2xl border border-white/[0.08] bg-[#131924] p-5">
+      <section className="mt-10 rounded-2xl border border-app-line/[0.08] bg-app-panel p-5">
         <h2 className="text-sm font-black uppercase tracking-[0.14em]">{t('Moje výzvy')}</h2>
         {!challenges.data?.length ? (
-          <p className="mt-4 text-sm leading-relaxed text-white/45">{userId ? t('Zatiaľ si neodoslal žiadnu výzvu.') : t('Prihlás sa, aby si mohol vyzývať dvojice.')}</p>
+          <p className="mt-4 text-sm leading-relaxed text-app-fg/45">{userId ? t('Zatiaľ si neodoslal žiadnu výzvu.') : t('Prihlás sa, aby si mohol vyzývať dvojice.')}</p>
         ) : (
           <ul className="mt-4 grid gap-3 md:grid-cols-2">
             {challenges.data.map((challenge) => (
-              <li key={challenge.id} className="rounded-xl border border-white/10 p-3">
+              <li key={challenge.id} className="rounded-xl border border-app-line/10 p-3">
                 <div className="flex items-start justify-between gap-2">
-                  <p className="min-w-0 text-sm font-bold leading-5">{pairLabel(challenge.challenger_1_id, challenge.challenger_2_id, challenge.challenger_1, challenge.challenger_2)} <span className="text-white/40">vs</span> {pairLabel(challenge.challenged_1_id, challenge.challenged_2_id, challenge.challenged_1, challenge.challenged_2)}</p>
+                  <p className="min-w-0 text-sm font-bold leading-5">{pairLabel(challenge.challenger_1_id, challenge.challenger_2_id, challenge.challenger_1, challenge.challenger_2)} <span className="text-app-fg/40">vs</span> {pairLabel(challenge.challenged_1_id, challenge.challenged_2_id, challenge.challenged_1, challenge.challenged_2)}</p>
                   <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${statusStyle[challenge.status]}`}>
                     {challenge.status === 'pending'
                       ? `${Number(challenge.challenger_2_accepted) + Number(challenge.challenged_1_accepted) + Number(challenge.challenged_2_accepted)}/3 ${t('potvrdenia', 'confirmations')}`
                       : t(statusLabel[challenge.status])}
                   </span>
                 </div>
-                <p className="mt-2 flex items-center gap-1.5 text-xs text-white/45"><Calendar size={12} />{dateFormatter.format(new Date(challenge.match_date))}</p>
-                {challenge.arena_id ? <p className="mt-1 flex items-center gap-1.5 text-xs text-white/45"><MapPin size={12} />{arenas.find((arena) => arena.id === challenge.arena_id)?.name ?? t('Aréna')}</p> : null}
-                {challenge.match_pin && !challenge.is_pin_activated ? <p className="mt-3 rounded-lg border border-[#ccff00]/20 bg-[#ccff00]/[0.06] px-3 py-2 text-xs font-semibold text-[#ccff00]">{t('Váš PIN pre kiosk')}: <span className="ml-1 font-black tracking-[0.2em]">{challenge.match_pin}</span></p> : null}
-                {challenge.is_pin_activated ? <p className="mt-3 text-xs font-semibold text-emerald-300">{t('Zápas bol spustený v kiosku.')}</p> : null}
-                {challenge.status === 'pending' ? <button type="button" onClick={() => void handleCancel(challenge.id)} className="mt-3 inline-flex items-center gap-1 text-xs font-bold text-white/50 hover:text-red-300"><X size={12} />{t('Zrušiť výzvu')}</button> : null}
+                <p className="mt-2 flex items-center gap-1.5 text-xs text-app-fg/45"><Calendar size={12} />{dateFormatter.format(new Date(challenge.match_date))}</p>
+                {challenge.arena_id ? <p className="mt-1 flex items-center gap-1.5 text-xs text-app-fg/45"><MapPin size={12} />{arenas.find((arena) => arena.id === challenge.arena_id)?.name ?? t('Aréna')}</p> : null}
+                {challenge.match_pin && !challenge.is_pin_activated ? <p className="mt-3 rounded-lg border border-[#ccff00]/20 bg-[#ccff00]/[0.06] px-3 py-2 text-xs font-semibold text-app-league">{t('Váš PIN pre kiosk')}: <span className="ml-1 font-black tracking-[0.2em]">{challenge.match_pin}</span></p> : null}
+                {challenge.is_pin_activated ? <p className="mt-3 text-xs font-semibold text-app-emerald-300">{t('Zápas bol spustený v kiosku.')}</p> : null}
+                {challenge.status === 'pending' ? <button type="button" onClick={() => void handleCancel(challenge.id)} className="mt-3 inline-flex items-center gap-1 text-xs font-bold text-app-fg/50 hover:text-app-red-300"><X size={12} />{t('Zrušiť výzvu')}</button> : null}
               </li>
             ))}
           </ul>
@@ -200,14 +211,14 @@ export function PairChallengeView({ userId, arenas, initialArena, onOpenPairs, i
       </section>
 
       {pairToDelete ? <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onKeyDown={(event) => { if (event.key === 'Escape' && !isDeleting) setPairToDelete(null) }}>
-        <section role="dialog" aria-modal="true" aria-labelledby="delete-pair-title" aria-describedby="delete-pair-description" className="w-full max-w-md rounded-2xl border border-white/10 bg-[#131924] p-6">
+        <section role="dialog" aria-modal="true" aria-labelledby="delete-pair-title" aria-describedby="delete-pair-description" className="w-full max-w-md rounded-2xl border border-app-line/10 bg-app-panel p-6">
           <h2 id="delete-pair-title" className="text-lg font-black">{t('Odstrániť dvojicu')}</h2>
           <p className="mt-3 font-bold">{pairToDelete.player_1.full_name} & {pairToDelete.player_2.full_name}</p>
-          <p id="delete-pair-description" className="mt-3 text-sm leading-relaxed text-white/55">{t('Dvojica sa natrvalo odstráni z databázy pre oboch hráčov. Existujúce výzvy a výsledky zápasov zostanú zachované.')}</p>
-          {deleteError ? <p role="alert" className="mt-4 text-sm text-red-300">{deleteError}</p> : null}
+          <p id="delete-pair-description" className="mt-3 text-sm leading-relaxed text-app-fg/55">{t('Dvojica sa natrvalo odstráni z databázy pre oboch hráčov. Existujúce výzvy a výsledky zápasov zostanú zachované.')}</p>
+          {deleteError ? <p role="alert" className="mt-4 text-sm text-app-red-300">{deleteError}</p> : null}
           <div className="mt-6 flex justify-end gap-3">
-            <button type="button" autoFocus disabled={isDeleting} onClick={() => setPairToDelete(null)} className="rounded-lg border border-white/10 px-4 py-2 text-sm font-bold disabled:opacity-40">{t('Zrušiť')}</button>
-            <button type="button" disabled={isDeleting} onClick={() => void handleDeletePair()} className="rounded-lg bg-red-500 px-4 py-2 text-sm font-bold text-white disabled:opacity-40">{t(isDeleting ? 'Odstraňujem…' : 'Odstrániť dvojicu')}</button>
+            <button type="button" autoFocus disabled={isDeleting} onClick={() => setPairToDelete(null)} className="rounded-lg border border-app-line/10 px-4 py-2 text-sm font-bold disabled:opacity-40">{t('Zrušiť')}</button>
+            <button type="button" disabled={isDeleting} onClick={() => void handleDeletePair()} className="rounded-lg bg-red-500 px-4 py-2 text-sm font-bold text-app-fg disabled:opacity-40">{t(isDeleting ? 'Odstraňujem…' : 'Odstrániť dvojicu')}</button>
           </div>
         </section>
       </div> : null}
@@ -294,12 +305,12 @@ function ChallengeDialog({ userId, target, myPairs, arenas, initialArena, onClos
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget && !submitting) onClose() }}>
-      <form role="dialog" aria-modal="true" onSubmit={(event) => void submit(event)} className="w-full max-w-md rounded-2xl border border-white/10 bg-[#131924] p-6">
+      <form role="dialog" aria-modal="true" onSubmit={(event) => void submit(event)} className="w-full max-w-md rounded-2xl border border-app-line/10 bg-app-panel p-6">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-black">{t('Vyzvať dvojicu')}</h2>
-          <button type="button" onClick={onClose} aria-label={t('Zavrieť')} className="text-white/50 hover:text-white"><X size={18} /></button>
+          <button type="button" onClick={onClose} aria-label={t('Zavrieť')} className="text-app-fg/50 hover:text-app-fg"><X size={18} /></button>
         </div>
-        <p className="mt-2 text-sm font-semibold text-[#ccff00]">{target.player_1.full_name} &amp; {target.player_2.full_name}</p>
+        <p className="mt-2 text-sm font-semibold text-app-league">{target.player_1.full_name} &amp; {target.player_2.full_name}</p>
         <div className="mt-5 grid gap-4">
           {myPairs.length > 1 ? (
             <label>
@@ -327,9 +338,9 @@ function ChallengeDialog({ userId, target, myPairs, arenas, initialArena, onClos
             </select>
           </label>
         </div>
-        {error ? <p role="alert" className="mt-4 rounded-lg bg-red-400/10 px-3 py-2 text-sm font-semibold text-red-300">{error}</p> : null}
+        {error ? <p role="alert" className="mt-4 rounded-lg bg-red-400/10 px-3 py-2 text-sm font-semibold text-app-red-300">{error}</p> : null}
         <div className="mt-6 flex justify-end gap-2">
-          <button type="button" onClick={onClose} disabled={submitting} className="rounded-lg border border-white/10 px-4 py-2.5 text-xs font-bold text-white/70">{t('Zrušiť')}</button>
+          <button type="button" onClick={onClose} disabled={submitting} className="rounded-lg border border-app-line/10 px-4 py-2.5 text-xs font-bold text-app-fg/70">{t('Zrušiť')}</button>
           <button type="submit" disabled={submitting} className="inline-flex items-center gap-2 rounded-lg bg-[#ccff00] px-4 py-2.5 text-xs font-black text-[#10150d] disabled:opacity-60"><Send size={14} />{submitting ? t('Odosielam…') : t('Odoslať výzvu')}</button>
         </div>
       </form>

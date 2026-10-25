@@ -59,19 +59,7 @@ export async function sendFriendRequest(myId: string | number, friendId: string 
   const { error } = await supabase.from('friendships').insert({ user_id: me, friend_id: friend, status: 'pending' })
   if (error) throw error
 
-  const { data: profile } = await supabase.from('proffiles').select('full_name').eq('id', me).maybeSingle()
-  const name = (profile as { full_name: string | null } | null)?.full_name?.trim() || 'Hráč'
-  const { error: notificationError } = await supabase.from('notifications').insert({
-    user_id: friend,
-    sender_id: me,
-    type: 'friend_request',
-    message: `${name} ti poslal(a) žiadosť o priateľstvo.`,
-    is_read: false,
-  })
-  if (notificationError) {
-    console.error('Notifikáciu o žiadosti o priateľstvo sa nepodarilo vytvoriť:', notificationError.message)
-    throw notificationError
-  }
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event('communications-updated'))
 }
 
 async function fetchProfiles(ids: number[]): Promise<ProfileRow[]> {

@@ -207,19 +207,19 @@ export default function FindPlayerPage() {
     setMessageContent('')
   }
 
-  const fieldClass = 'w-full rounded-lg border border-white/10 bg-[#0b0f17] px-3 py-2.5 text-sm text-white outline-none focus:border-[#ccff00]'
-  const cardClass = 'rounded-xl border border-white/[0.08] bg-[#111722] p-5'
+  const fieldClass = 'w-full rounded-lg border border-app-line/10 bg-app-canvas px-3 py-2.5 text-sm text-app-fg outline-none focus:border-[#ccff00]'
+  const cardClass = 'rounded-xl border border-app-line/[0.08] bg-app-surface p-5'
 
   return (
-    <main className="mx-auto min-h-screen max-w-[1200px] px-4 py-8 text-white sm:px-8">
-      <header className="flex flex-col justify-between gap-5 border-b border-white/10 pb-5 sm:flex-row sm:items-center">
+    <main className="mx-auto min-h-screen max-w-[1200px] px-4 py-8 text-app-fg sm:px-8">
+      <header className="flex flex-col justify-between gap-5 border-b border-app-line/10 pb-5 sm:flex-row sm:items-center">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#ccff00]">RIVA / HRÁČI</p>
+          <p className="text-xs font-bold uppercase tracking-[0.2em] text-app-league">RIVA / HRÁČI</p>
           <h1 className="mt-2 text-3xl font-black">Padel Matchmaking</h1>
         </div>
         <nav className="flex gap-2" aria-label="Matchmaking">
-          <button type="button" onClick={() => setActiveTab('players')} aria-pressed={activeTab === 'players'} className={`rounded-lg px-4 py-2.5 text-sm font-bold ${activeTab === 'players' ? 'bg-[#ccff00] text-[#10150d]' : 'border border-white/10 text-white/65'}`}>Nájsť hráča</button>
-          <button type="button" onClick={() => setActiveTab('listings')} aria-pressed={activeTab === 'listings'} className={`rounded-lg px-4 py-2.5 text-sm font-bold ${activeTab === 'listings' ? 'bg-[#ccff00] text-[#10150d]' : 'border border-white/10 text-white/65'}`}>Inzeráty</button>
+          <button type="button" onClick={() => setActiveTab('players')} aria-pressed={activeTab === 'players'} className={`rounded-lg px-4 py-2.5 text-sm font-bold ${activeTab === 'players' ? 'bg-[#ccff00] text-[#10150d]' : 'border border-app-line/10 text-app-fg/65'}`}>Nájsť hráča</button>
+          <button type="button" onClick={() => setActiveTab('listings')} aria-pressed={activeTab === 'listings'} className={`rounded-lg px-4 py-2.5 text-sm font-bold ${activeTab === 'listings' ? 'bg-[#ccff00] text-[#10150d]' : 'border border-app-line/10 text-app-fg/65'}`}>Inzeráty</button>
         </nav>
       </header>
 
@@ -227,26 +227,26 @@ export default function FindPlayerPage() {
         <section className="pt-6">
           <div className="flex items-center justify-between gap-4">
             <h2 className="text-xl font-bold">Burza hráčov</h2>
-            <button type="button" onClick={() => setActiveTab('listings')} className="text-sm font-bold text-[#ccff00]">Pozrieť inzeráty →</button>
+            <button type="button" onClick={() => setActiveTab('listings')} className="text-sm font-bold text-app-league">Pozrieť inzeráty →</button>
           </div>
-          <div className="mt-5 grid gap-4 rounded-xl border border-white/10 bg-[#111722] p-4 md:grid-cols-5">
-            <label className="grid gap-1.5 text-xs font-bold text-white/55 md:col-span-5">Hľadať podľa mena<input type="search" value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Zadaj meno hráča" className={fieldClass} /></label>
-            <label className="grid gap-1.5 text-xs font-bold text-white/55">Kraj<select value={filterRegion} onChange={(event) => setFilterRegion(event.target.value)} className={fieldClass}><option value="Všetky kraje">Všetky kraje</option>{REGIONS.map((item) => <option key={item}>{item}</option>)}</select></label>
-            <label className="grid gap-1.5 text-xs font-bold text-white/55">Úroveň<select value={filterLevel} onChange={(event) => setFilterLevel(event.target.value)} className={fieldClass}><option value="">Všetky úrovne</option>{['Začiatočník', 'Mierne pokročilý', 'Pokročilý', 'Expert'].map((item) => <option key={item}>{item}</option>)}</select></label>
-            <label className="grid gap-1.5 text-xs font-bold text-white/55">Minimálne ELO: {filterEloMin}<input type="range" min="0" max="10000" step="100" value={filterEloMin} onChange={(event) => setFilterEloMin(Number(event.target.value))} /></label>
-            <label className="grid gap-1.5 text-xs font-bold text-white/55">Maximálne ELO: {filterEloMax}<input type="range" min="0" max="10000" step="100" value={filterEloMax} onChange={(event) => setFilterEloMax(Number(event.target.value))} /></label>
-            <button type="button" onClick={() => { setSearchTerm(''); setFilterRegion('Všetky kraje'); setFilterLevel('Všetky úrovne'); setFilterEloMin(0); setFilterEloMax(10000) }} className="self-end rounded-lg border border-white/10 px-3 py-2.5 text-xs font-bold text-white/70 hover:border-[#ccff00]/50">Zrušiť filtre</button>
+          <div className="mt-5 grid gap-4 rounded-xl border border-app-line/10 bg-app-surface p-4 md:grid-cols-5">
+            <label className="grid gap-1.5 text-xs font-bold text-app-fg/55 md:col-span-5">Hľadať podľa mena<input type="search" value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Zadaj meno hráča" className={fieldClass} /></label>
+            <label className="grid gap-1.5 text-xs font-bold text-app-fg/55">Kraj<select value={filterRegion} onChange={(event) => setFilterRegion(event.target.value)} className={fieldClass}><option value="Všetky kraje">Všetky kraje</option>{REGIONS.map((item) => <option key={item}>{item}</option>)}</select></label>
+            <label className="grid gap-1.5 text-xs font-bold text-app-fg/55">Úroveň<select value={filterLevel} onChange={(event) => setFilterLevel(event.target.value)} className={fieldClass}><option value="">Všetky úrovne</option>{['Začiatočník', 'Mierne pokročilý', 'Pokročilý', 'Expert'].map((item) => <option key={item}>{item}</option>)}</select></label>
+            <label className="grid gap-1.5 text-xs font-bold text-app-fg/55">Minimálne ELO: {filterEloMin}<input type="range" min="0" max="10000" step="100" value={filterEloMin} onChange={(event) => setFilterEloMin(Number(event.target.value))} /></label>
+            <label className="grid gap-1.5 text-xs font-bold text-app-fg/55">Maximálne ELO: {filterEloMax}<input type="range" min="0" max="10000" step="100" value={filterEloMax} onChange={(event) => setFilterEloMax(Number(event.target.value))} /></label>
+            <button type="button" onClick={() => { setSearchTerm(''); setFilterRegion('Všetky kraje'); setFilterLevel('Všetky úrovne'); setFilterEloMin(0); setFilterEloMax(10000) }} className="self-end rounded-lg border border-app-line/10 px-3 py-2.5 text-xs font-bold text-app-fg/70 hover:border-[#ccff00]/50">Zrušiť filtre</button>
           </div>
-          {error ? <p role="alert" className="mt-5 rounded-lg border border-red-400/30 bg-red-500/10 p-3 text-sm text-red-200">{error}</p> : null}
-          {loading ? <p role="status" className="py-12 text-center text-sm text-white/50">Načítavam hráčov…</p> : (
+          {error ? <p role="alert" className="mt-5 rounded-lg border border-red-400/30 bg-red-500/10 p-3 text-sm text-app-red-200">{error}</p> : null}
+          {loading ? <p role="status" className="py-12 text-center text-sm text-app-fg/50">Načítavam hráčov…</p> : (
             <ul className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               {players.map((player) => <li key={player.id} className={cardClass}>
                 <div className="flex items-center gap-3"><PlayerAvatar name={player.full_name || '?'} src={player.avatar_url} gender={player.gender} className="size-12 text-lg" /><h3 className="text-lg font-bold">{player.full_name || 'Neznámy hráč'}</h3></div>
-                <p className="mt-1 text-sm text-white/55">Kraj: {player.region || 'Nezadaný'}</p>
-                <p className="mt-1 text-sm text-white/55">Úroveň: {player.level || 'Nezadaná'}</p>
-                <p className="mt-3 text-sm font-bold text-[#ccff00]">ELO: {player.elo_rating ?? 1000}</p>
+                <p className="mt-1 text-sm text-app-fg/55">Kraj: {player.region || 'Nezadaný'}</p>
+                <p className="mt-1 text-sm text-app-fg/55">Úroveň: {player.level || 'Nezadaná'}</p>
+                <p className="mt-3 text-sm font-bold text-app-league">ELO: {player.elo_rating ?? 1000}</p>
               </li>)}
-              {!players.length && !error && !loading ? <li className={`${cardClass} text-sm text-white/50`}>Nenašli sa žiadni hráči s vybranými filtrami.</li> : null}
+              {!players.length && !error && !loading ? <li className={`${cardClass} text-sm text-app-fg/50`}>Nenašli sa žiadni hráči s vybranými filtrami.</li> : null}
             </ul>
           )}
         </section>
@@ -257,55 +257,55 @@ export default function FindPlayerPage() {
             <button type="button" onClick={() => setShowCreateModal(true)} className="rounded-lg bg-[#ccff00] px-4 py-2.5 text-sm font-black text-[#10150d]">+ Vytvoriť inzerát</button>
           </div>
           <div className="mt-5 grid max-w-2xl gap-3 sm:grid-cols-2">
-            <label className="grid gap-1.5 text-xs font-bold text-white/55">Filtrovať podľa kraja<select value={listingRegion} onChange={(event) => setListingRegion(event.target.value)} className={fieldClass}><option value="">Všetky kraje</option>{REGIONS.map((item) => <option key={item}>{item}</option>)}</select></label>
-            <label className="grid gap-1.5 text-xs font-bold text-white/55">Úroveň vyzývateľa<select value={listingLevel} onChange={(event) => setListingLevel(event.target.value)} className={fieldClass}><option value="">Všetky úrovne</option>{LEVELS.map((item) => <option key={item}>{item}</option>)}</select></label>
+            <label className="grid gap-1.5 text-xs font-bold text-app-fg/55">Filtrovať podľa kraja<select value={listingRegion} onChange={(event) => setListingRegion(event.target.value)} className={fieldClass}><option value="">Všetky kraje</option>{REGIONS.map((item) => <option key={item}>{item}</option>)}</select></label>
+            <label className="grid gap-1.5 text-xs font-bold text-app-fg/55">Úroveň vyzývateľa<select value={listingLevel} onChange={(event) => setListingLevel(event.target.value)} className={fieldClass}><option value="">Všetky úrovne</option>{LEVELS.map((item) => <option key={item}>{item}</option>)}</select></label>
           </div>
-          {error ? <p role="alert" className="mt-5 rounded-lg border border-red-400/30 bg-red-500/10 p-3 text-sm text-red-200">{error}</p> : null}
-          {loading ? <p role="status" className="py-12 text-center text-sm text-white/50">Načítavam inzeráty…</p> : (
+          {error ? <p role="alert" className="mt-5 rounded-lg border border-red-400/30 bg-red-500/10 p-3 text-sm text-app-red-200">{error}</p> : null}
+          {loading ? <p role="status" className="py-12 text-center text-sm text-app-fg/50">Načítavam inzeráty…</p> : (
             <ul className="mt-5 grid gap-4 md:grid-cols-2">
               {listings.map((listing) => <li key={listing.id} className={`${cardClass} flex flex-col justify-between`}>
                 <div>
-                  <span className="rounded-full bg-[#ccff00]/10 px-2.5 py-1 text-xs font-semibold text-[#ccff00]">{REQUEST_TYPES.find((type) => type.value === listing.request_type)?.label ?? listing.request_type}</span>
+                  <span className="rounded-full bg-[#ccff00]/10 px-2.5 py-1 text-xs font-semibold text-app-league">{REQUEST_TYPES.find((type) => type.value === listing.request_type)?.label ?? listing.request_type}</span>
                   <p className="mt-3 text-sm">Kraj: {listing.region}</p>
-                  <p className="mt-1 text-sm text-white/55">Úroveň: {listing.level || 'Neuvedená'}</p>
-                  {listing.match_date || listing.match_time ? <p className="mt-1 text-sm text-white/55">Termín: {listing.match_date ? new Date(`${listing.match_date}T00:00:00`).toLocaleDateString('sk-SK') : ''}{listing.match_date && listing.match_time ? ' · ' : ''}{listing.match_time ?? ''}</p> : null}
-                  {listing.participants_names?.trim() ? <p className="mt-2 text-sm text-white/55">Hráči: {listing.participants_names}</p> : null}
-                  {listing.note ? <p className="mt-3 rounded-lg bg-white/[0.04] p-3 text-sm italic text-white/70">{listing.note}</p> : null}
+                  <p className="mt-1 text-sm text-app-fg/55">Úroveň: {listing.level || 'Neuvedená'}</p>
+                  {listing.match_date || listing.match_time ? <p className="mt-1 text-sm text-app-fg/55">Termín: {listing.match_date ? new Date(`${listing.match_date}T00:00:00`).toLocaleDateString('sk-SK') : ''}{listing.match_date && listing.match_time ? ' · ' : ''}{listing.match_time ?? ''}</p> : null}
+                  {listing.participants_names?.trim() ? <p className="mt-2 text-sm text-app-fg/55">Hráči: {listing.participants_names}</p> : null}
+                  {listing.note ? <p className="mt-3 rounded-lg bg-app-overlay/[0.04] p-3 text-sm italic text-app-fg/70">{listing.note}</p> : null}
                 </div>
-                <div className="mt-5 flex items-center justify-between border-t border-white/10 pt-3">
-                  <span className="text-xs text-white/45">Autor: {listing.proffiles?.full_name || 'Neznámy'}</span>
-                  <button type="button" onClick={() => setSelectedListing(listing)} className="text-sm font-bold text-[#ccff00]">Reagovať správou</button>
+                <div className="mt-5 flex items-center justify-between border-t border-app-line/10 pt-3">
+                  <span className="text-xs text-app-fg/45">Autor: {listing.proffiles?.full_name || 'Neznámy'}</span>
+                  <button type="button" onClick={() => setSelectedListing(listing)} className="text-sm font-bold text-app-league">Reagovať správou</button>
                 </div>
               </li>)}
-              {!listings.length && !error && !loading ? <li className={`${cardClass} text-sm text-white/50`}>Zatiaľ tu nie sú žiadne aktívne inzeráty.</li> : null}
+              {!listings.length && !error && !loading ? <li className={`${cardClass} text-sm text-app-fg/50`}>Zatiaľ tu nie sú žiadne aktívne inzeráty.</li> : null}
             </ul>
           )}
         </section>
       )}
 
       {showCreateModal ? <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-        <div className="w-full max-w-md rounded-xl border border-white/10 bg-[#111722] p-6">
+        <div className="w-full max-w-md rounded-xl border border-app-line/10 bg-app-surface p-6">
           <h2 className="text-lg font-bold">Nový inzerát</h2>
           <form onSubmit={handleCreateListing} className="mt-4 space-y-4">
-            <label className="grid gap-1.5 text-xs font-bold text-white/55">Typ inzerátu<select value={requestType} onChange={(event) => changeRequestType(event.target.value)} className={fieldClass}>{REQUEST_TYPES.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}</select></label>
-            <label className="grid gap-1.5 text-xs font-bold text-white/55">Kraj<select required value={region} onChange={(event) => setRegion(event.target.value)} className={fieldClass}><option value="">Vyber kraj</option>{REGIONS.map((item) => <option key={item}>{item}</option>)}</select></label>
-            <label className="grid gap-1.5 text-xs font-bold text-white/55">Dátum (voliteľné)<input type="date" value={matchDate} onChange={(event) => setMatchDate(event.target.value)} className={fieldClass} /></label>
-            <label className="grid gap-1.5 text-xs font-bold text-white/55">Čas (voliteľné)<input type="time" value={matchTime} onChange={(event) => setMatchTime(event.target.value)} className={fieldClass} /></label>
-            <p className="text-xs text-white/50">Úroveň vyzývateľa: <span className="font-semibold text-white/75">{currentUserLevel || 'Neuvedená v profile'}</span></p>
-            {participants.map((participant, index) => <label key={index} className="grid gap-1.5 text-xs font-bold text-white/55">Hráč {index + 1}<input required value={participant} onChange={(event) => setParticipants((current) => current.map((name, slot) => slot === index ? event.target.value : name))} placeholder={`Meno hráča ${index + 1}`} className={fieldClass} /></label>)}
-            <label className="grid gap-1.5 text-xs font-bold text-white/55">Poznámka<textarea rows={3} value={note} onChange={(event) => setNote(event.target.value)} placeholder="Hráme v utorok o 18:00…" className={fieldClass} /></label>
-            <div className="flex justify-end gap-2"><button type="button" onClick={() => setShowCreateModal(false)} className="rounded-lg border border-white/10 px-4 py-2 text-sm text-white/70">Zrušiť</button><button type="submit" className="rounded-lg bg-[#ccff00] px-4 py-2 text-sm font-bold text-[#10150d]">Vytvoriť</button></div>
+            <label className="grid gap-1.5 text-xs font-bold text-app-fg/55">Typ inzerátu<select value={requestType} onChange={(event) => changeRequestType(event.target.value)} className={fieldClass}>{REQUEST_TYPES.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}</select></label>
+            <label className="grid gap-1.5 text-xs font-bold text-app-fg/55">Kraj<select required value={region} onChange={(event) => setRegion(event.target.value)} className={fieldClass}><option value="">Vyber kraj</option>{REGIONS.map((item) => <option key={item}>{item}</option>)}</select></label>
+            <label className="grid gap-1.5 text-xs font-bold text-app-fg/55">Dátum (voliteľné)<input type="date" value={matchDate} onChange={(event) => setMatchDate(event.target.value)} className={fieldClass} /></label>
+            <label className="grid gap-1.5 text-xs font-bold text-app-fg/55">Čas (voliteľné)<input type="time" value={matchTime} onChange={(event) => setMatchTime(event.target.value)} className={fieldClass} /></label>
+            <p className="text-xs text-app-fg/50">Úroveň vyzývateľa: <span className="font-semibold text-app-fg/75">{currentUserLevel || 'Neuvedená v profile'}</span></p>
+            {participants.map((participant, index) => <label key={index} className="grid gap-1.5 text-xs font-bold text-app-fg/55">Hráč {index + 1}<input required value={participant} onChange={(event) => setParticipants((current) => current.map((name, slot) => slot === index ? event.target.value : name))} placeholder={`Meno hráča ${index + 1}`} className={fieldClass} /></label>)}
+            <label className="grid gap-1.5 text-xs font-bold text-app-fg/55">Poznámka<textarea rows={3} value={note} onChange={(event) => setNote(event.target.value)} placeholder="Hráme v utorok o 18:00…" className={fieldClass} /></label>
+            <div className="flex justify-end gap-2"><button type="button" onClick={() => setShowCreateModal(false)} className="rounded-lg border border-app-line/10 px-4 py-2 text-sm text-app-fg/70">Zrušiť</button><button type="submit" className="rounded-lg bg-[#ccff00] px-4 py-2 text-sm font-bold text-[#10150d]">Vytvoriť</button></div>
           </form>
         </div>
       </div> : null}
 
       {selectedListing ? <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-        <div className="w-full max-w-md rounded-xl border border-white/10 bg-[#111722] p-6">
+        <div className="w-full max-w-md rounded-xl border border-app-line/10 bg-app-surface p-6">
           <h2 className="text-lg font-bold">Reagovať na inzerát</h2>
-          <p className="mt-2 text-sm text-white/55">Posielaš správu používateľovi: <strong>{selectedListing.proffiles?.full_name || 'Neznámy'}</strong></p>
+          <p className="mt-2 text-sm text-app-fg/55">Posielaš správu používateľovi: <strong>{selectedListing.proffiles?.full_name || 'Neznámy'}</strong></p>
           <form onSubmit={handleSendMessage} className="mt-4 space-y-4">
             <textarea required rows={4} value={messageContent} onChange={(event) => setMessageContent(event.target.value)} placeholder="Napíš svoju správu…" className={fieldClass} />
-            <div className="flex justify-end gap-2"><button type="button" onClick={() => setSelectedListing(null)} className="rounded-lg border border-white/10 px-4 py-2 text-sm text-white/70">Zrušiť</button><button type="submit" className="rounded-lg bg-[#ccff00] px-4 py-2 text-sm font-bold text-[#10150d]">Odoslať</button></div>
+            <div className="flex justify-end gap-2"><button type="button" onClick={() => setSelectedListing(null)} className="rounded-lg border border-app-line/10 px-4 py-2 text-sm text-app-fg/70">Zrušiť</button><button type="submit" className="rounded-lg bg-[#ccff00] px-4 py-2 text-sm font-bold text-[#10150d]">Odoslať</button></div>
           </form>
         </div>
       </div> : null}

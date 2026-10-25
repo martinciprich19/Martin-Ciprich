@@ -17,7 +17,7 @@ const REQUEST_TYPES = [
   { value: 'potrebujeme_dvoch_hracov', label: 'Potrebujeme dvoch hráčov', existingPlayers: 2 },
   { value: 'potrebujeme_troch_hracov', label: 'Potrebujeme troch hráčov', existingPlayers: 1 },
 ]
-const fieldClass = 'w-full rounded-lg border border-white/10 bg-[#0b0f17] px-3 py-2.5 text-sm text-white outline-none focus:border-[#ccff00]'
+const fieldClass = 'w-full rounded-lg border border-app-line/10 bg-app-canvas px-3 py-2.5 text-sm text-app-fg outline-none focus:border-[#ccff00]'
 
 function normalizeFilterValue(value: string) {
   return value.trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').replace(/\s*kraj$/i, '').toLowerCase()
@@ -198,15 +198,15 @@ export function PlayerMarketplaceView({ currentPlayerId, currentPlayerAvatarUrl,
 
   return (
     <div className="mx-auto max-w-[1120px]">
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-4 border-b border-white/10 pb-4">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-4 border-b border-app-line/10 pb-4">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#ccff00]">RIVA / HRÁČI</p>
+          <p className="text-xs font-bold uppercase tracking-[0.22em] text-app-league">RIVA / HRÁČI</p>
           <h1 className="mt-2 text-3xl font-black">Nájsť hráčov</h1>
-          <p className="mt-2 text-sm text-white/45">Vyhľadaj hráčov RIVA Padel alebo pozri aktívne inzeráty.</p>
+          <p className="mt-2 text-sm text-app-fg/45">Vyhľadaj hráčov RIVA Padel alebo pozri aktívne inzeráty.</p>
         </div>
         <nav className="flex gap-2" aria-label="Matchmaking">
-          <button type="button" onClick={() => setActiveTab('players')} aria-pressed={activeTab === 'players'} className={`rounded-lg px-4 py-2.5 text-sm font-bold ${activeTab === 'players' ? 'bg-[#ccff00] text-[#10150d]' : 'border border-white/10 text-white/65'}`}>Hráči</button>
-          <button type="button" onClick={() => setActiveTab('listings')} aria-pressed={activeTab === 'listings'} className={`rounded-lg px-4 py-2.5 text-sm font-bold ${activeTab === 'listings' ? 'bg-[#ccff00] text-[#10150d]' : 'border border-white/10 text-white/65'}`}>Inzeráty & výzvy</button>
+          <button type="button" onClick={() => setActiveTab('players')} aria-pressed={activeTab === 'players'} className={`rounded-lg px-4 py-2.5 text-sm font-bold ${activeTab === 'players' ? 'bg-[#ccff00] text-[#10150d]' : 'border border-app-line/10 text-app-fg/65'}`}>Hráči</button>
+          <button type="button" onClick={() => setActiveTab('listings')} aria-pressed={activeTab === 'listings'} className={`rounded-lg px-4 py-2.5 text-sm font-bold ${activeTab === 'listings' ? 'bg-[#ccff00] text-[#10150d]' : 'border border-app-line/10 text-app-fg/65'}`}>Inzeráty & výzvy</button>
         </nav>
       </div>
 
@@ -219,57 +219,57 @@ export function PlayerMarketplaceView({ currentPlayerId, currentPlayerAvatarUrl,
             <button type="button" onClick={() => { setActionError(''); setShowCreateModal(true) }} className="inline-flex items-center gap-2 rounded-lg bg-[#ccff00] px-4 py-2.5 text-sm font-black text-[#10150d]"><Plus size={16} /> Vytvoriť inzerát</button>
           </div>
           <div className="mt-5 grid max-w-2xl gap-3 sm:grid-cols-2">
-            <label className="grid gap-1.5 text-xs font-bold text-white/55">Filtrovať podľa kraja<select value={listingRegion} onChange={(event) => setListingRegion(event.target.value)} className={fieldClass}><option value="">Všetky kraje</option>{REGIONS.map((item) => <option key={item}>{item}</option>)}</select></label>
-            <label className="grid gap-1.5 text-xs font-bold text-white/55">Filtrovať podľa úrovne<select value={listingLevel} onChange={(event) => setListingLevel(event.target.value)} className={fieldClass}><option value="">Všetky úrovne</option>{LEVELS.map((item) => <option key={item}>{item}</option>)}</select></label>
+            <label className="grid gap-1.5 text-xs font-bold text-app-fg/55">Filtrovať podľa kraja<select value={listingRegion} onChange={(event) => setListingRegion(event.target.value)} className={fieldClass}><option value="">Všetky kraje</option>{REGIONS.map((item) => <option key={item}>{item}</option>)}</select></label>
+            <label className="grid gap-1.5 text-xs font-bold text-app-fg/55">Filtrovať podľa úrovne<select value={listingLevel} onChange={(event) => setListingLevel(event.target.value)} className={fieldClass}><option value="">Všetky úrovne</option>{LEVELS.map((item) => <option key={item}>{item}</option>)}</select></label>
           </div>
-          {listings.error ? <p role="alert" className="mt-5 rounded-lg border border-red-400/30 bg-red-500/10 p-3 text-sm text-red-200">{getErrorMessage(listings.error, t('Inzeráty sa nepodarilo načítať.'))}</p> : null}
-          {listings.isLoading ? <p role="status" className="py-12 text-center text-sm text-white/50">Načítavam inzeráty…</p> : (
+          {listings.error ? <p role="alert" className="mt-5 rounded-lg border border-red-400/30 bg-red-500/10 p-3 text-sm text-app-red-200">{getErrorMessage(listings.error, t('Inzeráty sa nepodarilo načítať.'))}</p> : null}
+          {listings.isLoading ? <p role="status" className="py-12 text-center text-sm text-app-fg/50">Načítavam inzeráty…</p> : (
             <ul className="mt-5 grid gap-4 md:grid-cols-2">
-              {(listings.data ?? []).map((item) => <li key={item.id} className="flex flex-col justify-between rounded-xl border border-white/[0.08] bg-[#111722] p-5">
+              {(listings.data ?? []).map((item) => <li key={item.id} className="flex flex-col justify-between rounded-xl border border-app-line/[0.08] bg-app-surface p-5">
                 <div>
-                  <span className="rounded-full bg-[#ccff00]/10 px-2.5 py-1 text-xs font-semibold text-[#ccff00]">{REQUEST_TYPES.find((type) => type.value === item.request_type)?.label ?? item.request_type}</span>
+                  <span className="rounded-full bg-[#ccff00]/10 px-2.5 py-1 text-xs font-semibold text-app-league">{REQUEST_TYPES.find((type) => type.value === item.request_type)?.label ?? item.request_type}</span>
                   <p className="mt-3 text-sm">Kraj: {item.region}</p>
-                  <p className="mt-1 text-sm text-white/55">Úroveň: {item.level || 'Neuvedená'}</p>
-                  {item.match_date || item.match_time ? <p className="mt-1 text-sm text-white/55">Termín: {item.match_date ? formatRequestDate(item.match_date) : ''}{item.match_date && item.match_time ? ' · ' : ''}{item.match_time ? formatRequestTime(item.match_time) : ''}</p> : null}
-                  {item.participants_names?.trim() ? <p className="mt-2 text-sm text-white/55">Zapojení hráči: {item.participants_names}</p> : null}
-                  {item.note ? <p className="mt-3 rounded-lg bg-white/[0.04] p-3 text-sm italic text-white/70">{item.note}</p> : null}
+                  <p className="mt-1 text-sm text-app-fg/55">Úroveň: {item.level || 'Neuvedená'}</p>
+                  {item.match_date || item.match_time ? <p className="mt-1 text-sm text-app-fg/55">Termín: {item.match_date ? formatRequestDate(item.match_date) : ''}{item.match_date && item.match_time ? ' · ' : ''}{item.match_time ? formatRequestTime(item.match_time) : ''}</p> : null}
+                  {item.participants_names?.trim() ? <p className="mt-2 text-sm text-app-fg/55">Zapojení hráči: {item.participants_names}</p> : null}
+                  {item.note ? <p className="mt-3 rounded-lg bg-app-overlay/[0.04] p-3 text-sm italic text-app-fg/70">{item.note}</p> : null}
                 </div>
-                <div className="mt-5 flex items-center justify-between border-t border-white/10 pt-3">
-                  <span className="text-xs text-white/45">Autor: {item.proffiles?.full_name || 'Neznámy'}</span>
-                  <button type="button" onClick={() => { setActionError(''); setSelectedListing(item) }} className="inline-flex items-center gap-1.5 text-sm font-bold text-[#ccff00]"><MessageSquare size={14} /> Reagovať správou</button>
+                <div className="mt-5 flex items-center justify-between border-t border-app-line/10 pt-3">
+                  <span className="text-xs text-app-fg/45">Autor: {item.proffiles?.full_name || 'Neznámy'}</span>
+                  <button type="button" onClick={() => { setActionError(''); setSelectedListing(item) }} className="inline-flex items-center gap-1.5 text-sm font-bold text-app-league"><MessageSquare size={14} /> Reagovať správou</button>
                 </div>
               </li>)}
-              {!listings.data?.length && !listings.error && !listings.isLoading ? <li className="rounded-xl border border-white/[0.08] bg-[#111722] p-5 text-sm text-white/50">Zatiaľ tu nie sú žiadne aktívne inzeráty.</li> : null}
+              {!listings.data?.length && !listings.error && !listings.isLoading ? <li className="rounded-xl border border-app-line/[0.08] bg-app-surface p-5 text-sm text-app-fg/50">Zatiaľ tu nie sú žiadne aktívne inzeráty.</li> : null}
             </ul>
           )}
         </section>
       )}
 
       {showCreateModal ? <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-        <div className="w-full max-w-md rounded-xl border border-white/10 bg-[#111722] p-6">
+        <div className="w-full max-w-md rounded-xl border border-app-line/10 bg-app-surface p-6">
           <h2 className="text-lg font-bold">Nový inzerát / výzva</h2>
           <form onSubmit={handleCreateListing} className="mt-4 space-y-4">
-            <label className="grid gap-1.5 text-xs font-bold text-white/55">Typ inzerátu<select value={requestType} onChange={(event) => changeRequestType(event.target.value)} className={fieldClass}>{REQUEST_TYPES.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}</select></label>
-            <label className="grid gap-1.5 text-xs font-bold text-white/55">Kraj<select required value={region} onChange={(event) => setRegion(event.target.value)} className={fieldClass}><option value="">Vyber kraj</option>{REGIONS.map((item) => <option key={item}>{item}</option>)}</select></label>
-            <label className="grid gap-1.5 text-xs font-bold text-white/55">Dátum (voliteľné)<input type="date" value={matchDate} onChange={(event) => setMatchDate(event.target.value)} className={fieldClass} /></label>
-            <label className="grid gap-1.5 text-xs font-bold text-white/55">Čas (voliteľné)<input type="time" value={matchTime} onChange={(event) => setMatchTime(event.target.value)} className={fieldClass} /></label>
-            <p className="text-xs text-white/50">Úroveň vyzývateľa: <span className="font-semibold text-white/75">{currentProfileLevel || 'Neuvedená v profile'}</span></p>
-            {participants.slice(0, participantFieldCount).map((participant, index) => <label key={index} className="grid gap-1.5 text-xs font-bold text-white/55">Hráč {index + 1}<input required value={participant} onChange={(event) => setParticipants((current) => current.map((name, slot) => slot === index ? event.target.value : name))} placeholder={`Meno hráča ${index + 1}`} className={fieldClass} /></label>)}
-            <label className="grid gap-1.5 text-xs font-bold text-white/55">Poznámka<textarea rows={3} value={note} onChange={(event) => setNote(event.target.value)} className={fieldClass} /></label>
-            {actionError ? <p role="alert" className="text-sm text-red-300">{actionError}</p> : null}
-            <div className="flex justify-end gap-2"><button type="button" onClick={() => setShowCreateModal(false)} className="rounded-lg border border-white/10 px-4 py-2 text-sm text-white/70">Zrušiť</button><button type="submit" className="rounded-lg bg-[#ccff00] px-4 py-2 text-sm font-bold text-[#10150d]">Vytvoriť</button></div>
+            <label className="grid gap-1.5 text-xs font-bold text-app-fg/55">Typ inzerátu<select value={requestType} onChange={(event) => changeRequestType(event.target.value)} className={fieldClass}>{REQUEST_TYPES.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}</select></label>
+            <label className="grid gap-1.5 text-xs font-bold text-app-fg/55">Kraj<select required value={region} onChange={(event) => setRegion(event.target.value)} className={fieldClass}><option value="">Vyber kraj</option>{REGIONS.map((item) => <option key={item}>{item}</option>)}</select></label>
+            <label className="grid gap-1.5 text-xs font-bold text-app-fg/55">Dátum (voliteľné)<input type="date" value={matchDate} onChange={(event) => setMatchDate(event.target.value)} className={fieldClass} /></label>
+            <label className="grid gap-1.5 text-xs font-bold text-app-fg/55">Čas (voliteľné)<input type="time" value={matchTime} onChange={(event) => setMatchTime(event.target.value)} className={fieldClass} /></label>
+            <p className="text-xs text-app-fg/50">Úroveň vyzývateľa: <span className="font-semibold text-app-fg/75">{currentProfileLevel || 'Neuvedená v profile'}</span></p>
+            {participants.slice(0, participantFieldCount).map((participant, index) => <label key={index} className="grid gap-1.5 text-xs font-bold text-app-fg/55">Hráč {index + 1}<input required value={participant} onChange={(event) => setParticipants((current) => current.map((name, slot) => slot === index ? event.target.value : name))} placeholder={`Meno hráča ${index + 1}`} className={fieldClass} /></label>)}
+            <label className="grid gap-1.5 text-xs font-bold text-app-fg/55">Poznámka<textarea rows={3} value={note} onChange={(event) => setNote(event.target.value)} className={fieldClass} /></label>
+            {actionError ? <p role="alert" className="text-sm text-app-red-300">{actionError}</p> : null}
+            <div className="flex justify-end gap-2"><button type="button" onClick={() => setShowCreateModal(false)} className="rounded-lg border border-app-line/10 px-4 py-2 text-sm text-app-fg/70">Zrušiť</button><button type="submit" className="rounded-lg bg-[#ccff00] px-4 py-2 text-sm font-bold text-[#10150d]">Vytvoriť</button></div>
           </form>
         </div>
       </div> : null}
 
       {selectedListing ? <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-        <div className="w-full max-w-md rounded-xl border border-white/10 bg-[#111722] p-6">
+        <div className="w-full max-w-md rounded-xl border border-app-line/10 bg-app-surface p-6">
           <h2 className="text-lg font-bold">Reagovať na inzerát</h2>
-          <p className="mt-2 text-sm text-white/55">Posielaš správu používateľovi: <strong>{selectedListing.proffiles?.full_name || 'Neznámy'}</strong></p>
+          <p className="mt-2 text-sm text-app-fg/55">Posielaš správu používateľovi: <strong>{selectedListing.proffiles?.full_name || 'Neznámy'}</strong></p>
           <form onSubmit={handleSendMessage} className="mt-4 space-y-4">
             <textarea required rows={4} value={messageContent} onChange={(event) => setMessageContent(event.target.value)} placeholder="Napíš svoju správu…" className={fieldClass} />
-            {actionError ? <p role="alert" className="text-sm text-red-300">{actionError}</p> : null}
-            <div className="flex justify-end gap-2"><button type="button" onClick={() => setSelectedListing(null)} className="rounded-lg border border-white/10 px-4 py-2 text-sm text-white/70">Zrušiť</button><button type="submit" className="rounded-lg bg-[#ccff00] px-4 py-2 text-sm font-bold text-[#10150d]">Odoslať</button></div>
+            {actionError ? <p role="alert" className="text-sm text-app-red-300">{actionError}</p> : null}
+            <div className="flex justify-end gap-2"><button type="button" onClick={() => setSelectedListing(null)} className="rounded-lg border border-app-line/10 px-4 py-2 text-sm text-app-fg/70">Zrušiť</button><button type="submit" className="rounded-lg bg-[#ccff00] px-4 py-2 text-sm font-bold text-[#10150d]">Odoslať</button></div>
           </form>
         </div>
       </div> : null}

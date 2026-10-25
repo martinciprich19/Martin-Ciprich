@@ -29,6 +29,16 @@ test('confirmed pair challenge gets a one-time kiosk PIN', async () => {
         challenged_2_accepted boolean not null default false
       );
       create table public.notifications(user_id bigint, challenge_id text, type text, is_read boolean);
+      create table public.matches (
+        id bigint generated always as identity primary key,
+        player1_id bigint, team1_player1_id bigint, team1_player2_id bigint,
+        player2_id bigint, team2_player1_id bigint, team2_player2_id bigint,
+        winner_id bigint, match_date timestamptz, status text,
+        player1_sets_won integer, player2_sets_won integer,
+        player1_games_won integer, player2_games_won integer,
+        result_sets jsonb, arena_name text, submitted_by bigint,
+        approved_profile_ids bigint[] not null default '{}', live_statistics jsonb
+      );
       insert into public.proffiles values
         (1, 'Player A1', 'a1@example.test'),
         (2, 'Player A2', 'a2@example.test'),
@@ -65,8 +75,31 @@ test('confirmed pair challenge gets a one-time kiosk PIN', async () => {
     const rulesMigration = await readFile(new URL('./055_live_match_scoring_rules.sql', import.meta.url), 'utf8')
     await db.exec(rulesMigration)
     await db.exec(rulesMigration)
+    const tiebreakMigration = await readFile(new URL('./056_live_match_tiebreak.sql', import.meta.url), 'utf8')
+    await db.exec(tiebreakMigration)
+    const formatsMigration = await readFile(new URL('./057_live_match_formats.sql', import.meta.url), 'utf8')
+    await db.exec(formatsMigration)
+    await db.exec(formatsMigration)
+    const sevenGamesMigration = await readFile(new URL('./058_live_match_seven_games_no_tiebreak.sql', import.meta.url), 'utf8')
+    await db.exec(sevenGamesMigration)
+    await db.exec(sevenGamesMigration)
+    const pointHistoryMigration = await readFile(new URL('./059_live_match_point_history.sql', import.meta.url), 'utf8')
+    await db.exec(pointHistoryMigration)
+    await db.exec(pointHistoryMigration)
 
     await db.exec('set role anon')
+    const nicknames = ['Maťo', 'Peťo', 'Katka', 'Zuzka']
+    const namedQuickGame = (await db.query(`insert into live_matches
+      (team_a_player1_name, team_a_player2_name, team_b_player1_name, team_b_player2_name)
+      values ($1, $2, $3, $4)
+      returning team_a_player1_name, team_a_player2_name, team_b_player1_name, team_b_player2_name,
+        challenge_id, is_pin_activated`, nicknames)).rows[0]
+    assert.deepEqual([
+      namedQuickGame.team_a_player1_name, namedQuickGame.team_a_player2_name,
+      namedQuickGame.team_b_player1_name, namedQuickGame.team_b_player2_name,
+    ], nicknames)
+    assert.equal(namedQuickGame.challenge_id, null)
+    assert.equal(namedQuickGame.is_pin_activated, false)
     const rulesQuick = (await db.query("insert into live_matches (scoring_type) values ('advantage') returning id")).rows[0]
     assert.equal((await db.query('select scoring_type from live_matches where id=$1', [rulesQuick.id])).rows[0].scoring_type, 'advantage')
     await db.query('update live_matches set team_a_game_score=15 where id=$1', [rulesQuick.id])
@@ -168,10 +201,16 @@ test('confirmed pair challenge gets a one-time kiosk PIN', async () => {
     await assert.rejects(db.query('select public.activate_live_match_pin_with_rules($1,$2)', [match.match_pin, 'invalid']), /Neplatne/)
     await db.exec('set role anon')
     assert.equal(
-      (await db.query('select public.activate_live_match_pin_with_rules($1,$2) as id', [match.match_pin, 'advantage'])).rows[0].id,
+      (await db.query('select public.activate_live_match_pin_with_settings($1,$2,$3,$4) as id',
+        [match.match_pin, 'advantage', 'seven_games_no_tiebreak', 'full_set'])).rows[0].id,
       match.id,
     )
-    assert.equal((await db.query('select scoring_type from live_matches where id=$1', [match.id])).rows[0].scoring_type, 'advantage')
+    assert.deepEqual((await db.query('select scoring_type,set_format,third_set_format from live_matches where id=$1', [match.id])).rows[0],
+      { scoring_type: 'advantage', set_format: 'seven_games_no_tiebreak', third_set_format: 'full_set' })
+    await assert.rejects(db.query(
+      'select public.activate_live_match_pin_with_settings($1,$2,$3,$4)',
+      [match.match_pin, 'advantage', 'pro_set', 'full_set'],
+    ), /Neplatny/)
     await assert.rejects(db.query('select public.activate_live_match_pin($1)', [match.match_pin]))
     await assert.rejects(db.query('select public.activate_live_match_pin_with_rules($1,$2)', [match.match_pin, 'golden_point']))
 

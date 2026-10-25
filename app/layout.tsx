@@ -39,5 +39,5 @@ export const viewport: Viewport = {
 }
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="sk" className={`${inter.variable} dark`} suppressHydrationWarning><body><LanguageProvider><PushNotificationListener />{children}</LanguageProvider></body></html>
+  return <html lang="sk" className={`${inter.variable} dark`}><body><LanguageProvider><PushNotificationListener />{children}</LanguageProvider></body></html>
 }

@@ -2,9 +2,10 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { Dice5, RotateCcw, Undo2, Volume2, VolumeX } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { BarChart3, Check, Dice5, Pause, Square, RotateCcw, Undo2, Volume2, VolumeX } from 'lucide-react'
 import { isAuthSessionMissingError } from '@supabase/supabase-js'
-import { createQrDeviceClient, getQrDeviceToken } from '@/lib/qr-match-device'
+import { clearQrDeviceToken, createQrDeviceClient, createQrDeviceToken, getQrDeviceToken, saveQrDeviceToken } from '@/lib/qr-match-device'
 import { createClient } from '@/lib/supabase/client'
 import { getErrorMessage } from '@/lib/errors'
 import { useLanguage } from '@/components/language-provider'
@@ -13,11 +14,16 @@ import { PlayerAvatar } from '@/components/player-avatar'
 import { parseMatchAvatars, type MatchAvatars } from '@/lib/live-match-avatars'
 import { speakMatchAnnouncement } from '@/lib/match-speech'
 import { MatchAudio, type MatchSpeechStatus } from '@/lib/match-audio'
-import { isTiebreak, getTiebreakScore, parseTiebreakScore } from '@/lib/live-match-scoring'
-import { awardLivePoint, getPointAnnouncement, getMatchWinner, getWinnerAnnouncement, parseSetStatistics, parseServiceGameStatistics, type LiveScore, type Team, type GameScore } from '@/lib/live-match-scoring'
+import { isTiebreak, isSuperTiebreak, getTiebreakScore, parsePointHistory, parseTiebreakScore } from '@/lib/live-match-scoring'
+import { awardLivePoint, removeLastTeamPoint, resetLiveGame, getPointAnnouncement, getMatchWinner, getWinnerAnnouncement, parseSetStatistics, parseServiceGameStatistics, type LiveScore, type Team, type GameScore } from '@/lib/live-match-scoring'
+import { useKioskInactivity } from '@/lib/use-kiosk-inactivity'
+import { PauseMatchDialog } from '@/components/pause-match-dialog'
+import { createMatchClickerHandler, type ClickerInputStatus } from '@/lib/match-clicker'
 
 type MatchRow = LiveScore & {
   scoring_type: 'golden_point' | 'advantage'
+  set_format: 'standard' | 'pro_set' | 'seven_games_no_tiebreak'
+  third_set_format: 'full_set' | 'super_tiebreak'
   advantage_team: Team | null
   id: string | number
   challenge_id: string | null
@@ -33,11 +39,19 @@ type MatchRow = LiveScore & {
   statistics_complete: boolean
   qr_created_by: string | null
   official_result_id: string | null
+  paused_at: string | null
+  paused_seconds: number
+  ended_early_at: string | null
 }
 type MatchSnapshot = LiveScore
 type MatchPatch = Partial<MatchSnapshot>
+const REMATCH_PAIRINGS = [
+  [0, 1, 2, 3],
+  [0, 2, 1, 3],
+  [0, 3, 1, 2],
+] as const
 
-const MATCH_COLUMNS = 'id, challenge_id, team_a_player1_name, team_a_player2_name, team_b_player1_name, team_b_player2_name, team_a_game_score, team_b_game_score, team_a_games, team_b_games, team_a_sets, team_b_sets, serving_team, serving_player, initial_server_chosen, is_pin_activated, team_a_player1_serve_points_won, team_a_player1_serve_points_lost, team_a_player2_serve_points_won, team_a_player2_serve_points_lost, team_b_player1_serve_points_won, team_b_player1_serve_points_lost, team_b_player2_serve_points_won, team_b_player2_serve_points_lost, team_a_total_points_won, team_b_total_points_won, streak_team, current_point_streak, team_a_longest_point_streak, team_b_longest_point_streak, team_a_break_points, team_a_break_points_converted, team_a_break_points_missed, team_b_break_points, team_b_break_points_converted, team_b_break_points_missed, started_at, finished_at, completed_sets, statistics_complete, qr_created_by, official_result_id, set_statistics'
+const MATCH_COLUMNS = 'id, ended_early_at, challenge_id, team_a_player1_name, team_a_player2_name, team_b_player1_name, team_b_player2_name, team_a_game_score, team_b_game_score, team_a_games, team_b_games, team_a_sets, team_b_sets, serving_team, serving_player, initial_server_chosen, is_pin_activated, team_a_player1_serve_points_won, team_a_player1_serve_points_lost, team_a_player2_serve_points_won, team_a_player2_serve_points_lost, team_b_player1_serve_points_won, team_b_player1_serve_points_lost, team_b_player2_serve_points_won, team_b_player2_serve_points_lost, team_a_total_points_won, team_b_total_points_won, streak_team, current_point_streak, team_a_longest_point_streak, team_b_longest_point_streak, team_a_break_points, team_a_break_points_converted, team_a_break_points_missed, team_b_break_points, team_b_break_points_converted, team_b_break_points_missed, started_at, finished_at, completed_sets, statistics_complete, qr_created_by, official_result_id, set_statistics, set_format, third_set_format, point_history, point_history_complete, paused_at, paused_seconds'
 
 function toCounter(value: unknown): number {
   if (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0) return value
@@ -70,6 +84,9 @@ function formatDuration(totalSeconds: number): string {
 function normalizeMatch(row: Record<string, unknown>): MatchRow {
   const servingTeam = row.serving_team
   const streakTeam = row.streak_team
+  const scoringType = row.scoring_type ?? 'golden_point'
+  const setFormat = row.set_format ?? 'standard'
+  const thirdSetFormat = row.third_set_format ?? 'super_tiebreak'
   if (servingTeam !== null && servingTeam !== 'TEAM_A' && servingTeam !== 'TEAM_B') {
     throw new Error('Zápas obsahuje neplatný tím podávajúceho.')
   }
@@ -107,17 +124,32 @@ function normalizeMatch(row: Record<string, unknown>): MatchRow {
     if (!Array.isArray(set) || set.length !== 2) throw new Error('Neplatné výsledky setov.')
     return [toCounter(set[0]), toCounter(set[1])]
   })
-  if (row.scoring_type !== 'golden_point' && row.scoring_type !== 'advantage') {
+  if (scoringType !== 'golden_point' && scoringType !== 'advantage') {
     throw new Error('Chýbajú pravidlá bodovania. Spusti SQL migráciu 055.')
+  }
+  if (setFormat !== 'standard' && setFormat !== 'pro_set'
+    && setFormat !== 'seven_games_no_tiebreak') {
+    throw new Error('Chýba formát setu. Spusti SQL migráciu 057.')
+  }
+  if (thirdSetFormat !== 'full_set' && thirdSetFormat !== 'super_tiebreak') {
+    throw new Error('Chýba formát tretieho setu. Spusti SQL migráciu 057.')
   }
   if (row.advantage_team !== null && row.advantage_team !== 'TEAM_A' && row.advantage_team !== 'TEAM_B') {
     throw new Error('Neplatný stav výhody. Spusti SQL migráciu 055.')
   }
   if (!('tiebreak_score' in row)) throw new Error('Chýba stav tajbrejku. Spusti SQL migráciu 056.')
+  if (typeof row.paused_seconds !== 'number' || !Number.isFinite(row.paused_seconds) || row.paused_seconds < 0) {
+    throw new Error('Neplatný stav prerušenia zápasu. Spusti SQL migráciu 060.')
+  }
 
   return {
+    ended_early_at: toTimestamp(row.ended_early_at, 'predčasný koniec'),
+    paused_at: toTimestamp(row.paused_at, 'paused_at'),
+    paused_seconds: row.paused_seconds,
     tiebreak_score: parseTiebreakScore(row.tiebreak_score),
-    scoring_type: row.scoring_type,
+    scoring_type: scoringType,
+    set_format: setFormat,
+    third_set_format: thirdSetFormat,
     advantage_team: row.advantage_team,
     id: row.id,
     qr_created_by: row.qr_created_by === null ? null : String(row.qr_created_by),
@@ -141,6 +173,8 @@ function normalizeMatch(row: Record<string, unknown>): MatchRow {
     completed_sets: completedSets,
     set_statistics: parseSetStatistics(row.set_statistics),
     service_game_statistics: parseServiceGameStatistics(row.service_game_statistics),
+    point_history: parsePointHistory(row.point_history),
+    point_history_complete: row.point_history_complete === true,
     team_a_player1_serve_points_won: toCounter(row.team_a_player1_serve_points_won),
     team_a_player1_serve_points_lost: toCounter(row.team_a_player1_serve_points_lost),
     team_a_player2_serve_points_won: toCounter(row.team_a_player2_serve_points_won),
@@ -170,6 +204,8 @@ function snapshot(match: MatchRow): MatchSnapshot {
   return {
     tiebreak_score: match.tiebreak_score,
     scoring_type: match.scoring_type,
+    set_format: match.set_format,
+    third_set_format: match.third_set_format,
     advantage_team: match.advantage_team,
     team_a_game_score: match.team_a_game_score,
     team_b_game_score: match.team_b_game_score,
@@ -183,6 +219,8 @@ function snapshot(match: MatchRow): MatchSnapshot {
     completed_sets: match.completed_sets,
     set_statistics: match.set_statistics,
     service_game_statistics: match.service_game_statistics,
+    point_history: match.point_history ?? [],
+    point_history_complete: match.point_history_complete ?? false,
     team_a_player1_serve_points_won: match.team_a_player1_serve_points_won,
     team_a_player1_serve_points_lost: match.team_a_player1_serve_points_lost,
     team_a_player2_serve_points_won: match.team_a_player2_serve_points_won,
@@ -208,69 +246,106 @@ function snapshot(match: MatchRow): MatchSnapshot {
   }
 }
 
-function useBleClicker(onTeamAPoint: () => void, onTeamBPoint: () => void, onUndo: () => void, onReset: () => void, enabled: boolean) {
+function useBleClicker(onTeamAPoint: () => void, onTeamBPoint: () => void, onTeamUndo: (team: Team) => void, onUndo: () => void, onReset: () => void, enabled: boolean, helperMode: boolean, isBusy: () => boolean) {
+  const [diagnostic, setDiagnostic] = useState<{ key: string; code: string; status: ClickerInputStatus; count: number } | null>(null)
+  const actionsRef = useRef({ onTeamAPoint, onTeamBPoint, onTeamUndo, onUndo, onReset, enabled, helperMode, isBusy })
+  const handlerRef = useRef<ReturnType<typeof createMatchClickerHandler> | null>(null)
+  actionsRef.current = { onTeamAPoint, onTeamBPoint, onTeamUndo, onUndo, onReset, enabled, helperMode, isBusy }
   useEffect(() => {
-    if (!enabled) return
-
-    function onKeyDown(event: KeyboardEvent) {
-      const target = event.target
-      if (target instanceof HTMLElement && (target.isContentEditable || target.matches('input, textarea, select, button'))) return
-      if (event.repeat || event.altKey || event.ctrlKey || event.metaKey) return
-
-      switch (event.key.toLowerCase()) {
-        case 'a':
-          event.preventDefault()
-          onTeamAPoint()
-          break
-        case 'l':
-          event.preventDefault()
-          onTeamBPoint()
-          break
-        case 'z':
-          event.preventDefault()
-          onUndo()
-          break
-        case 'm':
-          event.preventDefault()
-          onReset()
-          break
-      }
+    const handleKeyPress = createMatchClickerHandler({
+      isEnabled: () => actionsRef.current.enabled,
+      isHelperMode: () => actionsRef.current.helperMode,
+      isBusy: () => actionsRef.current.isBusy(),
+      onDiagnostic: (key, code, status) => setDiagnostic((previous) => ({
+        key, code, status, count: (previous?.count ?? 0) + (status === 'received' ? 1 : 0),
+      })),
+      onTeamAPoint: () => actionsRef.current.onTeamAPoint(),
+      onTeamBPoint: () => actionsRef.current.onTeamBPoint(),
+      onTeamUndo: (team) => actionsRef.current.onTeamUndo(team),
+      onUndo: () => actionsRef.current.onUndo(),
+      onReset: () => actionsRef.current.onReset(),
+    })
+    handlerRef.current = handleKeyPress
+    window.addEventListener('keydown', handleKeyPress, { passive: false })
+    window.addEventListener('blur', handleKeyPress.cancelPending)
+    document.addEventListener('visibilitychange', handleKeyPress.cancelPending)
+    document.addEventListener('focusin', handleKeyPress.cancelPending)
+    window.addEventListener('pointerdown', handleKeyPress.cancelPending)
+    return () => {
+      handleKeyPress.cancelPending()
+      window.removeEventListener('keydown', handleKeyPress)
+      window.removeEventListener('blur', handleKeyPress.cancelPending)
+      document.removeEventListener('visibilitychange', handleKeyPress.cancelPending)
+      document.removeEventListener('focusin', handleKeyPress.cancelPending)
+      window.removeEventListener('pointerdown', handleKeyPress.cancelPending)
+      handlerRef.current = null
     }
-
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [enabled, onTeamAPoint, onTeamBPoint, onUndo, onReset])
+  }, [])
+  useEffect(() => { handlerRef.current?.cancelPending() }, [enabled, helperMode])
+  return diagnostic
 }
 
 function formatScore(score: number) {
   return String(score)
 }
 
-export function MatchView({ matchId }: { matchId: string }) {
+export function MatchView({ matchId, kioskMode = false, viewerMode = false }: { matchId: string; kioskMode?: boolean; viewerMode?: boolean }) {
+  const router = useRouter()
   const { language, setLanguage, t } = useLanguage()
   const languageRef = useRef(language)
   languageRef.current = language
   const [speechStatus, setSpeechStatus] = useState<MatchSpeechStatus>('ready')
   const audioRef = useRef<MatchAudio | null>(null)
   const [muted, setMuted] = useState(false)
+  const [helperMode, setHelperMode] = useState(false)
   const mutedRef = useRef(false)
   const [match, setMatch] = useState<MatchRow | null>(null)
   const [clockNow, setClockNow] = useState<number | null>(null)
-  const [canEdit, setCanEdit] = useState(false)
+  const [canEditState, setCanEdit] = useState(false)
+  const canEdit = canEditState && !viewerMode
   const [needsLogin, setNeedsLogin] = useState(false)
   const canEditRef = useRef(false)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
+  const [showLiveStatistics, setShowLiveStatistics] = useState(false)
+  const [pointFlash, setPointFlash] = useState<Team | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [avatars, setAvatars] = useState<MatchAvatars | null>(null)
   const [avatarError, setAvatarError] = useState<string | null>(null)
   const [avatarRetry, setAvatarRetry] = useState(0)
+  const [pauseReceipt, setPauseReceipt] = useState<{ pin: string; pauseId: string; dispatchToken: string; recipients: number } | null>(null)
+  const [emailStatus, setEmailStatus] = useState('')
+  const [emailBusy, setEmailBusy] = useState(false)
+  const [emailFailed, setEmailFailed] = useState(false)
+  const [confirmingPause, setConfirmingPause] = useState(false)
+  const [confirmingEnd, setConfirmingEnd] = useState(false)
+  const [isStartingNext, setIsStartingNext] = useState(false)
+  const [selectedRematchPairing, setSelectedRematchPairing] = useState(0)
+  const startingNextRef = useRef(false)
   const matchRef = useRef<MatchRow | null>(null)
   const supabaseRef = useRef<ReturnType<typeof createClient> | null>(null)
   const historyRef = useRef<MatchSnapshot[]>([])
   const writeQueueRef = useRef<Promise<void>>(Promise.resolve())
   const writeRevisionRef = useRef(0)
   const writeInFlightRef = useRef(false)
+
+  useEffect(() => {
+    if (!pointFlash) return
+    const timer = window.setTimeout(() => setPointFlash(null), 300)
+    return () => window.clearTimeout(timer)
+  }, [pointFlash])
+
+  const resetKiosk = useCallback(() => {
+    try {
+      clearQrDeviceToken(matchId)
+    } catch (resetError) {
+      console.error('QR kioskový token sa nepodarilo odstrániť:', resetError)
+    }
+    router.replace(kioskMode ? '/match?mode=kiosk' : '/match')
+    router.refresh()
+  }, [kioskMode, matchId, router])
+
+  useKioskInactivity(!isLoading && match !== null && !match.finished_at && !match.paused_at && !confirmingEnd && !confirmingPause && !getMatchWinner(match), resetKiosk)
 
   const leagueMatch = Boolean(match && (match.qr_created_by !== null || match.challenge_id !== null))
   useEffect(() => {
@@ -294,14 +369,14 @@ export function MatchView({ matchId }: { matchId: string }) {
   }, [matchId, leagueMatch, needsLogin, match?.is_pin_activated, avatarRetry])
 
   useEffect(() => {
-    if (!match?.started_at || match.finished_at) {
+    if (!match?.started_at || match.finished_at || match.paused_at) {
       setClockNow(null)
       return
     }
     setClockNow(Date.now())
     const timer = window.setInterval(() => setClockNow(Date.now()), 1000)
     return () => window.clearInterval(timer)
-  }, [match?.started_at, match?.finished_at])
+  }, [match?.started_at, match?.finished_at, match?.paused_at])
 
   useEffect(() => {
     const saved = window.localStorage.getItem('riva-match-muted') === 'true'
@@ -384,14 +459,14 @@ export function MatchView({ matchId }: { matchId: string }) {
 
         if (!data) throw new Error('Zápas sa nenašiel alebo ešte nemáš prístup.')
         const loaded = normalizeMatch(data)
-        let editable = loaded.qr_created_by === null
+        let editable = !viewerMode && loaded.qr_created_by === null
         let loginRequired = false
-        const deviceToken = loaded.qr_created_by !== null ? getQrDeviceToken(matchId) : null
+        const deviceToken = viewerMode ? null : getQrDeviceToken(matchId)
         if (deviceToken) {
           scoreClient = createQrDeviceClient(deviceToken)
           supabaseRef.current = scoreClient
           editable = true
-        } else if (!editable) {
+        } else if (!viewerMode && !editable) {
           const { data: authData, error: authError } = await supabase.auth.getUser()
           if (authError && !isAuthSessionMissingError(authError)) throw authError
           loginRequired = !authData.user
@@ -422,15 +497,20 @@ export function MatchView({ matchId }: { matchId: string }) {
             try {
               const updated = normalizeMatch(payload.new as unknown as Record<string, unknown>)
               const previous = matchRef.current
-              const winnerAnnouncement = previous && !getMatchWinner(previous) ? getWinnerAnnouncement(updated) : null
-              const pointAnnouncement = previous ? getPointAnnouncement(previous, updated) : null
-              if (winnerAnnouncement) {
-                if (!writeInFlightRef.current) celebrateWinner(winnerAnnouncement)
-              } else if (pointAnnouncement) {
-                announce(pointAnnouncement.sk, pointAnnouncement.en)
-              } else if (!getMatchWinner(updated) && previous && (updated.serving_team !== previous.serving_team || updated.serving_player !== previous.serving_player) && updated.serving_team !== null) {
-                const teamNumber = updated.serving_team === 'TEAM_A' ? 1 : 2
-                announce(`Podáva Tím ${teamNumber}, hráč ${updated.serving_player}.`, `Team ${teamNumber}, player ${updated.serving_player} serves.`)
+              if (!viewerMode) {
+                const winnerAnnouncement = previous && !getMatchWinner(previous) ? getWinnerAnnouncement(updated) : null
+                const pointAnnouncement = previous ? getPointAnnouncement(previous, updated) : null
+                if (winnerAnnouncement) {
+                  if (!writeInFlightRef.current) celebrateWinner(pointAnnouncement ? {
+                    sk: `${winnerAnnouncement.sk} ${pointAnnouncement.sk}`,
+                    en: `${winnerAnnouncement.en} ${pointAnnouncement.en}`,
+                  } : winnerAnnouncement)
+                } else if (pointAnnouncement) {
+                  announce(pointAnnouncement.sk, pointAnnouncement.en)
+                } else if (!getMatchWinner(updated) && previous && (updated.serving_team !== previous.serving_team || updated.serving_player !== previous.serving_player) && updated.serving_team !== null) {
+                  const teamNumber = updated.serving_team === 'TEAM_A' ? 1 : 2
+                  announce(`Podáva Tím ${teamNumber}, hráč ${updated.serving_player}.`, `Team ${teamNumber}, player ${updated.serving_player} serves.`)
+                }
               }
               matchRef.current = updated
               setMatch(updated)
@@ -451,6 +531,15 @@ export function MatchView({ matchId }: { matchId: string }) {
       } catch (loadError: unknown) {
         const message = getErrorMessage(loadError, 'Zápas sa nepodarilo načítať.')
         console.error('Načítanie zápasu zlyhalo:', loadError)
+        const loadErrorDetails = loadError instanceof Error
+          ? {
+            name: loadError.name,
+            message: loadError.message,
+            stack: loadError.stack,
+            properties: Object.fromEntries(Object.entries(loadError)),
+          }
+          : loadError
+        console.error('Match load error detail:', JSON.stringify(loadErrorDetails, null, 2))
         if (isActive) setError(message)
       } finally {
         if (isActive) setIsLoading(false)
@@ -463,12 +552,12 @@ export function MatchView({ matchId }: { matchId: string }) {
       if (channel) void supabase.removeChannel(channel)
       if (supabaseRef.current === scoreClient) supabaseRef.current = null
     }
-  }, [matchId, announce, celebrateWinner])
+  }, [matchId, announce, celebrateWinner, viewerMode])
 
   const persist = useCallback((patch: MatchPatch, completionAnnouncement?: { sk: string; en: string }) => {
     const current = matchRef.current
     const supabase = supabaseRef.current
-    if (!canEditRef.current || !current || !supabase || getMatchWinner(current) || writeInFlightRef.current) return
+    if (viewerMode || !canEditRef.current || !current || !supabase || current.finished_at || current.paused_at || getMatchWinner(current) || writeInFlightRef.current) return
     writeInFlightRef.current = true
 
     const optimistic = { ...current, ...patch }
@@ -483,6 +572,9 @@ export function MatchView({ matchId }: { matchId: string }) {
         .from('live_matches')
         .update(snapshot(optimistic))
         .eq('id', current.id)
+        .is('finished_at', null)
+        .is('paused_at', null)
+        .eq('paused_seconds', current.paused_seconds)
         .eq('team_a_player1_serve_points_won', current.team_a_player1_serve_points_won)
         .eq('team_a_player1_serve_points_lost', current.team_a_player1_serve_points_lost)
         .eq('team_a_player2_serve_points_won', current.team_a_player2_serve_points_won)
@@ -502,6 +594,8 @@ export function MatchView({ matchId }: { matchId: string }) {
         .eq('team_a_game_score', current.team_a_game_score)
         .eq('team_b_game_score', current.team_b_game_score)
         .eq('scoring_type', current.scoring_type)
+        .eq('set_format', current.set_format)
+        .eq('third_set_format', current.third_set_format)
         .filter('advantage_team', current.advantage_team === null ? 'is' : 'eq', current.advantage_team ?? 'null')
         .filter('tiebreak_score', current.tiebreak_score == null ? 'is' : 'eq', current.tiebreak_score == null ? 'null' : JSON.stringify(current.tiebreak_score))
         .eq('set_statistics', JSON.stringify(current.set_statistics))
@@ -530,26 +624,187 @@ export function MatchView({ matchId }: { matchId: string }) {
       writeInFlightRef.current = false
       if (revision === writeRevisionRef.current) setIsSaving(false)
     })
-  }, [celebrateWinner])
+  }, [celebrateWinner, viewerMode])
+
+  async function sendPauseEmails(receipt: NonNullable<typeof pauseReceipt>) {
+    if (!leagueMatch) {
+      setEmailStatus(t('Rýchla hra: PIN sa neposiela e-mailom. Zapíšte si ho na obnovenie zápasu.', 'Quick game: the PIN is not sent by email. Save it to resume the match.'))
+      return
+    }
+    if (!receipt.recipients) {
+      setEmailStatus(t('Zápas nemá priradené registračné e-maily. PIN si odfoť alebo zapíš.', 'No registered emails are attached to this match. Save a photo or write down the PIN.'))
+      return
+    }
+    setEmailBusy(true)
+    setEmailFailed(false)
+    setEmailStatus(t('Odosielam PIN účastníkom…', 'Sending PIN to participants…'))
+    try {
+      const response = await fetch('/api/pause-match', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ matchId, pinCode: receipt.pin, pauseId: receipt.pauseId, dispatchToken: receipt.dispatchToken }),
+        signal: AbortSignal.timeout(60_000),
+      })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error ?? 'E-maily sa nepodarilo odoslať.')
+      const message = leagueMatch && receipt.recipients < 4
+        ? t(`PIN bol odoslaný na ${receipt.recipients} dostupných adries. Niektorým účastníkom chýba registračný e-mail; PIN im odovzdajte osobne.`, `PIN sent to ${receipt.recipients} available addresses. Some participants have no registered email; share the PIN with them in person.`)
+        : t('Zápas bol úspešne prerušený. E-mailová služba prijala PIN pre všetkých účastníkov. Skontrolujte aj priečinok Spam.', 'Match paused successfully. The email service accepted PIN messages for all participants. Check spam folders too.')
+      setEmailStatus(message)
+      window.alert(`${message}\n\nPIN: ${receipt.pin}`)
+      resetKiosk()
+    } catch (emailError) {
+      console.error('Odoslanie PIN-u zlyhalo:', emailError)
+      setEmailFailed(true)
+      setEmailStatus(getErrorMessage(emailError, 'PIN sa nepodarilo odoslať e-mailom.'))
+    } finally {
+      setEmailBusy(false)
+    }
+  }
+
+  async function pauseMatch() {
+    const current = matchRef.current
+    const supabase = supabaseRef.current
+    if (viewerMode || !current || !supabase || !canEditRef.current || writeInFlightRef.current || current.finished_at || getMatchWinner(current)) return
+    setConfirmingPause(false)
+    writeInFlightRef.current = true
+    setIsSaving(true)
+    setError(null)
+    audioRef.current?.stop()
+    try {
+      const { data, error: pauseError } = await supabase.rpc('pause_live_match', { p_match_id: matchId })
+      if (pauseError) throw pauseError
+      if (!data || typeof data.pin !== 'string' || !/^\d{4}$/.test(data.pin)
+        || typeof data.pauseId !== 'string' || typeof data.dispatchToken !== 'string'
+        || typeof data.recipients !== 'number') throw new Error('Databáza nevrátila PIN prerušenia.')
+      const receipt = { pin: data.pin, pauseId: data.pauseId, dispatchToken: data.dispatchToken, recipients: data.recipients }
+      setPauseReceipt(receipt)
+      historyRef.current = []
+      const { data: saved, error: reloadError } = await supabase.from('live_matches')
+        .select(`${MATCH_COLUMNS}, service_game_statistics, scoring_type, advantage_team, tiebreak_score`)
+        .eq('id', matchId).single()
+      if (reloadError) throw reloadError
+      const paused = normalizeMatch(saved)
+      matchRef.current = paused
+      setMatch(paused)
+      await sendPauseEmails(receipt)
+    } catch (pauseError) {
+      console.error('Prerušenie zápasu zlyhalo:', pauseError)
+      setError(getErrorMessage(pauseError, 'Zápas sa nepodarilo prerušiť. Over SQL migráciu 060.'))
+    } finally {
+      writeInFlightRef.current = false
+      setIsSaving(false)
+    }
+  }
+
+  async function endMatch() {
+    const current = matchRef.current
+    const supabase = supabaseRef.current
+    if (viewerMode || !current || !supabase || !canEditRef.current || writeInFlightRef.current || current.finished_at || getMatchWinner(current)) return
+    setConfirmingEnd(false)
+    writeInFlightRef.current = true
+    setIsSaving(true)
+    setError(null)
+    audioRef.current?.stop()
+    try {
+      const { data, error: endError } = await supabase.rpc('end_live_match', { p_match_id: matchId })
+      if (endError) throw endError
+      if (data?.matchId !== matchId) throw new Error('Databáza nepotvrdila ukončenie zápasu.')
+      const { data: saved, error: reloadError } = await supabase.from('live_matches')
+        .select(`${MATCH_COLUMNS}, service_game_statistics, scoring_type, advantage_team, tiebreak_score`)
+        .eq('id', matchId).single()
+      if (reloadError) throw reloadError
+      const ended = normalizeMatch(saved)
+      matchRef.current = ended
+      setMatch(ended)
+      historyRef.current = []
+      setPauseReceipt(null)
+    } catch (endError) {
+      console.error('Ukončenie zápasu zlyhalo:', endError)
+      setError(getErrorMessage(endError, 'Zápas sa nepodarilo ukončiť. Over SQL migráciu 062.'))
+    } finally {
+      writeInFlightRef.current = false
+      setIsSaving(false)
+    }
+  }
+
+  async function startNextMatch() {
+    const current = matchRef.current
+    const supabase = supabaseRef.current
+    if (viewerMode || !current || !supabase || !canEditRef.current || writeInFlightRef.current || startingNextRef.current || !getMatchWinner(current)) return
+    startingNextRef.current = true
+    setIsStartingNext(true)
+    setError(null)
+    try {
+      const teamSlots = REMATCH_PAIRINGS[selectedRematchPairing]
+      if (!teamSlots) throw new Error('Vybrané rozdelenie dvojíc nie je platné.')
+      const key = `riva-rematch-${matchId}`
+      const stored = window.sessionStorage.getItem(key)
+      const pending: unknown = stored ? JSON.parse(stored) : { id: crypto.randomUUID(), token: createQrDeviceToken() }
+      if (!pending || typeof pending !== 'object'
+        || !('id' in pending) || typeof pending.id !== 'string'
+        || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(pending.id)
+        || !('token' in pending) || typeof pending.token !== 'string' || !/^[a-f0-9]{64}$/.test(pending.token)) {
+        throw new Error('Uložené údaje pre ďalší zápas sú poškodené.')
+      }
+      window.sessionStorage.setItem(key, JSON.stringify(pending))
+      saveQrDeviceToken(pending.id, pending.token)
+      const { data, error: creationError } = await supabase.rpc('create_live_match_rematch', {
+        p_previous_match_id: matchId, p_next_match_id: pending.id, p_device_token: pending.token,
+        p_team_slots: [...teamSlots],
+      })
+      if (creationError) throw creationError
+      if (data !== pending.id) throw new Error('Databáza nepotvrdila vytvorenie ďalšieho zápasu.')
+      audioRef.current?.stop()
+      clearQrDeviceToken(matchId)
+      router.replace(`/match?id=${encodeURIComponent(pending.id)}${kioskMode ? '&mode=kiosk' : ''}`)
+    } catch (creationError) {
+      console.error('Vytvorenie ďalšieho zápasu zlyhalo:', creationError)
+      setError(getErrorMessage(creationError, 'Ďalší zápas sa nepodarilo vytvoriť. Over SQL migráciu 065 a skús znova.'))
+      startingNextRef.current = false
+      setIsStartingNext(false)
+    }
+  }
 
   const awardPoint = useCallback((team: Team) => {
     const current = matchRef.current
-    if (!canEditRef.current || !current || writeInFlightRef.current || getMatchWinner(current) || !current.initial_server_chosen || (current.challenge_id !== null && !current.is_pin_activated)) return
+    if (viewerMode || !canEditRef.current || !current || current.finished_at || current.paused_at || writeInFlightRef.current || getMatchWinner(current) || !current.initial_server_chosen || (current.challenge_id !== null && !current.is_pin_activated)) return
     historyRef.current.push(snapshot(current))
 
     const patch = awardLivePoint(snapshot(current), team)
 
     const winnerAnnouncement = getWinnerAnnouncement({ ...current, ...patch })
-    persist(patch, winnerAnnouncement ?? undefined)
     const pointAnnouncement = getPointAnnouncement(current, patch)
+    const completionAnnouncement = winnerAnnouncement && pointAnnouncement ? {
+      sk: `${winnerAnnouncement.sk} ${pointAnnouncement.sk}`,
+      en: `${winnerAnnouncement.en} ${pointAnnouncement.en}`,
+    } : winnerAnnouncement
+    persist(patch, completionAnnouncement ?? undefined)
+    setPointFlash(team)
     if (!winnerAnnouncement && pointAnnouncement) announce(pointAnnouncement.sk, pointAnnouncement.en)
-  }, [persist, announce])
+  }, [persist, announce, viewerMode])
 
   const addTeamAPoint = useCallback(() => awardPoint('TEAM_A'), [awardPoint])
   const addTeamBPoint = useCallback(() => awardPoint('TEAM_B'), [awardPoint])
 
+  const undoTeamPoint = useCallback((team: Team) => {
+    const current = matchRef.current
+    if (viewerMode || !canEditRef.current || !current || current.finished_at || current.paused_at || writeInFlightRef.current || getMatchWinner(current)) return
+    try {
+      const corrected = removeLastTeamPoint(snapshot(current), team, historyRef.current)
+      historyRef.current.push(snapshot(current))
+      persist(corrected, getWinnerAnnouncement({ ...current, ...corrected }) ?? undefined)
+      const number = team === 'TEAM_A' ? 1 : 2
+      announce(`Posledný bod tímu ${number} bol odobratý.`, `Team ${number}'s last point was removed.`)
+      setPointFlash(team)
+    } catch (correctionError) {
+      console.error('Odobratie bodu klikrom zlyhalo:', correctionError)
+      setError(getErrorMessage(correctionError, 'Bod sa nepodarilo odobrať.'))
+    }
+  }, [persist, announce, viewerMode])
+
   const undo = useCallback(() => {
-    if (!canEditRef.current || writeInFlightRef.current || (matchRef.current && getMatchWinner(matchRef.current))) return
+    if (viewerMode || !canEditRef.current || writeInFlightRef.current || (matchRef.current && getMatchWinner(matchRef.current))) return
     const previous = historyRef.current.pop()
     if (!previous) return
     persist(previous)
@@ -560,71 +815,153 @@ export function MatchView({ matchId }: { matchId: string }) {
     } else {
       announce(`Posledná zmena bola vrátená. Skóre ${previous.team_a_game_score} ku ${previous.team_b_game_score}.`, `Last change undone. Score ${previous.team_a_game_score} to ${previous.team_b_game_score}.`)
     }
-  }, [persist, announce])
+  }, [persist, announce, viewerMode])
 
   const resetGame = useCallback(() => {
     const current = matchRef.current
-    if (!canEditRef.current || !current || writeInFlightRef.current || getMatchWinner(current)) return
+    if (viewerMode || !canEditRef.current || !current || writeInFlightRef.current || getMatchWinner(current)) return
     const tie = isTiebreak(current) ? getTiebreakScore(current) : null
     if (tie ? tie.a + tie.b === 0 : current.team_a_game_score + current.team_b_game_score === 0) return
     historyRef.current.push(snapshot(current))
-    persist({
-      team_a_game_score: 0, team_b_game_score: 0, advantage_team: null,
-      ...(tie ? { tiebreak_score: { ...tie, a: 0, b: 0 }, serving_team: tie.first_team, serving_player: tie.first_player } : {}),
-    })
+    persist(resetLiveGame(snapshot(current)))
     announce(tie ? 'Skóre tajbrejku bolo vynulované.' : 'Skóre gemu bolo vynulované.', tie ? 'Tiebreak score reset.' : 'Game score reset.')
-  }, [persist, announce])
+  }, [persist, announce, viewerMode])
 
   const drawServe = useCallback(() => {
     const current = matchRef.current
-    if (!canEditRef.current || !current || current.initial_server_chosen || writeInFlightRef.current || getMatchWinner(current) || (current.challenge_id !== null && !current.is_pin_activated)) return
+    if (viewerMode || !canEditRef.current || !current || current.initial_server_chosen || writeInFlightRef.current || getMatchWinner(current) || (current.challenge_id !== null && !current.is_pin_activated)) return
     const servingTeam: Team = Math.random() < 0.5 ? 'TEAM_A' : 'TEAM_B'
     persist({ serving_team: servingTeam, serving_player: 1, initial_server_chosen: true })
     const teamNumber = servingTeam === 'TEAM_A' ? 1 : 2
     announce(`Podáva Tím ${teamNumber}.`, `Team ${teamNumber} serves.`)
-  }, [persist, announce])
+  }, [persist, announce, viewerMode])
 
   function selectServer(team: Team, player: 1 | 2) {
     const current = matchRef.current
-    if (!canEditRef.current || !current || writeInFlightRef.current || getMatchWinner(current) || isTiebreak(current) || (current.challenge_id !== null && !current.is_pin_activated)) return
+    if (viewerMode || !canEditRef.current || !current || writeInFlightRef.current || getMatchWinner(current) || isTiebreak(current) || (current.challenge_id !== null && !current.is_pin_activated)) return
     if (current.initial_server_chosen) historyRef.current.push(snapshot(current))
     persist({ serving_team: team, serving_player: player, initial_server_chosen: true })
     announce(`Podáva Tím ${team === 'TEAM_A' ? 1 : 2}, hráč ${player}.`, `Team ${team === 'TEAM_A' ? 1 : 2}, player ${player} serves.`)
   }
 
-  useBleClicker(addTeamAPoint, addTeamBPoint, undo, resetGame, Boolean(canEdit && !isSaving && match?.initial_server_chosen && !getMatchWinner(match) && (match.challenge_id === null || match.is_pin_activated)))
+  const clickerDiagnostic = useBleClicker(addTeamAPoint, addTeamBPoint, undoTeamPoint, undo, resetGame, Boolean(canEdit && !confirmingPause && !confirmingEnd && !match?.finished_at && !match?.paused_at && match?.initial_server_chosen && !getMatchWinner(match) && (match.challenge_id === null || match.is_pin_activated)), helperMode, () => writeInFlightRef.current)
 
   if (isLoading) {
-    return <div className="mx-auto max-w-5xl py-24 text-center text-sm text-white/60" role="status">Načítavam zápas…</div>
+    return <div className="mx-auto max-w-5xl py-24 text-center text-sm text-app-fg/60" role="status">Načítavam zápas…</div>
   }
 
   if (!match) {
     return (
-      <section className="mx-auto max-w-3xl rounded-3xl border border-white/10 bg-[#0b1b22]/90 p-8 text-center">
+      <section className="mx-auto max-w-3xl rounded-3xl border border-app-line/10 bg-app-court/90 p-8 text-center">
         <h1 className="text-3xl font-black sm:text-4xl">Priebeh zápasu</h1>
-        <p role="alert" className="mt-4 text-sm text-red-300">{error ?? 'Zápas sa nepodarilo načítať.'}</p>
-        <Link href="/match" className="mt-6 inline-block rounded-xl border border-white/15 px-5 py-3 text-sm font-semibold hover:bg-white/5">Späť na výber hry</Link>
+        <p role="alert" className="mt-4 text-sm text-app-red-300">{error ?? 'Zápas sa nepodarilo načítať.'}</p>
+        <Link href="/match" className="mt-6 inline-block rounded-xl border border-app-line/15 px-5 py-3 text-sm font-semibold hover:bg-app-overlay/5">Späť na výber hry</Link>
       </section>
     )
   }
 
-  const scoreReady = canEdit && !isSaving && match.initial_server_chosen && (match.challenge_id === null || match.is_pin_activated)
+  const scoreReady = canEdit && !isSaving && !match.finished_at && match.initial_server_chosen && (match.challenge_id === null || match.is_pin_activated)
   const winner = getMatchWinner(match)
+  const resultActionsDisabled = isSaving || isStartingNext || (leagueMatch && !match.official_result_id)
   const tie = isTiebreak(match) ? getTiebreakScore(match) : null
-  const durationEnd = match.finished_at ? Date.parse(match.finished_at) : clockNow
+  const superTie = isSuperTiebreak(match)
+  const durationEnd = match.finished_at ? Date.parse(match.finished_at) : match.paused_at ? Date.parse(match.paused_at) : clockNow
   const durationSeconds = match.started_at && durationEnd !== null
-    ? Math.floor((durationEnd - Date.parse(match.started_at)) / 1000)
+    ? Math.floor((durationEnd - Date.parse(match.started_at)) / 1000 - match.paused_seconds)
     : 0
   const durationLabel = match.started_at ? formatDuration(durationSeconds) : '00:00'
-  const loginNotice = needsLogin ? <p role="status" className="court-stat-warning text-center text-xs text-amber-200">{t('Nie si prihlásený. Zápas môžeš sledovať, ale skóre môže meniť iba prihlásený organizátor.', 'You are not signed in. You can watch the match, but only the signed-in organizer can change the score.')} <Link href="/auth/login" className="underline">{t('Prihlásiť sa', 'Sign in')}</Link></p> : null
+  const loginNotice = needsLogin ? <p role="status" className="court-stat-warning text-center text-xs text-app-amber-200">{t('Nie si prihlásený. Zápas môžeš sledovať, ale skóre môže meniť iba prihlásený organizátor.', 'You are not signed in. You can watch the match, but only the signed-in organizer can change the score.')} <Link href="/auth/login" className="underline">{t('Prihlásiť sa', 'Sign in')}</Link></p> : null
   const avatarNotice = avatarError ? <div className="court-avatar-error" role="alert">{t('Profilové fotky sa nepodarilo načítať. Skontroluj SQL migráciu 051.', 'Profile photos could not be loaded. Check SQL migration 051.')} <button type="button" onClick={() => setAvatarRetry((retry) => retry + 1)}>{t('Skúsiť znova', 'Retry')}</button></div> : null
   function resultPlayer(name: string, slot: number) {
     return <span key={slot} className="result-score-player">{leagueMatch ? <PlayerAvatar name={name} src={avatars?.[slot]} className="size-8 text-xs" /> : null}<span>{name}</span></span>
   }
+  if (viewerMode) {
+    const teams = [
+      { key: 'TEAM_A', label: t('Tím 1', 'Team 1'), players: [match.team_a_player1_name, match.team_a_player2_name], points: match.advantage_team === 'TEAM_A' ? 'AD' : formatScore(tie ? tie.a : match.team_a_game_score) },
+      { key: 'TEAM_B', label: t('Tím 2', 'Team 2'), players: [match.team_b_player1_name, match.team_b_player2_name], points: match.advantage_team === 'TEAM_B' ? 'AD' : formatScore(tie ? tie.b : match.team_b_game_score) },
+    ] as const
+    return (
+      <section className="live-court live-court-viewer mx-auto max-w-5xl">
+        <header className="text-center">
+          <Link href="/live-matches" className="mb-5 inline-block text-sm text-app-fg/55 transition hover:text-app-accent">{t('Späť na prebiehajúce zápasy', 'Back to live matches')}</Link>
+          <p className="text-xs font-bold uppercase tracking-[0.24em] text-app-accent">RIVA / LIVE</p>
+          <h1 className="mt-3 text-3xl font-black tracking-tight sm:text-5xl">{t('Prebiehajúci zápas', 'Live match')}</h1>
+        </header>
+        <div className="court-teams mt-8 grid gap-4 md:grid-cols-2">
+          {teams.map(({ key, label, players, points }) => (
+            <article key={key} data-team={key} className="relative overflow-hidden rounded-3xl border border-app-line/10 bg-app-court/90 p-6 text-center sm:p-9">
+              <p className="text-xs font-bold uppercase tracking-[0.2em] text-app-fg/45">{label}</p>
+              <div className="mt-4 grid gap-2">
+                {players.map((player, index) => <p key={index} className={`text-lg font-bold ${leagueMatch ? 'court-player-identity' : ''}`}>{leagueMatch ? <PlayerAvatar name={player} src={avatars?.[(key === 'TEAM_A' ? 0 : 2) + index]} className="size-8 text-xs" /> : null}<span>{player}</span></p>)}
+              </div>
+              <p className="mt-7 text-xs font-bold uppercase tracking-[0.18em] text-app-fg/40">{tie ? t('Body v tajbrejku', 'Tiebreak points') : t('Body v geme', 'Game points')}</p>
+              <p className="mt-3 font-black leading-none tracking-tight text-app-fg tabular-nums text-6xl">{points}</p>
+            </article>
+          ))}
+        </div>
+        <div className="court-summary mt-5 grid grid-cols-2 gap-4 rounded-2xl border border-app-line/10 bg-app-court/90 p-5 text-center">
+          <div><p className="text-sm text-app-fg/60">{t('Gemy v aktuálnom sete', 'Games in current set')}</p><p className="mt-2 text-3xl font-black">{match.team_a_games} – {match.team_b_games}</p></div>
+          <div><p className="text-sm text-app-fg/60">{t('Sety', 'Sets')}</p><p className="mt-2 text-3xl font-black">{match.team_a_sets} – {match.team_b_sets}</p></div>
+        </div>
+        <div className="mt-5 text-center">
+          <button
+            type="button"
+            aria-expanded={showLiveStatistics}
+            aria-controls="spectator-match-statistics"
+            onClick={() => setShowLiveStatistics((visible) => !visible)}
+            className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-app-line/15 px-5 py-2.5 text-sm font-bold text-app-fg/80 transition hover:border-[#a8e63c]/50 hover:text-app-fg"
+          >
+            <BarChart3 size={17} aria-hidden="true" />
+            {showLiveStatistics ? t('Skryť štatistiky zápasu', 'Hide match statistics') : t('Štatistiky zápasu', 'Match statistics')}
+          </button>
+        </div>
+        {showLiveStatistics ? (
+          <section id="spectator-match-statistics" className="mt-5 rounded-2xl border border-app-line/10 bg-app-court/90 p-4 sm:p-6" aria-label={t('Štatistiky zápasu', 'Match statistics')}>
+            {!match.statistics_complete ? <p className="court-stat-warning mb-4 text-center text-xs text-app-amber-200">{t('Staršie body a sety neboli zaznamenávané. Štatistiky sú iba od zapnutia sledovania.', 'Earlier points and sets were not recorded. Statistics cover only the tracked period.')}</p> : null}
+            <MatchStatistics match={match} showAvatars={leagueMatch} avatars={avatars} showRules={false} />
+          </section>
+        ) : null}
+      </section>
+    )
+  }
+  if (match.ended_early_at) {
+    return (
+      <section className="mx-auto max-w-5xl rounded-3xl border border-app-line/10 bg-app-court/95 p-6 sm:p-10">
+        <h1 className="text-center text-3xl font-black">{t('Zápas ukončený bez výsledku', 'Match ended without a result')}</h1>
+        {leagueMatch ? <p className="mt-4 text-center text-app-fg/70">{t('Priebeh a štatistiky sú uložené. Víťaz nebol určený a ELO sa nezapočítava. PIN už neplatí.', 'The timeline and statistics are saved. No winner was declared and ELO is unchanged. The PIN has expired.')}</p> : null}
+        <p className="mt-4 text-center">{match.team_a_sets} : {match.team_b_sets} {t('na sety', 'sets')} · {match.team_a_games} : {match.team_b_games} {t('na gemy', 'games')} · {durationLabel}</p>
+        <MatchStatistics match={match} showAvatars={leagueMatch} avatars={avatars} showRules={leagueMatch} />
+        <button type="button" onClick={resetKiosk} disabled={isSaving} className="mx-auto mt-8 block min-h-12 rounded-xl bg-[#a8e63c] px-6 py-3 font-bold text-[#061016]">{t('Späť na výber hry', 'Back to game selection')}</button>
+      </section>
+    )
+  }
+  if (match.paused_at) {
+    return (
+      <section className="mx-auto max-w-3xl rounded-3xl border border-app-line/10 bg-app-court/95 p-6 text-center sm:p-10">
+        <h1 className="text-3xl font-black">{t('Zápas prerušený', 'Match paused')}</h1>
+        <p className="mt-4 text-app-fg/70">{t('Skóre, pravidlá, podanie aj priebeh bod po bode sú uložené. Zápas zatiaľ nie je ukončený.', 'The score, rules, server and point timeline are saved. The match is not finished.')}</p>
+        <p className="mt-4 text-lg">{match.team_a_sets} : {match.team_b_sets} {t('na sety', 'sets')} · {match.team_a_games} : {match.team_b_games} {t('na gemy', 'games')}</p>
+        {pauseReceipt ? <>
+          <p className="mt-6 text-sm text-app-fg/60">{t('PIN na pokračovanie', 'Resume PIN')}</p>
+          <strong className="my-4 block font-mono text-6xl tracking-[0.25em] text-app-accent">{pauseReceipt.pin}</strong>
+          <p className="text-sm text-app-fg/70">{leagueMatch
+            ? t('PIN si odfoť alebo zapíš. Na úvode zvoľ „Zadaj PIN kód“ → „Pokračovať v zápase“.', 'Save this PIN. On the home screen choose “Enter PIN code” → “Resume match”.')
+            : t('Zapamätajte si alebo zapíšte tento PIN – budete ho potrebovať na obnovenie rýchlej hry. Na úvode zvoľte „Zadaj PIN kód“ → „Pokračovať v zápase“.', 'Remember or write down this PIN – you will need it to resume this quick game. On the home screen choose “Enter PIN code” → “Resume match”.')}</p>
+          <p className="mt-2 text-sm text-app-fg/70">{t('Rovnaký PIN platí aj po obnovení a ďalšom prerušení, až do ukončenia zápasu.', 'The same PIN remains valid after resuming and pausing again, until the match ends.')}</p>
+        </> : canEdit ? <button type="button" disabled={isSaving} onClick={() => void pauseMatch()} className="mt-6 min-h-12 rounded-xl border border-app-line/20 px-5 py-3">{leagueMatch ? t('Zobraziť PIN a odoslať e-maily', 'Show PIN and send emails') : t('Zobraziť PIN', 'Show PIN')}</button> : null}
+        {emailStatus ? <p role={emailFailed ? 'alert' : 'status'} className={`mt-5 text-sm ${emailFailed ? 'text-app-amber-200' : 'text-app-fg/70'}`}>{emailStatus}</p> : null}
+        {emailFailed && pauseReceipt ? <button type="button" disabled={emailBusy} onClick={() => void sendPauseEmails(pauseReceipt)} className="mt-4 min-h-12 rounded-xl border border-app-line/20 px-5 py-3">{t('Skúsiť e-maily znova', 'Retry emails')}</button> : null}
+        {error ? <p role="alert" className="mt-4 text-app-red-300">{error}</p> : null}
+        <button type="button" onClick={resetKiosk} disabled={isSaving || emailBusy} className="mx-auto mt-8 block min-h-12 rounded-xl bg-[#a8e63c] px-6 py-3 font-bold text-[#061016] disabled:opacity-40">{t('Späť na výber hry', 'Back to game selection')}</button>
+        {canEdit ? <button type="button" disabled={isSaving || emailBusy} onClick={() => setConfirmingEnd(true)} className="mt-4 min-h-12 rounded-xl border border-red-400/40 px-5 text-app-red-200">{t('Ukončiť zápas', 'End match')}</button> : null}
+        {confirmingEnd ? <PauseMatchDialog registered={leagueMatch} ending onCancel={() => setConfirmingEnd(false)} onConfirm={() => void endMatch()} /> : null}
+      </section>
+    )
+  }
   if (winner) {
     return (
       <section className="live-court court-finished">
-        <header><Link href="/match">{t('Späť na výber hry', 'Back to game selection')}</Link><h1>{t('Zápas skončený', 'Match finished')}</h1></header>
+        <header><h1>{t('Zápas skončený', 'Match finished')}</h1></header>
         <div className="court-results">
         <div className="result-scoreboard">
           <div className="result-score-team result-stat-leading-a"><h2>{t('Tím 1', 'Team 1')}</h2><div className={leagueMatch ? 'result-score-roster' : 'result-quick-roster'}>{resultPlayer(match.team_a_player1_name, 0)}{resultPlayer(match.team_a_player2_name, 1)}</div></div>
@@ -638,9 +975,37 @@ export function MatchView({ matchId }: { matchId: string }) {
           {loginNotice}
         </div>
         <p role="status" className="text-center text-xs">{isSaving ? t('Ukladám konečný výsledok…', 'Saving final result…') : error ? error : t('Výsledok uložený', 'Result saved')}</p>
-        {match.qr_created_by !== null ? <p className="court-stat-warning text-center text-xs text-[#a8e63c]">{isSaving ? t('Odosielam ligový výsledok…', 'Submitting league result…') : match.official_result_id ? t('Ligový výsledok bol odoslaný. Každý hráč ho musí potvrdiť vo svojom profile; až potom sa započíta ELO a ligové štatistiky.', 'League result submitted. Each player must approve it in their profile before ELO and league statistics are applied.') : t('Ligový výsledok ešte nebol odoslaný.', 'League result has not been submitted yet.')}</p> : null}
-        {!match.statistics_complete ? <p className="court-stat-warning text-center text-xs text-amber-200">{t('Staršie body a sety neboli zaznamenávané. Štatistiky sú iba od zapnutia sledovania.', 'Earlier points and sets were not recorded. Statistics cover only the tracked period.')}</p> : null}
-        <MatchStatistics match={match} showAvatars={leagueMatch} avatars={avatars} />
+        {leagueMatch ? <p className="court-stat-warning text-center text-xs text-app-accent">{isSaving ? t('Ukladám výsledok a notifikácie hráčom…', 'Saving the result and player notifications…') : match.official_result_id ? t('Každý hráč má v profile notifikáciu „Potvrď výsledok“. ELO sa započíta až po potvrdení všetkými hráčmi. Môžete hrať ďalší zápas alebo skončiť.', 'Every player has a “Confirm result” notification in their profile. ELO is applied only after everyone confirms. You can play another match or finish.') : t('Ligový výsledok ešte nebol odoslaný. Obnov stránku a over uloženie výsledku.', 'League result has not been submitted yet. Reload and check that the result was saved.')}</p> : null}
+        {!match.statistics_complete ? <p className="court-stat-warning text-center text-xs text-app-amber-200">{t('Staršie body a sety neboli zaznamenávané. Štatistiky sú iba od zapnutia sledovania.', 'Earlier points and sets were not recorded. Statistics cover only the tracked period.')}</p> : null}
+        <MatchStatistics match={match} showAvatars={leagueMatch} avatars={avatars} showRules={leagueMatch} />
+        {canEdit ? <fieldset className="mx-auto mt-3 w-full max-w-2xl rounded-xl border border-app-line/10 bg-app-court/70 p-2.5">
+          <legend className="px-1.5 text-xs font-bold text-app-fg/65">{t('Dvojice pre ďalší zápas', 'Next match teams')}</legend>
+          <div className="grid grid-cols-3 gap-1.5">
+            {REMATCH_PAIRINGS.map((slots, index) => {
+              const roster = [match.team_a_player1_name, match.team_a_player2_name, match.team_b_player1_name, match.team_b_player2_name]
+              return <button key={index} type="button" aria-pressed={selectedRematchPairing === index}
+                disabled={resultActionsDisabled}
+                onClick={() => setSelectedRematchPairing(index)}
+                className={`min-h-12 rounded-lg border px-2 py-1.5 text-left transition disabled:opacity-50 ${selectedRematchPairing === index ? 'border-[#a8e63c]/70 bg-[#a8e63c]/10' : 'border-app-line/10 hover:border-app-line/25'}`}>
+                <span className={`mb-0.5 block text-[9px] font-bold uppercase tracking-wider ${selectedRematchPairing === index ? 'text-app-accent' : 'text-app-fg/40'}`}>
+                  {t('Možnosť', 'Option')} {index + 1}
+                </span>
+                <span className="block truncate text-[11px] font-semibold leading-tight text-app-fg/90">{roster[slots[0]]} + {roster[slots[1]]}</span>
+                <span className="mt-0.5 block truncate text-[11px] leading-tight text-app-fg/55">{roster[slots[2]]} + {roster[slots[3]]}</span>
+              </button>
+            })}
+          </div>
+        </fieldset> : null}
+        <div className="mx-auto mt-5 flex max-w-2xl flex-wrap items-center justify-center gap-4 rounded-2xl border border-[#a8e63c]/25 bg-app-court p-4 text-center">
+          {canEdit ? <button type="button" onClick={() => void startNextMatch()} disabled={resultActionsDisabled} className="inline-flex min-h-12 items-center gap-2 rounded-xl bg-[#a8e63c] px-5 py-3 text-sm font-black text-[#061016] transition hover:bg-[#c1fa66] disabled:cursor-wait disabled:opacity-50">
+            <RotateCcw size={18} aria-hidden="true" />
+            {isStartingNext ? t('Pripravujem ďalší zápas…', 'Preparing next match…') : t('Hrať ďalší zápas', 'Play another match')}
+          </button> : null}
+          <button type="button" onClick={resetKiosk} disabled={resultActionsDisabled} className="inline-flex min-h-12 items-center gap-2 rounded-xl border border-app-line/20 px-5 py-3 text-sm font-black transition hover:bg-app-overlay/5 disabled:cursor-wait disabled:opacity-50">
+            <Check size={18} aria-hidden="true" />
+            {isSaving ? t('Dokončujem zápas…', 'Finishing match…') : t('Ukončiť zápas', 'End match')}
+          </button>
+        </div>
         </div>
       </section>
     )
@@ -649,32 +1014,49 @@ export function MatchView({ matchId }: { matchId: string }) {
   return (
     <section className="live-court mx-auto max-w-5xl">
       <header className="text-center">
-        <Link href="/match" className="mb-5 inline-block text-sm text-white/55 transition hover:text-[#a8e63c]">Späť na výber hry</Link>
-        <p className="text-xs font-bold uppercase tracking-[0.24em] text-[#a8e63c]">RIVA / LIVE SCORE</p>
+        <Link href="/match" className="mb-5 inline-block text-sm text-app-fg/55 transition hover:text-app-accent">Späť na výber hry</Link>
+        <p className="text-xs font-bold uppercase tracking-[0.24em] text-app-accent">RIVA / LIVE SCORE</p>
         <h1 className="mt-3 text-3xl font-black tracking-tight sm:text-5xl">Priebeh zápasu</h1>
-        <p className="mt-3 text-sm text-white/55">Sleduj skóre naživo a ovládaj ho priamo z kurtu.</p>
-        <span className="text-xs text-white/50">{t('Režim', 'Mode')}: {match.scoring_type === 'advantage' ? t('So zhodou', 'Advantage') : 'Golden Point'}</span>
-        {tie ? <strong className="text-xs text-[#a8e63c]">{t('Tajbrejk · do 7 bodov, rozdiel 2', 'Tiebreak · first to 7, win by 2')}</strong> : null}
+        {canEdit ? <button type="button" disabled={isSaving || (match.challenge_id !== null && !match.is_pin_activated)} onClick={() => setConfirmingPause(true)} className="ml-auto inline-flex min-h-11 items-center gap-2 rounded-xl border border-amber-300/40 bg-amber-300/10 px-4 py-2 text-sm font-bold text-app-amber-200 disabled:opacity-40"><Pause size={18} aria-hidden="true" />{t('Prerušiť zápas', 'Pause match')}</button> : null}
+        {canEdit ? <button type="button" disabled={isSaving || (match.challenge_id !== null && !match.is_pin_activated)} onClick={() => setConfirmingEnd(true)} className="ml-2 inline-flex min-h-11 items-center gap-2 rounded-xl border border-red-400/40 bg-red-400/10 px-4 py-2 text-sm font-bold text-app-red-200 disabled:opacity-40"><Square size={18} aria-hidden="true" />{t('Ukončiť zápas', 'End match')}</button> : null}
+        <p className="mt-3 text-sm text-app-fg/55">Sleduj skóre naživo a ovládaj ho priamo z kurtu.</p>
+        <p className="mt-3 flex flex-wrap justify-center gap-2 text-xs text-app-fg/60">
+          <span className="rounded-full border border-app-line/10 px-3 py-1">{match.scoring_type === 'advantage' ? t('Klasické výhody (Ad)', 'Classic advantage (Ad)') : t('Zlatá loptička (Punto de Oro)', 'Golden point (Punto de Oro)')}</span>
+          <span className="rounded-full border border-app-line/10 px-3 py-1">{match.set_format === 'pro_set'
+            ? t('Historický Pro-Set · tajbrejk za 8:8', 'Legacy Pro-Set · tiebreak at 8:8')
+            : match.set_format === 'seven_games_no_tiebreak'
+              ? t('Set do 7 gemov · bez tajbrejku', 'Set to 7 games · no tiebreak')
+              : t('Klasický set · tajbrejk za 6:6', 'Standard set · tiebreak at 6:6')}</span>
+          {match.set_format !== 'pro_set' ? <span className="rounded-full border border-app-line/10 px-3 py-1">{t('3. set: ', 'Deciding set: ')}{match.third_set_format === 'full_set' ? t('plnohodnotný set', 'full set') : t('Super Tiebreak', 'Super Tiebreak')}</span> : null}
+        </p>
+        {tie ? <strong className="text-xs text-app-accent">{superTie
+          ? t('Super Tiebreak · do 10 bodov, rozdiel 2', 'Super tiebreak · first to 10, win by 2')
+          : match.set_format === 'pro_set'
+            ? t('Tajbrejk Pro-Setu · do 7 bodov, rozdiel 2', 'Pro-Set tiebreak · first to 7, win by 2')
+            : t('Tajbrejk · do 7 bodov, rozdiel 2', 'Tiebreak · first to 7, win by 2')}</strong> : null}
       </header>
+
+      {confirmingPause ? <PauseMatchDialog registered={leagueMatch} onCancel={() => setConfirmingPause(false)} onConfirm={() => void pauseMatch()} /> : null}
+      {confirmingEnd ? <PauseMatchDialog registered={leagueMatch} ending onCancel={() => setConfirmingEnd(false)} onConfirm={() => void endMatch()} /> : null}
 
       {!match.initial_server_chosen ? <div className="court-toolbar mt-8 flex flex-wrap items-center justify-center gap-3">
         <button type="button" onClick={drawServe} disabled={!canEdit || isSaving || (match.challenge_id !== null && !match.is_pin_activated)} className="inline-flex min-h-12 items-center gap-2 rounded-xl bg-[#a8e63c] px-5 py-3 text-sm font-black text-[#061016] transition hover:bg-[#c1fa66] disabled:cursor-not-allowed disabled:opacity-40">
           <Dice5 size={18} aria-hidden="true" /> 🎲 Vylosovať podanie
         </button>
-        {!canEdit ? <span className="text-xs text-amber-200">{t('Skóre ovláda zariadenie, ktoré zápas vytvorilo, alebo prihlásený organizátor.', 'The creating device or signed-in organizer controls the score.')}</span> : null}
+        {!canEdit ? <span className="text-xs text-app-amber-200">{t('Skóre ovláda zariadenie, ktoré zápas vytvorilo, alebo prihlásený organizátor.', 'The creating device or signed-in organizer controls the score.')}</span> : null}
       </div> : null}
 
-      {error ? <p className="court-error mx-auto mt-4 max-w-2xl rounded-xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-center text-sm text-red-200" role="alert">{error}</p> : null}
+      {error ? <p className="court-error mx-auto mt-4 max-w-2xl rounded-xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-center text-sm text-app-red-200" role="alert">{error}</p> : null}
       {avatarNotice}
       {loginNotice}
 
-      <div className="court-summary mt-6 grid grid-cols-2 gap-4 rounded-2xl border border-white/10 bg-[#0b1b22]/90 p-5 text-center">
-        <div><p className="text-sm text-white/60">{t('Gemy v aktuálnom sete', 'Games in current set')}</p><p className="mt-2 text-3xl font-black">{match.team_a_games} – {match.team_b_games}</p></div>
-        <div><p className="text-sm text-white/60">{t('Sety', 'Sets')}</p><p className="mt-2 text-3xl font-black">{match.team_a_sets} – {match.team_b_sets}</p></div>
-        <div><p className="text-sm text-white/60">{t('Trvanie zápasu', 'Match duration')}</p><p className="mt-2 text-3xl font-black" aria-live="off">{durationLabel}</p></div>
-        <div><p className="text-sm text-white/60">{match.streak_team ? t(`Séria bodov – Tím ${match.streak_team === 'TEAM_A' ? '1' : '2'}`, `Point streak – Team ${match.streak_team === 'TEAM_A' ? '1' : '2'}`) : t('Séria bodov', 'Point streak')}</p><p className="mt-2 text-3xl font-black">{match.current_point_streak}</p></div>
+      <div className="court-summary mt-6 grid grid-cols-2 gap-4 rounded-2xl border border-app-line/10 bg-app-court/90 p-5 text-center">
+        <div><p className="text-sm text-app-fg/60">{t('Gemy v aktuálnom sete', 'Games in current set')}</p><p className="mt-2 text-3xl font-black">{match.team_a_games} – {match.team_b_games}</p></div>
+        <div><p className="text-sm text-app-fg/60">{t('Sety', 'Sets')}</p><p className="mt-2 text-3xl font-black">{match.team_a_sets} – {match.team_b_sets}</p></div>
+        <div><p className="text-sm text-app-fg/60">{t('Trvanie zápasu', 'Match duration')}</p><p className="mt-2 text-3xl font-black" aria-live="off">{durationLabel}</p></div>
+        <div><p className="text-sm text-app-fg/60">{match.streak_team ? t(`Séria bodov – Tím ${match.streak_team === 'TEAM_A' ? '1' : '2'}`, `Point streak – Team ${match.streak_team === 'TEAM_A' ? '1' : '2'}`) : t('Séria bodov', 'Point streak')}</p><p className="mt-2 text-3xl font-black">{match.current_point_streak}</p></div>
       </div>
-      <p className="mt-2 text-center text-xs text-white/45">{t('Pri 6:6 tajbrejk do 7 bodov s rozdielom 2.', 'At 6:6, tiebreak to 7 points, win by 2.')}</p>
+      <p className="mt-2 text-center text-xs text-app-fg/45">{t('Pri 6:6 tajbrejk do 7 bodov s rozdielom 2.', 'At 6:6, tiebreak to 7 points, win by 2.')}</p>
 
       <div className="court-teams mt-8 grid gap-4 md:grid-cols-2">
         {([
@@ -683,9 +1065,9 @@ export function MatchView({ matchId }: { matchId: string }) {
         ] as const).map(({ team, label, players, score }) => {
           const serving = match.serving_team === team
           return (
-            <article key={team} data-team={team} className={`relative overflow-hidden rounded-3xl border bg-[#0b1b22]/90 p-6 transition sm:p-9 ${serving ? 'border-[#a8e63c]/70 shadow-[0_0_35px_rgba(168,230,60,0.15)]' : 'border-white/10'}`}>
-              {serving ? <div className="absolute right-5 top-5 rounded-full border border-[#a8e63c]/30 bg-[#a8e63c]/10 px-3 py-1 text-xs font-bold text-[#c1fa66]">🎾 PODÁVA</div> : null}
-              <p className="text-xs font-bold uppercase tracking-[0.2em] text-white/45">{label}</p>
+            <article key={team} data-team={team} className={`relative overflow-hidden rounded-3xl border bg-app-court/90 p-6 transition sm:p-9 ${pointFlash === team ? 'ring-4 ring-[#a8e63c] ring-inset' : ''} ${serving ? 'border-[#a8e63c]/70 shadow-[0_0_35px_rgba(168,230,60,0.15)]' : 'border-app-line/10'}`}>
+              {serving ? <div className="absolute right-5 top-5 rounded-full border border-[#a8e63c]/30 bg-[#a8e63c]/10 px-3 py-1 text-xs font-bold text-app-highlight">🎾 PODÁVA</div> : null}
+              <p className="text-xs font-bold uppercase tracking-[0.2em] text-app-fg/45">{label}</p>
               <div className="court-players mt-4 grid gap-3">
                 {players.map((player, index) => {
                   const playerNumber = index === 0 ? 1 : 2
@@ -696,28 +1078,28 @@ export function MatchView({ matchId }: { matchId: string }) {
                       onClick={() => selectServer(team, playerNumber)}
                       aria-pressed={playerServing}
                       aria-label={`${t('Nastaviť podanie', 'Set server')}: ${label}, ${t('Hráč', 'Player')} ${playerNumber}`}
-                      className={`rounded-xl border p-4 text-left transition disabled:opacity-40 ${playerServing ? 'border-[#a8e63c] bg-[#a8e63c]/10 shadow-[0_0_18px_rgba(168,230,60,0.2)]' : 'border-white/10 bg-white/[0.03] hover:border-white/30'}`}>
-                      <span className="flex flex-wrap items-center justify-between gap-2 text-xs text-white/60">
+                      className={`rounded-xl border p-4 text-left transition disabled:opacity-40 ${playerServing ? 'border-[#a8e63c] bg-[#a8e63c]/10 shadow-[0_0_18px_rgba(168,230,60,0.2)]' : 'border-app-line/10 bg-app-overlay/[0.03] hover:border-app-line/30'}`}>
+                      <span className="flex flex-wrap items-center justify-between gap-2 text-xs text-app-fg/60">
                         <span>{t('Hráč', 'Player')} {playerNumber}</span>
-                        {playerServing ? <span className="font-bold text-[#c1fa66]">🎾 {t('Podáva', 'Serving')}</span> : null}
+                        {playerServing ? <span className="font-bold text-app-highlight">🎾 {t('Podáva', 'Serving')}</span> : null}
                       </span>
                       <span className={`mt-2 block text-lg font-bold ${leagueMatch ? 'court-player-identity' : ''}`}>{leagueMatch ? <PlayerAvatar name={player} src={avatars?.[(team === 'TEAM_A' ? 0 : 2) + index]} className="size-8 text-xs" /> : null}<span>{player === 'Hráč 1' ? t('Hráč 1', 'Player 1') : player === 'Hráč 2' ? t('Hráč 2', 'Player 2') : player}</span></span>
                     </button>
                   )
                 })}
               </div>
-              <p className="court-points-label mt-8 text-xs font-bold uppercase tracking-[0.18em] text-white/40">{tie ? t('Body v tajbrejku', 'Tiebreak points') : t('Body v geme', 'Game points')}</p>
-              <p className="court-points mt-3 text-center font-black leading-none tracking-tight text-white tabular-nums" aria-label={`${label}: ${match.advantage_team === team ? t('Výhoda', 'Advantage') : formatScore(score)}`}><span>{match.advantage_team === team ? 'AD' : formatScore(score)}</span></p>
+              <p className="court-points-label mt-8 text-xs font-bold uppercase tracking-[0.18em] text-app-fg/40">{tie ? t('Body v tajbrejku', 'Tiebreak points') : t('Body v geme', 'Game points')}</p>
+              <p className="court-points mt-3 text-center font-black leading-none tracking-tight text-app-fg tabular-nums" aria-label={`${label}: ${match.advantage_team === team ? t('Výhoda', 'Advantage') : formatScore(score)}`}><span>{match.advantage_team === team ? 'AD' : formatScore(score)}</span></p>
               <button
                 type="button"
                 onClick={team === 'TEAM_A' ? addTeamAPoint : addTeamBPoint}
                 disabled={!scoreReady}
                 aria-label={`Pridať bod pre ${label}`}
-                className="mt-7 min-h-12 w-full rounded-xl border border-white/10 bg-white/[0.04] text-sm font-bold transition hover:border-[#a8e63c]/50 hover:bg-[#a8e63c]/10 disabled:cursor-not-allowed disabled:opacity-40"
+                className="mt-7 min-h-12 w-full rounded-xl border border-app-line/10 bg-app-overlay/[0.04] text-sm font-bold transition hover:border-[#a8e63c]/50 hover:bg-[#a8e63c]/10 disabled:cursor-not-allowed disabled:opacity-40"
               >
-                + Bod pre {label} <span className="ml-1 text-white/40">({team === 'TEAM_A' ? 'A' : 'L'})</span>
+                + Bod pre {label} <span className="ml-1 text-app-fg/40">({team === 'TEAM_A' ? 'A' : 'L'})</span>
               </button>
-              <div className="court-breakpoint-summary text-center text-xs text-white/65">
+              <div className="court-breakpoint-summary text-center text-xs text-app-fg/65">
                 {t('Brejkbaly – šance / využité / zahodené', 'Break points – chances / converted / missed')}: <strong>{team === 'TEAM_A' ? match.team_a_break_points : match.team_b_break_points} / {team === 'TEAM_A' ? match.team_a_break_points_converted : match.team_b_break_points_converted} / {team === 'TEAM_A' ? match.team_a_break_points_missed : match.team_b_break_points_missed}</strong>
               </div>
             </article>
@@ -725,16 +1107,16 @@ export function MatchView({ matchId }: { matchId: string }) {
         })}
       </div>
 
-      <div className="court-controls mt-5 flex flex-col items-center justify-between gap-4 rounded-2xl border border-white/10 bg-[#0b1b22]/75 p-4 sm:flex-row sm:px-6">
+      <div className="court-controls mt-5 flex flex-col items-center justify-between gap-4 rounded-2xl border border-app-line/10 bg-app-court/75 p-4 sm:flex-row sm:px-6">
         <div className="flex flex-wrap items-center justify-center gap-3">
           <button type="button" onClick={toggleMute} aria-pressed={muted}
             aria-label={muted ? t('Zapnúť zvuk', 'Enable sound') : t('Vypnúť zvuk', 'Mute sound')}
-            className={`inline-flex min-h-11 items-center gap-2 rounded-lg border px-3 text-sm font-bold ${muted ? 'border-amber-300/40 text-amber-200' : 'border-[#a8e63c]/40 text-[#a8e63c]'}`}>
+            className={`inline-flex min-h-11 items-center gap-2 rounded-lg border px-3 text-sm font-bold ${muted ? 'border-amber-300/40 text-app-amber-200' : 'border-[#a8e63c]/40 text-app-accent'}`}>
             {muted ? <VolumeX size={18} aria-hidden="true" /> : <Volume2 size={18} aria-hidden="true" />}
             {muted ? t('Zvuk vypnutý', 'Sound off') : t('Zvuk zapnutý', 'Sound on')}
           </button>
-          <div className="flex items-center gap-2 text-sm text-white/65">
-            <Volume2 size={17} className="text-[#a8e63c]" aria-hidden="true" />
+          <div className="flex items-center gap-2 text-sm text-app-fg/65">
+            <Volume2 size={17} className="text-app-accent" aria-hidden="true" />
             {t('Jazyk hlasového hlásenia', 'Announcement language')}
           </div>
           <div className="flex items-center gap-2" role="group" aria-label={t('Jazyk hlasového hlásenia', 'Announcement language')}>
@@ -749,7 +1131,7 @@ export function MatchView({ matchId }: { matchId: string }) {
                 aria-label={label}
                 aria-pressed={language === value}
                 title={label}
-                className={`flex h-11 w-14 items-center justify-center overflow-hidden rounded-lg border p-1.5 transition-colors ${language === value ? 'border-[#ccff00] bg-[#ccff00]/15 ring-2 ring-[#ccff00]/30' : 'border-white/10 bg-[#131924] opacity-60 hover:opacity-100'}`}
+                className={`flex h-11 w-14 items-center justify-center overflow-hidden rounded-lg border p-1.5 transition-colors ${language === value ? 'border-[#ccff00] bg-[#ccff00]/15 ring-2 ring-[#ccff00]/30' : 'border-app-line/10 bg-app-panel opacity-60 hover:opacity-100'}`}
               >
                 <img src={`/images/flags/${flag}.svg`} alt="" className="h-full w-full rounded-sm object-cover" />
               </button>
@@ -757,12 +1139,31 @@ export function MatchView({ matchId }: { matchId: string }) {
           </div>
         </div>
         <div className="flex flex-wrap justify-center gap-2">
-          <button type="button" onClick={undo} disabled={!canEdit || isSaving || !historyRef.current.length} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-white/10 px-4 text-sm font-semibold text-white/75 transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40"><Undo2 size={16} aria-hidden="true" /> Späť <kbd className="ml-1 rounded border border-white/15 px-1.5 py-0.5 text-[10px]">Z</kbd></button>
-          <button type="button" onClick={resetGame} disabled={!canEdit || isSaving || (tie ? tie.a + tie.b === 0 : match.team_a_game_score + match.team_b_game_score === 0)} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-white/10 px-4 text-sm font-semibold text-white/75 transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40"><RotateCcw size={16} aria-hidden="true" /> {tie ? t('Reset tajbrejku', 'Reset tiebreak') : t('Reset gemu', 'Reset game')} <kbd className="ml-1 rounded border border-white/15 px-1.5 py-0.5 text-[10px]">M</kbd></button>
+          <button type="button" onClick={undo} disabled={!canEdit || isSaving || !historyRef.current.length} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-app-line/10 px-4 text-sm font-semibold text-app-fg/75 transition hover:bg-app-overlay/5 disabled:cursor-not-allowed disabled:opacity-40"><Undo2 size={16} aria-hidden="true" /> Späť <kbd className="ml-1 rounded border border-app-line/15 px-1.5 py-0.5 text-[10px]">Z</kbd></button>
+          <button type="button" onClick={resetGame} disabled={!canEdit || isSaving || (tie ? tie.a + tie.b === 0 : match.team_a_game_score + match.team_b_game_score === 0)} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-app-line/10 px-4 text-sm font-semibold text-app-fg/75 transition hover:bg-app-overlay/5 disabled:cursor-not-allowed disabled:opacity-40"><RotateCcw size={16} aria-hidden="true" /> {tie ? t('Reset tajbrejku', 'Reset tiebreak') : t('Reset gemu', 'Reset game')} <kbd className="ml-1 rounded border border-app-line/15 px-1.5 py-0.5 text-[10px]">M</kbd></button>
         </div>
       </div>
 
-      <p role="status" className={`court-status mt-3 text-center text-xs ${speechStatus === 'ready' ? 'text-white/55' : 'text-amber-200'}`}>
+      <div className="mt-5 text-center">
+        <button
+          type="button"
+          aria-expanded={showLiveStatistics}
+          aria-controls="live-match-statistics"
+          onClick={() => setShowLiveStatistics((visible) => !visible)}
+          className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-app-line/15 px-5 py-2.5 text-sm font-bold text-app-fg/80 transition hover:border-[#a8e63c]/50 hover:text-app-fg"
+        >
+          <BarChart3 size={17} aria-hidden="true" />
+          {showLiveStatistics ? t('Skryť štatistiky zápasu', 'Hide match statistics') : t('Štatistiky zápasu', 'Match statistics')}
+        </button>
+      </div>
+      {showLiveStatistics ? (
+        <section id="live-match-statistics" className="mt-5 rounded-2xl border border-app-line/10 bg-app-court/90 p-4 sm:p-6" aria-label={t('Štatistiky zápasu', 'Match statistics')}>
+          {!match.statistics_complete ? <p className="court-stat-warning mb-4 text-center text-xs text-app-amber-200">{t('Staršie body a sety neboli zaznamenávané. Štatistiky sú iba od zapnutia sledovania.', 'Earlier points and sets were not recorded. Statistics cover only the tracked period.')}</p> : null}
+          <MatchStatistics match={match} showAvatars={leagueMatch} avatars={avatars} showRules={leagueMatch} />
+        </section>
+      ) : null}
+
+      <p role="status" className={`court-status mt-3 text-center text-xs ${speechStatus === 'ready' ? 'text-app-fg/55' : 'text-app-amber-200'}`}>
         {muted ? t('Hlasové hlásenia sú stíšené.', 'Voice announcements are muted.') : speechStatus === 'ready'
           ? t('Hlas Jessa je zapnutý: slovenčina.', 'Jessa voice enabled: English.')
           : speechStatus === 'fallback'
@@ -776,8 +1177,31 @@ export function MatchView({ matchId }: { matchId: string }) {
                   : 'No English voice is available. Install or enable an English voice in the device settings.'}
       </p>
 
-      <p className="mt-4 text-center text-xs text-white/35">Skratky: A = bod pre Tím 1 · L = bod pre Tím 2 · Z = späť · M = reset gemu</p>
-      {!scoreReady ? <p className="mt-2 text-center text-xs text-[#c1fa66]/80">{match.challenge_id !== null && !match.is_pin_activated ? 'Najprv aktivuj zápas zadaním PIN-u v kiosku.' : 'Najprv vylosuj podanie, aby sa mohlo začať skórovať.'}</p> : null}
+      <p className="mt-4 text-center text-xs text-app-fg/35">Skratky: A = bod pre Tím 1 · L = bod pre Tím 2 · Z = späť · M = reset gemu</p>
+      {canEdit ? <label className="mt-4 flex items-center justify-center gap-2 text-sm text-app-fg/75">
+        <input type="checkbox" data-match-clicker-helper checked={helperMode} onChange={(event) => setHelperMode(event.target.checked)} />
+        {t('Windows pomocník pre dva rovnaké klikre', 'Windows helper for two identical clickers')}
+      </label> : null}
+      <p role="status" className="mt-2 text-center text-xs text-app-fg/45">{helperMode
+        ? t('Pomocník: F13 = Tím 1 · F14 = Tím 2. Pôvodné mediálne klávesy sú ignorované. Po obnovení stránky zapni tento režim znova.', 'Helper: F13 = Team 1 · F14 = Team 2. Original media keys are ignored. Re-enable this mode after reloading.')
+        : t('Bluetooth kliker: VolumeUp / medzerník = Tím 1 · VolumeDown / PlayPause / Enter = Tím 2.', 'Bluetooth clicker: VolumeUp / Space = Team 1 · VolumeDown / PlayPause / Enter = Team 2.')}</p>
+      <p className="mt-2 text-center text-xs text-app-fg/55">{t('Kliker: 1 stlačenie = pridať bod (po 350 ms) · 2 rýchle stlačenia toho istého klikra = odobrať posledný bod jeho tímu. Platí aj po bode súpera. A/L pridávajú bod ihneď.', 'Clicker: 1 press = add a point (after 350 ms) · 2 quick presses of the same clicker = remove its team’s last point, even after an opponent’s point. A/L add points immediately.')}</p>
+      {helperMode ? <p role="status" className="mt-2 text-center text-xs text-app-fg/75">
+        {t('Vstup Windows pomocníka:', 'Windows helper input:')} {clickerDiagnostic
+          ? `${clickerDiagnostic.key} / ${clickerDiagnostic.code || '—'} (#${clickerDiagnostic.count}) — ${{
+            received: t('prijatý vstup', 'input received'),
+            context: t('ignorované: klikni na nadpis zápasu, mimo polí a dialógov', 'ignored: click the match heading, outside fields and dialogs'),
+            'media-ignored': t('pôvodný signál ignorovaný; čakám F13/F14 z programu', 'original signal ignored; waiting for F13/F14 from helper'),
+            disabled: t('bodovanie nie je pripravené: skontroluj podanie, ukladanie alebo pauzu', 'scoring not ready: check serve selection, saving or pause'),
+            repeat: t('držanie tlačidla ignorované', 'held key ignored'),
+            debounce: t('príliš rýchly duplicitný signál ignorovaný', 'duplicate signal ignored'),
+            waiting: t('čakám 350 ms na prípadný dvojklik', 'waiting 350 ms for a possible double-click'),
+            undo: t('dvojklik: odobratie bodu tímu; skontroluj skóre a prípadnú chybu', 'double-click: team point removal; check score and any error'),
+            accepted: t('odoslané do bodovania; skontroluj skóre a prípadnú chybu uloženia', 'passed to scoring; check score and any save error'),
+          }[clickerDiagnostic.status]}`
+          : t('čakám na signál. Nechaj zápas aktívny a klikni na jeho nadpis.', 'waiting for input. Keep the match active and click its heading.')}
+      </p> : null}
+      {!scoreReady ? <p className="mt-2 text-center text-xs text-app-highlight/80">{match.challenge_id !== null && !match.is_pin_activated ? 'Najprv aktivuj zápas zadaním PIN-u v kiosku.' : 'Najprv vylosuj podanie, aby sa mohlo začať skórovať.'}</p> : null}
     </section>
   )
 }

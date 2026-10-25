@@ -51,12 +51,12 @@ export function ResendVerificationButton({ email, className = '' }: { email: str
         type="button"
         onClick={resend}
         disabled={busy || cooldown > 0}
-        className="w-full rounded-lg border border-[#b5ef33]/40 px-4 py-2.5 text-xs font-black uppercase tracking-wider text-[#b5ef33] transition-colors hover:bg-[#b5ef33]/10 disabled:cursor-not-allowed disabled:opacity-50"
+        className="w-full rounded-lg border border-[#b5ef33]/40 px-4 py-2.5 text-xs font-black uppercase tracking-wider text-app-lime transition-colors hover:bg-[#b5ef33]/10 disabled:cursor-not-allowed disabled:opacity-50"
       >
         {busy ? 'Odosielam…' : cooldown > 0 ? `Poslať znova o ${cooldown} s` : 'Poslať overovací e-mail znova'}
       </button>
       {status && (
-        <p role="status" className={`mt-2 text-center text-xs ${status.ok ? 'text-[#b5ef33]' : 'text-red-400'}`}>{status.text}</p>
+        <p role="status" className={`mt-2 text-center text-xs ${status.ok ? 'text-app-lime' : 'text-app-red-400'}`}>{status.text}</p>
       )}
     </div>
   )

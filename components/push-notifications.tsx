@@ -142,10 +142,10 @@ export function PushNotificationSettings({ visible = true, pushAllowed = true, o
 
   if (!visible) return null
   return (
-    <section className="mx-auto my-4 max-w-[1120px] rounded-2xl border border-white/10 bg-[#131924] p-5">
-      <h2 className="flex items-center gap-2 text-sm font-black"><Bell size={18} className="text-[#ccff00]" />{localMode ? t('Lokálne notifikácie · vývoj', 'Local notifications · development') : t('Notifikácie na mobile', 'Mobile notifications')}</h2>
-      {localMode ? <p className="mt-2 text-sm text-white/60">{t('Nejde o vzdialený push; pri zatvorenej aplikácii sa upozornenia nedoručujú.', 'This is not remote push; alerts are not delivered when the app is closed.')}</p> : null}
-      {needsInstall ? <div className="mt-3"><p className="mb-3 text-sm text-amber-200">{t('Na iPhone/iPade (iOS 16.4+) pridaj RIVA Padel na plochu a otvor ju z jej ikony.', 'On iPhone/iPad (iOS 16.4+), add RIVA Padel to your home screen and open it from its icon.')}</p><InstallAppButton /></div> : !supported ? <p className="mt-3 text-sm text-amber-200">{t('Použi HTTPS a prehliadač s podporou Web Push.', 'Use HTTPS and a browser that supports Web Push.')}</p> : (
+    <section className="mx-auto my-4 max-w-[1120px] rounded-2xl border border-app-line/10 bg-app-panel p-5">
+      <h2 className="flex items-center gap-2 text-sm font-black"><Bell size={18} className="text-app-league" />{localMode ? t('Lokálne notifikácie · vývoj', 'Local notifications · development') : t('Notifikácie na mobile', 'Mobile notifications')}</h2>
+      {localMode ? <p className="mt-2 text-sm text-app-fg/60">{t('Nejde o vzdialený push; pri zatvorenej aplikácii sa upozornenia nedoručujú.', 'This is not remote push; alerts are not delivered when the app is closed.')}</p> : null}
+      {needsInstall ? <div className="mt-3"><p className="mb-3 text-sm text-app-amber-200">{t('Na iPhone/iPade (iOS 16.4+) pridaj RIVA Padel na plochu a otvor ju z jej ikony.', 'On iPhone/iPad (iOS 16.4+), add RIVA Padel to your home screen and open it from its icon.')}</p><InstallAppButton /></div> : !supported ? <p className="mt-3 text-sm text-app-amber-200">{t('Použi HTTPS a prehliadač s podporou Web Push.', 'Use HTTPS and a browser that supports Web Push.')}</p> : (
         <div className="mt-4 flex flex-wrap gap-3">
           <button type="button" disabled={busy || !userId} onClick={() => void run(enabled ? 'disable' : 'enable')} className="inline-flex items-center gap-2 rounded-lg bg-[#ccff00] px-4 py-3 text-xs font-black text-[#10150d] disabled:opacity-50">
             {enabled ? <BellOff size={16} /> : <Bell size={16} />}
@@ -153,8 +153,8 @@ export function PushNotificationSettings({ visible = true, pushAllowed = true, o
           </button>
         </div>
       )}
-      {message ? <p role="status" className="mt-3 text-sm text-[#ccff00]">{message}</p> : null}
-      {error ? <p role="alert" className="mt-3 text-sm text-red-200">{error}</p> : null}
+      {message ? <p role="status" className="mt-3 text-sm text-app-league">{message}</p> : null}
+      {error ? <p role="alert" className="mt-3 text-sm text-app-red-200">{error}</p> : null}
     </section>
   )
 }

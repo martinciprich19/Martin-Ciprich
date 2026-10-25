@@ -84,13 +84,13 @@ export function QrPlayerSearch({ excludedIds, disabled, onSelect }: {
     setOpen(false)
   }
 
-  return <div ref={containerRef} className="mt-3 rounded-xl border border-white/15 bg-[#111827] p-4"
+  return <div ref={containerRef} className="mt-3 rounded-xl border border-app-line/15 bg-app-slate p-4"
     onBlur={(event) => {
       if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false)
     }}>
     <label htmlFor={`${listId}-input`} className="text-sm font-semibold">{t('Meno, priezvisko alebo prezývka', 'First name, surname or nickname')}</label>
     <div className="relative mt-2">
-      <Search size={18} aria-hidden="true" className="absolute left-3 top-4 text-[#a8e63c]" />
+      <Search size={18} aria-hidden="true" className="absolute left-3 top-4 text-app-accent" />
       <input id={`${listId}-input`} autoFocus autoComplete="off" role="combobox" aria-autocomplete="list"
         aria-expanded={open && search.length >= 2} aria-controls={listId}
         aria-activedescendant={active >= 0 && visible[active] ? `${listId}-${active}` : undefined}
@@ -108,19 +108,19 @@ export function QrPlayerSearch({ excludedIds, disabled, onSelect }: {
             choose(visible[active])
           }
         }}
-        className="min-h-12 w-full rounded-xl border border-white/20 bg-[#1F2937] pl-10 pr-3 outline-none focus:border-[#a8e63c] disabled:opacity-50" />
+        className="min-h-12 w-full rounded-xl border border-app-line/20 bg-app-muted pl-10 pr-3 outline-none focus:border-[#a8e63c] disabled:opacity-50" />
     </div>
-    <p id={`${listId}-status`} role="status" className="mt-2 text-xs text-white/60">
+    <p id={`${listId}-status`} role="status" className="mt-2 text-xs text-app-fg/60">
       {search.length < 2 ? t('Zadaj aspoň 2 znaky.', 'Enter at least 2 characters.')
         : loading ? t('Vyhľadávam hráčov…', 'Searching players…')
           : !error && visible.length === 0 ? t('Žiadny dostupný hráč sa nenašiel.', 'No available players found.') : ''}
     </p>
-    {error ? <p role="alert" className="mt-2 text-sm text-red-200">{error} <button type="button" onClick={() => setRetry((value) => value + 1)} className="underline">{t('Skúsiť znova', 'Retry')}</button></p> : null}
+    {error ? <p role="alert" className="mt-2 text-sm text-app-red-200">{error} <button type="button" onClick={() => setRetry((value) => value + 1)} className="underline">{t('Skúsiť znova', 'Retry')}</button></p> : null}
     {open && search.length >= 2 ? <ul id={listId} role="listbox" aria-label={t('Nájdení hráči', 'Matching players')} className="mt-2 max-h-64 overflow-y-auto">
       {!loading && !error && visible.map((player, index) => <li id={`${listId}-${index}`} key={player.id} role="option"
         aria-selected={index === active} aria-disabled={disabled}
         onMouseDown={(event) => event.preventDefault()} onClick={() => choose(player)}
-        className={`flex cursor-pointer items-center gap-3 rounded-xl p-3 hover:bg-[#a8e63c]/10 ${index === active ? 'bg-[#a8e63c]/10 text-[#a8e63c]' : ''}`}>
+        className={`flex cursor-pointer items-center gap-3 rounded-xl p-3 hover:bg-[#a8e63c]/10 ${index === active ? 'bg-[#a8e63c]/10 text-app-accent' : ''}`}>
         <PlayerAvatar name={player.name} src={player.avatarUrl} className="size-10 text-sm" />
         <span className="font-semibold">{player.name}</span>
       </li>)}

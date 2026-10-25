@@ -50,13 +50,13 @@ export function ProfileServeStatistics({ profileId }: { profileId: string | numb
         percentage: false,
         description: t('Počet bodov získaných tvojou dvojicou pri podaní súperov.', 'Number of points won by your pair on opponents’ serve.') },
     ].map(({ label, stats, description, percentage }) => (
-      <article key={label} className="rounded-2xl border border-white/[0.08] bg-[#111722] p-5" title={description}>
-        <h3 className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/40">{label}</h3>
-        <p className="mt-4 text-3xl font-black text-[#ccff00]">{error || isLoading || !stats ? '—'
+      <article key={label} className="rounded-2xl border border-app-line/[0.08] bg-app-surface p-5" title={description}>
+        <h3 className="text-[10px] font-bold uppercase tracking-[0.16em] text-app-fg/40">{label}</h3>
+        <p className="mt-4 text-3xl font-black text-app-league">{error || isLoading || !stats ? '—'
           : percentage ? stats.percent === null ? '—' : `${stats.percent}%` : stats.won}</p>
-        {error ? <p role="alert" className="mt-2 text-xs text-red-300">{error instanceof Error ? error.message : t('Štatistiky sa nepodarilo načítať.', 'Could not load statistics.')} <button type="button" className="underline" onClick={() => void mutate()}>{t('Skúsiť znova', 'Retry')}</button></p>
+        {error ? <p role="alert" className="mt-2 text-xs text-app-red-300">{error instanceof Error ? error.message : t('Štatistiky sa nepodarilo načítať.', 'Could not load statistics.')} <button type="button" className="underline" onClick={() => void mutate()}>{t('Skúsiť znova', 'Retry')}</button></p>
           : isLoading || !data || !stats
-            ? <p role="status" className="mt-2 text-xs text-white/55">{isLoading ? t('Načítavam…', 'Loading…') : t('Zatiaľ bez údajov.', 'No data yet.')}</p>
+            ? <p role="status" className="mt-2 text-xs text-app-fg/55">{isLoading ? t('Načítavam…', 'Loading…') : t('Zatiaľ bez údajov.', 'No data yet.')}</p>
             : null}
       </article>
     ))}

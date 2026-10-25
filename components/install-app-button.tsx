@@ -100,7 +100,7 @@ export function InstallAppButton({ compact = false, showWhenInstalled = false }:
         type="button"
         onClick={() => void install()}
         disabled={isInstalling}
-        className={`inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-[#ccff00]/35 bg-[#ccff00]/10 font-bold text-[#ccff00] transition hover:bg-[#ccff00]/20 disabled:opacity-60 ${compact ? 'size-10' : 'px-4 py-3 text-xs'}`}
+        className={`inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-[#ccff00]/35 bg-[#ccff00]/10 font-bold text-app-league transition hover:bg-[#ccff00]/20 disabled:opacity-60 ${compact ? 'size-10' : 'px-4 py-3 text-xs'}`}
         aria-label={isInstalled ? t('Informácie o aplikácii', 'App information') : t('Pridať na plochu', 'Add to Home Screen')}
       >
         <Download size={compact ? 17 : 15} aria-hidden="true" />
@@ -108,11 +108,11 @@ export function InstallAppButton({ compact = false, showWhenInstalled = false }:
       </button>
 
       {isOpen ? createPortal(
-          <dialog ref={dialogRef} onCancel={() => setIsOpen(false)} onClick={(event) => { if (event.target === event.currentTarget) { const rect = event.currentTarget.getBoundingClientRect(); if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) setIsOpen(false) } }} aria-labelledby={titleId} className="fixed inset-0 m-auto max-h-[85svh] w-[calc(100%_-_2rem)] max-w-md overflow-y-auto rounded-2xl border border-[#9acc00]/40 bg-[#111722] p-5 text-white shadow-2xl backdrop:bg-black/75 sm:p-6">
+          <dialog ref={dialogRef} onCancel={() => setIsOpen(false)} onClick={(event) => { if (event.target === event.currentTarget) { const rect = event.currentTarget.getBoundingClientRect(); if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) setIsOpen(false) } }} aria-labelledby={titleId} className="fixed inset-0 m-auto max-h-[85svh] w-[calc(100%_-_2rem)] max-w-md overflow-y-auto rounded-2xl border border-[#9acc00]/40 bg-app-surface p-5 text-app-fg shadow-2xl backdrop:bg-black/75 sm:p-6">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h2 id={titleId} className="text-lg font-black">{isInstalled ? t('Aplikácia je už nainštalovaná', 'The app is already installed') : t('Pridaj RIVA Padel na plochu', 'Add RIVA Padel to your Home Screen')}</h2>
-                <p className="mt-2 text-sm leading-6 text-white/60">
+                <p className="mt-2 text-sm leading-6 text-app-fg/60">
                   {isInstalled
                     ? t('RIVA Padel už používaš ako aplikáciu. Nabudúce ju otvor ikonou na domovskej obrazovke.', 'You are already using RIVA Padel as an app. Next time, open it from your Home Screen.')
                     : isIOS && isSafari
@@ -122,14 +122,14 @@ export function InstallAppButton({ compact = false, showWhenInstalled = false }:
                     : t('Návod pre iPhone je určený pre Safari. Na tomto zariadení otvor menu prehliadača a vyber „Inštalovať aplikáciu“ alebo „Pridať na plochu“, ak je táto možnosť dostupná.', 'The iPhone guide is for Safari. On this device, open your browser menu and choose “Install app” or “Add to Home Screen”, if available.')}
                 </p>
               </div>
-              {isIOS ? <Share className="mt-1 shrink-0 text-[#ccff00]" size={21} aria-hidden="true" /> : null}
-              <button type="button" onClick={() => setIsOpen(false)} className="rounded-lg p-1 text-white/55 hover:text-white" aria-label={t('Zavrieť', 'Close')}><X size={19} /></button>
+              {isIOS ? <Share className="mt-1 shrink-0 text-app-league" size={21} aria-hidden="true" /> : null}
+              <button type="button" onClick={() => setIsOpen(false)} className="rounded-lg p-1 text-app-fg/55 hover:text-app-fg" aria-label={t('Zavrieť', 'Close')}><X size={19} /></button>
             </div>
             {isIOS && !isInstalled ? (
-              <ol className="mt-5 space-y-3 text-sm text-white/75">
-                <li className="flex gap-3"><span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-[#9acc00]/15 text-xs font-black text-[#9acc00]">1</span><span>{t('Ťukni na tlačidlo „Zdieľať“ v spodnej lište Safari.', 'Tap “Share” in the bottom Safari toolbar.')} <Share size={17} className="inline text-[#9acc00]" aria-hidden="true" /></span></li>
-                <li className="flex gap-3"><span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-[#9acc00]/15 text-xs font-black text-[#9acc00]">2</span><span>{t('Zroluj ponuku nadol a vyber „Pridať na domovskú obrazovku“.', 'Scroll down and choose “Add to Home Screen”.')} <Plus size={17} className="inline text-[#9acc00]" aria-hidden="true" /></span></li>
-                <li className="flex gap-3"><span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-[#9acc00]/15 text-xs font-black text-[#9acc00]">3</span>{t('V pravom hornom rohu klikni na „Pridať“.', 'Tap “Add” in the upper-right corner.')}</li>
+              <ol className="mt-5 space-y-3 text-sm text-app-fg/75">
+                <li className="flex gap-3"><span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-[#9acc00]/15 text-xs font-black text-app-olive">1</span><span>{t('Ťukni na tlačidlo „Zdieľať“ v spodnej lište Safari.', 'Tap “Share” in the bottom Safari toolbar.')} <Share size={17} className="inline text-app-olive" aria-hidden="true" /></span></li>
+                <li className="flex gap-3"><span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-[#9acc00]/15 text-xs font-black text-app-olive">2</span><span>{t('Zroluj ponuku nadol a vyber „Pridať na domovskú obrazovku“.', 'Scroll down and choose “Add to Home Screen”.')} <Plus size={17} className="inline text-app-olive" aria-hidden="true" /></span></li>
+                <li className="flex gap-3"><span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-[#9acc00]/15 text-xs font-black text-app-olive">3</span>{t('V pravom hornom rohu klikni na „Pridať“.', 'Tap “Add” in the upper-right corner.')}</li>
               </ol>
             ) : null}
             <button type="button" onClick={() => setIsOpen(false)} className="mt-6 w-full rounded-lg bg-[#ccff00] px-4 py-3 text-sm font-black text-[#10150d]">{t('Rozumiem', 'Got it')}</button>
