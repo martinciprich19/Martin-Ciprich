@@ -4,13 +4,13 @@ import { FormEvent, useEffect, useState } from 'react'
 import useSWR from 'swr'
 import { MessageSquare, Plus, Users } from 'lucide-react'
 import { useLanguage } from '@/components/language-provider'
+import { useLeague } from '@/components/league-provider'
 import { PlayerSearchView } from '@/components/find-players-view'
 import { createClient } from '@/lib/supabase/client'
 import { getErrorMessage } from '@/lib/errors'
 import { fetchPlayerProfile } from '@/lib/profiles'
 import type { LeaguePlayer } from '@/lib/players'
 
-const REGIONS = ['Bratislavský kraj', 'Trnavský kraj', 'Trenčiansky kraj', 'Nitriansky kraj', 'Žilinský kraj', 'Banskobystrický kraj', 'Prešovský kraj', 'Košický kraj']
 const LEVELS = ['Začiatočník', 'Mierne pokročilý', 'Pokročilý', 'Expert']
 const REQUEST_TYPES = [
   { value: 'potrebujeme_hraca', label: 'Potrebujeme jedného hráča', existingPlayers: 3 },
@@ -23,14 +23,14 @@ function normalizeFilterValue(value: string) {
   return value.trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').replace(/\s*kraj$/i, '').toLowerCase()
 }
 
-function formatRequestTime(value: string) {
+function formatRequestTime(value: string, locale: string) {
   const parsed = new Date(value)
-  return Number.isNaN(parsed.getTime()) ? value.slice(0, 5) : parsed.toLocaleTimeString('sk-SK', { hour: '2-digit', minute: '2-digit' })
+  return Number.isNaN(parsed.getTime()) ? value.slice(0, 5) : parsed.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })
 }
 
-function formatRequestDate(value: string) {
-  const parsed = new Date(value)
-  return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleDateString('sk-SK')
+function formatRequestDate(value: string, locale: string) {
+  const parsed = new Date(value.includes('T') ? value : `${value}T00:00:00`)
+  return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleDateString(locale)
 }
 
 type PlayerRequest = {
@@ -51,19 +51,28 @@ type JoinedPlayerRequest = Omit<PlayerRequest, 'proffiles'> & {
   proffiles: PlayerRequest['proffiles'] | NonNullable<PlayerRequest['proffiles']>[]
 }
 
-export function PlayerMarketplaceView({ currentPlayerId, currentPlayerAvatarUrl, defaultRegion, onMessage }: {
+type PlayerMarketplaceViewProps = {
   currentPlayerId?: string
   currentPlayerAvatarUrl?: string | null
   defaultRegion?: string
   onMessage: (player: LeaguePlayer) => void
-}) {
-  const { t } = useLanguage()
+}
+
+export function PlayerMarketplaceView(props: PlayerMarketplaceViewProps) {
+  const { country, isLoading } = useLeague()
+  return isLoading ? null : <CountryPlayerMarketplaceView key={country} {...props} />
+}
+
+function CountryPlayerMarketplaceView({ currentPlayerId, currentPlayerAvatarUrl, defaultRegion, onMessage }: PlayerMarketplaceViewProps) {
+  const { t, language } = useLanguage()
+  const locale = language === 'nl' ? 'nl-NL' : language === 'en' ? 'en-GB' : 'sk-SK'
+  const { country, regions: REGIONS } = useLeague()
   const [activeTab, setActiveTab] = useState<'players' | 'listings'>('players')
   const [listingRegion, setListingRegion] = useState('')
   const [listingLevel, setListingLevel] = useState('')
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [requestType, setRequestType] = useState(REQUEST_TYPES[0].value)
-  const [region, setRegion] = useState(defaultRegion ?? '')
+  const [region, setRegion] = useState(REGIONS.includes(defaultRegion ?? '') ? defaultRegion! : '')
   const [matchDate, setMatchDate] = useState('')
   const [matchTime, setMatchTime] = useState('')
   const [currentProfileLevel, setCurrentProfileLevel] = useState('')
@@ -96,8 +105,8 @@ export function PlayerMarketplaceView({ currentPlayerId, currentPlayerAvatarUrl,
     setParticipants((current) => Array.from({ length: nextCount }, (_, index) => current[index] ?? ''))
   }
 
-  const listings = useSWR(['player-requests', listingRegion, listingLevel], async () => {
-    let query = createClient().from('player_requests').select('id, user_id, request_type, region, level, match_date, match_time, participants_names, note, created_at, proffiles(full_name, email)').eq('is_active', true)
+  const listings = useSWR(['player-requests', country, listingRegion, listingLevel], async () => {
+    const query = createClient().from('player_requests').select('id, user_id, request_type, region, level, match_date, match_time, participants_names, note, created_at, proffiles(full_name, email)').eq('country_code', country).eq('is_active', true)
     const { data, error } = await query.order('created_at', { ascending: false })
     if (error) throw error
     const regionValue = normalizeFilterValue(listingRegion)
@@ -116,13 +125,13 @@ export function PlayerMarketplaceView({ currentPlayerId, currentPlayerAvatarUrl,
   useEffect(() => {
     const client = createClient()
     const channel = client
-      .channel('player-requests-live-refresh')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'player_requests' }, () => {
+      .channel(`player-requests-live-refresh-${country}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'player_requests', filter: `country_code=eq.${country}` }, () => {
         void listings.mutate(undefined, { revalidate: true })
       })
       .subscribe()
     return () => { void client.removeChannel(channel) }
-  }, [listings.mutate])
+  }, [country, listings.mutate])
 
   async function handleCreateListing(event: FormEvent) {
     event.preventDefault()
@@ -145,6 +154,7 @@ export function PlayerMarketplaceView({ currentPlayerId, currentPlayerAvatarUrl,
       ? new Date(`${matchDate}T${matchTime || '00:00'}:00`).toISOString()
       : null
     const { error } = await createClient().from('player_requests').insert({
+      country_code: country,
       user_id: currentProfileId,
       request_type: requestType,
       region,
@@ -206,7 +216,7 @@ export function PlayerMarketplaceView({ currentPlayerId, currentPlayerAvatarUrl,
         </div>
         <nav className="flex gap-2" aria-label="Matchmaking">
           <button type="button" onClick={() => setActiveTab('players')} aria-pressed={activeTab === 'players'} className={`rounded-lg px-4 py-2.5 text-sm font-bold ${activeTab === 'players' ? 'bg-[#ccff00] text-[#10150d]' : 'border border-app-line/10 text-app-fg/65'}`}>Hráči</button>
-          <button type="button" onClick={() => setActiveTab('listings')} aria-pressed={activeTab === 'listings'} className={`rounded-lg px-4 py-2.5 text-sm font-bold ${activeTab === 'listings' ? 'bg-[#ccff00] text-[#10150d]' : 'border border-app-line/10 text-app-fg/65'}`}>Inzeráty & výzvy</button>
+          <button type="button" onClick={() => setActiveTab('listings')} aria-pressed={activeTab === 'listings'} className={`rounded-lg px-4 py-2.5 text-sm font-bold ${activeTab === 'listings' ? 'bg-[#ccff00] text-[#10150d]' : 'border border-app-line/10 text-app-fg/65'}`}>Výzvy</button>
         </nav>
       </div>
 
@@ -219,7 +229,7 @@ export function PlayerMarketplaceView({ currentPlayerId, currentPlayerAvatarUrl,
             <button type="button" onClick={() => { setActionError(''); setShowCreateModal(true) }} className="inline-flex items-center gap-2 rounded-lg bg-[#ccff00] px-4 py-2.5 text-sm font-black text-[#10150d]"><Plus size={16} /> Vytvoriť inzerát</button>
           </div>
           <div className="mt-5 grid max-w-2xl gap-3 sm:grid-cols-2">
-            <label className="grid gap-1.5 text-xs font-bold text-app-fg/55">Filtrovať podľa kraja<select value={listingRegion} onChange={(event) => setListingRegion(event.target.value)} className={fieldClass}><option value="">Všetky kraje</option>{REGIONS.map((item) => <option key={item}>{item}</option>)}</select></label>
+            <label className="grid gap-1.5 text-xs font-bold text-app-fg/55">{country === 'NL' ? t('Provincia', 'Province') : t('Filtrovať podľa kraja')}<select value={listingRegion} onChange={(event) => setListingRegion(event.target.value)} className={fieldClass}><option value="">{country === 'NL' ? t('Všetky provincie', 'All provinces') : t('Všetky kraje')}</option>{REGIONS.map((item) => <option key={item}>{item}</option>)}</select></label>
             <label className="grid gap-1.5 text-xs font-bold text-app-fg/55">Filtrovať podľa úrovne<select value={listingLevel} onChange={(event) => setListingLevel(event.target.value)} className={fieldClass}><option value="">Všetky úrovne</option>{LEVELS.map((item) => <option key={item}>{item}</option>)}</select></label>
           </div>
           {listings.error ? <p role="alert" className="mt-5 rounded-lg border border-red-400/30 bg-red-500/10 p-3 text-sm text-app-red-200">{getErrorMessage(listings.error, t('Inzeráty sa nepodarilo načítať.'))}</p> : null}
@@ -228,9 +238,9 @@ export function PlayerMarketplaceView({ currentPlayerId, currentPlayerAvatarUrl,
               {(listings.data ?? []).map((item) => <li key={item.id} className="flex flex-col justify-between rounded-xl border border-app-line/[0.08] bg-app-surface p-5">
                 <div>
                   <span className="rounded-full bg-[#ccff00]/10 px-2.5 py-1 text-xs font-semibold text-app-league">{REQUEST_TYPES.find((type) => type.value === item.request_type)?.label ?? item.request_type}</span>
-                  <p className="mt-3 text-sm">Kraj: {item.region}</p>
+                  <p className="mt-3 text-sm">{country === 'NL' ? t('Provincia', 'Province') : t('Kraj')}: {item.region}</p>
                   <p className="mt-1 text-sm text-app-fg/55">Úroveň: {item.level || 'Neuvedená'}</p>
-                  {item.match_date || item.match_time ? <p className="mt-1 text-sm text-app-fg/55">Termín: {item.match_date ? formatRequestDate(item.match_date) : ''}{item.match_date && item.match_time ? ' · ' : ''}{item.match_time ? formatRequestTime(item.match_time) : ''}</p> : null}
+                  {item.match_date || item.match_time ? <p className="mt-1 text-sm text-app-fg/55">{t('Termín', 'Date')}: {item.match_date ? formatRequestDate(item.match_date, locale) : ''}{item.match_date && item.match_time ? ' · ' : ''}{item.match_time ? formatRequestTime(item.match_time, locale) : ''}</p> : null}
                   {item.participants_names?.trim() ? <p className="mt-2 text-sm text-app-fg/55">Zapojení hráči: {item.participants_names}</p> : null}
                   {item.note ? <p className="mt-3 rounded-lg bg-app-overlay/[0.04] p-3 text-sm italic text-app-fg/70">{item.note}</p> : null}
                 </div>
@@ -250,7 +260,7 @@ export function PlayerMarketplaceView({ currentPlayerId, currentPlayerAvatarUrl,
           <h2 className="text-lg font-bold">Nový inzerát / výzva</h2>
           <form onSubmit={handleCreateListing} className="mt-4 space-y-4">
             <label className="grid gap-1.5 text-xs font-bold text-app-fg/55">Typ inzerátu<select value={requestType} onChange={(event) => changeRequestType(event.target.value)} className={fieldClass}>{REQUEST_TYPES.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}</select></label>
-            <label className="grid gap-1.5 text-xs font-bold text-app-fg/55">Kraj<select required value={region} onChange={(event) => setRegion(event.target.value)} className={fieldClass}><option value="">Vyber kraj</option>{REGIONS.map((item) => <option key={item}>{item}</option>)}</select></label>
+            <label className="grid gap-1.5 text-xs font-bold text-app-fg/55">{country === 'NL' ? t('Provincia', 'Province') : t('Kraj')}<select required value={region} onChange={(event) => setRegion(event.target.value)} className={fieldClass}><option value="">{country === 'NL' ? t('Vyber provinciu', 'Select province') : t('Vyber kraj')}</option>{REGIONS.map((item) => <option key={item}>{item}</option>)}</select></label>
             <label className="grid gap-1.5 text-xs font-bold text-app-fg/55">Dátum (voliteľné)<input type="date" value={matchDate} onChange={(event) => setMatchDate(event.target.value)} className={fieldClass} /></label>
             <label className="grid gap-1.5 text-xs font-bold text-app-fg/55">Čas (voliteľné)<input type="time" value={matchTime} onChange={(event) => setMatchTime(event.target.value)} className={fieldClass} /></label>
             <p className="text-xs text-app-fg/50">Úroveň vyzývateľa: <span className="font-semibold text-app-fg/75">{currentProfileLevel || 'Neuvedená v profile'}</span></p>

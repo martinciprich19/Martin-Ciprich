@@ -62,7 +62,7 @@ export function MatchDetailModal({ matchId, currentProfileId, onClose }: { match
     }
   }, [])
 
-  const locale = language === 'en' ? 'en-GB' : 'sk-SK'
+  const locale = language === 'nl' ? 'nl-NL' : language === 'en' ? 'en-GB' : 'sk-SK'
   const formatDate = (value: string | null, withTime = false) => value
     ? new Intl.DateTimeFormat(locale, withTime ? { dateStyle: 'medium', timeStyle: 'short' } : { day: 'numeric', month: 'long', year: 'numeric' }).format(new Date(value))
     : t('Neuvedené', 'Not set')

@@ -7,6 +7,7 @@ import { useSearchParams } from 'next/navigation'
 import { getErrorMessage } from '@/lib/errors'
 import { safeNextPath } from '@/lib/auth-redirect'
 import { ResendVerificationButton } from '@/components/resend-verification-button'
+import { useLanguage } from '@/components/language-provider'
 
 const VERIFICATION_NOTICES: Record<string, { ok: boolean; text: string }> = {
   expired: { ok: false, text: 'Overovací odkaz už vypršal alebo bol použitý. Pošli si nový odkaz nižšie.' },
@@ -24,6 +25,7 @@ export default function LoginPage() {
 }
 
 function LoginForm() {
+  const { t } = useLanguage()
   const searchParams = useSearchParams()
   const verification = searchParams.get('verification') ?? ''
   const notice = VERIFICATION_NOTICES[verification]
@@ -72,17 +74,17 @@ function LoginForm() {
         <div className="flex justify-center mb-6">
           <RivaLogo />
         </div>
-        <h1 className="text-xl sm:text-2xl font-bold mb-6 text-center">PRIHLÁSENIE</h1>
+        <h1 className="text-xl sm:text-2xl font-bold mb-6 text-center">{t('PRIHLÁSENIE')}</h1>
 
         {notice && !error && (
           <div role="status" className={`p-3 rounded-lg mb-4 text-sm text-center border ${notice.ok ? 'bg-[#b5ef33]/10 border-[#b5ef33]/50 text-app-lime' : 'bg-amber-500/10 border-amber-500/60 text-app-amber-300'}`}>
-            {notice.text}
+            {t(notice.text)}
           </div>
         )}
 
         {error && (
           <div className="bg-red-500/10 border border-red-500 text-red-500 p-3 rounded-lg mb-4 text-sm text-center">
-            {error}
+            {t(error)}
           </div>
         )}
 
@@ -90,7 +92,7 @@ function LoginForm() {
 
         <form onSubmit={submit} className="space-y-4">
           <div>
-            <label className="text-sm text-gray-400">Email</label>
+            <label className="text-sm text-gray-400">{t('Email')}</label>
             <input
               type="email"
               name="email"
@@ -101,12 +103,12 @@ function LoginForm() {
               value={form.email}
               onChange={(e) => setForm({ ...form, email: e.target.value })}
               className="mt-1 w-full rounded-lg border border-app-line/10 bg-app-ink px-4 py-2.5 text-app-fg focus:outline-none focus:border-green-400"
-              placeholder="vas@email.sk"
+              placeholder={t('vas@email.sk')}
             />
           </div>
 
           <div>
-            <label className="text-sm text-gray-400">Heslo</label>
+            <label className="text-sm text-gray-400">{t('Heslo')}</label>
             <input
               type="password"
               name="password"
@@ -124,14 +126,19 @@ function LoginForm() {
             disabled={loading}
             className="w-full mt-4 bg-[#b5ef33] hover:bg-[#a2db25] text-black font-semibold py-3 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
           >
-            {loading ? 'PRIHLASUJEM...' : 'PRIHLÁSIŤ SA'}
+            {t(loading ? 'PRIHLASUJEM...' : 'PRIHLÁSIŤ SA')}
           </button>
         </form>
 
         <p className="text-center text-sm text-gray-400 mt-6">
-          Nemáš účet?{' '}
+          {t('Nemáš účet?')}{' '}
           <Link href="/auth/sign-up" className="text-app-lime hover:underline">
-            Registrovať sa
+            {t('Registrovať sa')}
+          </Link>
+        </p>
+        <p className="mt-3 text-center text-sm">
+          <Link href={`/auth/forgot-password?email=${encodeURIComponent(form.email.trim())}`} className="text-app-lime hover:underline">
+            {t('Zabudli ste heslo?')}
           </Link>
         </p>
       </div>

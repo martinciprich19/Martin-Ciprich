@@ -1,19 +1,26 @@
 import { uiPatterns, uiTranslations } from '@/lib/i18n/ui-translations'
+import { dutchDictionary, dutchPatterns } from '@/lib/i18n/dutch-translations'
+import type { AppLanguage } from '@/lib/i18n/language'
+import { sportDutch } from '@/lib/i18n/sport-dutch'
+import { sharedDutch } from '@/lib/i18n/shared-dutch'
 
 const ATTRIBUTES = ['placeholder', 'aria-label', 'title', 'alt'] as const
 const SKIPPED_TAGS = new Set(['SCRIPT', 'STYLE', 'TEXTAREA', 'NOSCRIPT', 'CODE'])
 
 type Applied = { original: string; applied: string }
 
-export function createTranslator(extra: Record<string, string>) {
-  const lookup: Record<string, string> = { ...extra, ...uiTranslations }
+export function createTranslator(extra: Record<string, string>, language: AppLanguage = 'en') {
+  const lookup: Record<string, string> = language === 'sk' ? {} : {
+    ...extra, ...(language === 'nl' ? { ...dutchDictionary(uiTranslations), ...sportDutch, ...sharedDutch } : uiTranslations),
+  }
+  const patterns = language === 'nl' ? dutchPatterns : language === 'en' ? uiPatterns : []
 
   function translateString(value: string): string | null {
     const trimmed = value.trim()
     if (!trimmed) return null
     const exact = lookup[trimmed]
     if (exact !== undefined) return value.replace(trimmed, () => exact)
-    for (const [pattern, replacement] of uiPatterns) {
+    for (const [pattern, replacement] of patterns) {
       if (pattern.test(trimmed)) return value.replace(trimmed, () => trimmed.replace(pattern, replacement))
     }
     return null
@@ -22,7 +29,7 @@ export function createTranslator(extra: Record<string, string>) {
   return { translateString }
 }
 
-// Translates rendered Slovak text/attributes to English in the live DOM and restores them when disabled.
+// Restore the source before starting another locale, without overwriting newer React updates.
 export function startDomTranslation(translateString: (value: string) => string | null) {
   const textState = new WeakMap<Text, Applied>()
   const attrState = new WeakMap<Element, Map<string, Applied>>()

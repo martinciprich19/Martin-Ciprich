@@ -4,6 +4,34 @@ import { readFile } from 'node:fs/promises'
 import vm from 'node:vm'
 import { getQrScanRegion, QR_VIEWFINDER_RATIO } from '../lib/qr-scan-region.ts'
 
+test('QR league scanner requests the front camera through the installed scanner library', async () => {
+  const component = await readFile(new URL('../components/riva-qr-scanner.tsx', import.meta.url), 'utf8')
+  const preferredCamera = component.match(/preferredCamera:\s*'([^']+)'/)?.[1]
+  assert.equal(preferredCamera, 'user')
+  const requests = []
+  const stream = { getVideoTracks: () => [{ getSettings: () => ({ facingMode: 'user' }) }] }
+  const context = vm.createContext({
+    navigator: {
+      mediaDevices: {
+        getUserMedia: async (constraints) => {
+          requests.push(constraints)
+          return stream
+        },
+      },
+    },
+  })
+  const source = await readFile(new URL('../node_modules/qr-scanner/qr-scanner.min.js', import.meta.url), 'utf8')
+  new vm.Script(source.replace('export default e', 'globalThis.Scanner = e')).runInContext(context)
+  const scanner = Object.create(context.Scanner.prototype)
+  scanner._preferredCamera = preferredCamera
+  const result = await scanner._getCameraStream()
+  assert.equal(requests.length, 1)
+  assert.equal(requests[0].video.facingMode.exact, 'user')
+  assert.equal(requests[0].audio, false)
+  assert.equal(result.stream, stream)
+  assert.equal(result.facingMode, 'user')
+})
+
 test('viewfinder is a centered square matching 70% of the visible object-cover camera', () => {
   for (const [width, height] of [[1920, 1080], [1080, 1920], [720, 720], [640, 480], [3840, 2160]]) {
     const region = getQrScanRegion(width, height)

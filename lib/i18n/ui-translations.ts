@@ -1,6 +1,8 @@
 // Slovak -> English phrases applied to rendered text by lib/i18n/dom-translator.ts.
 // Keys must match the rendered Slovak text exactly (whitespace is trimmed).
 export const uiTranslations: Record<string, string> = {
+  'Celonárodná komunitná sieť': 'Nationwide community network',
+  'Prepoj sa s hráčmi a padelovými arénami po celej krajine. Vyzývaj súperov v ľubovoľnom regióne bez ohľadu na úroveň.': 'Connect with players and padel arenas nationwide. Challenge opponents in any region regardless of level.',
   // Regions, levels, hands
   'Bratislavský kraj': 'Bratislava Region', 'Trnavský kraj': 'Trnava Region', 'Trenčiansky kraj': 'Trenčín Region', 'Nitriansky kraj': 'Nitra Region', 'Žilinský kraj': 'Žilina Region', 'Banskobystrický kraj': 'Banská Bystrica Region', 'Prešovský kraj': 'Prešov Region', 'Košický kraj': 'Košice Region',
   'Bratislavský': 'Bratislava', 'Trnavský': 'Trnava', 'Trenčiansky': 'Trenčín', 'Nitriansky': 'Nitra', 'Žilinský': 'Žilina', 'Banskobystrický': 'Banská Bystrica', 'Prešovský': 'Prešov', 'Košický': 'Košice',

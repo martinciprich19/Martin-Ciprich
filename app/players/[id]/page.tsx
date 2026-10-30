@@ -127,7 +127,10 @@ export default function PublicPlayerProfilePage() {
               {player.avatar_url ? <button type="button" onClick={() => setAvatarOpen(true)} aria-label={t('Zväčšiť profilovú fotografiu', 'Enlarge profile photo')} className="mb-5 block cursor-zoom-in rounded-full"><PlayerAvatar name={player.full_name} src={player.avatar_url} gender={player.gender} className="size-20 text-3xl" /></button> : <div className="mb-5"><PlayerAvatar name={player.full_name} gender={player.gender} className="size-20 text-3xl" /></div>}
               <p className="text-xs font-bold uppercase tracking-[0.22em] text-app-league">RIVA / {t('Profil hráča', 'PLAYER PROFILE')}</p>
               <h1 className="mt-3 text-3xl font-black md:text-4xl">{player.full_name}</h1>
-              <p className="mt-3 flex items-center gap-2 text-sm text-app-fg/50"><MapPin size={15} aria-hidden="true" /> {player.region || t('Kraj neuvedený', 'Region not specified')} · {player.level || t('Úroveň neuvedená', 'Level not specified')}</p>
+              <p className="mt-3 flex items-center gap-2 text-sm text-app-fg/50">
+                <MapPin size={15} className="shrink-0" aria-hidden="true" />
+                <span>{player.country_code === 'NL' ? t('Holandsko', 'Netherlands') : t('Slovensko', 'Slovakia')} · {player.region || (player.country_code === 'NL' ? t('Provincia neuvedená', 'Province not specified') : t('Kraj neuvedený', 'Region not specified'))} · {player.level || t('Úroveň neuvedená', 'Level not specified')}</span>
+              </p>
               {currentProfileId !== null && currentProfileId !== player.id ? friendshipStatus === 'accepted' ? <button type="button" disabled={friendshipLoading || friendshipRemoving} onClick={() => void removeFriend()} className="mt-4 inline-flex items-center gap-2 rounded-lg border border-red-400/30 px-3 py-2 text-xs font-bold text-app-red-200 hover:bg-red-400/10 disabled:cursor-not-allowed disabled:opacity-50">
                 <Trash2 size={14} />{friendshipRemoving ? t('Odstraňujem…', 'Removing…') : t('Odstrániť priateľa', 'Remove friend')}
               </button> : <button type="button" disabled={friendshipLoading || friendRequestSending || friendshipStatus !== 'none'} onClick={() => void addFriend()} className="mt-4 inline-flex items-center gap-2 rounded-lg border border-app-line/10 px-3 py-2 text-xs font-bold text-app-fg/75 hover:border-[#ccff00]/50 disabled:cursor-not-allowed disabled:opacity-50">
@@ -154,7 +157,7 @@ export default function PublicPlayerProfilePage() {
                   {matches.map((match) => {
                     const isWin = match.result === 'win'
                     return <li key={match.id}><div onClick={() => setDetailMatchId(match.id)} className="group -mx-3 flex w-[calc(100%+1.5rem)] cursor-pointer flex-col gap-3 rounded-lg px-3 py-5 text-left transition-colors hover:bg-app-overlay/[0.03] sm:flex-row sm:items-center sm:justify-between">
-                      <div><p className="font-bold">{match.opponent_name}</p><time dateTime={match.match_date} className="mt-1 block text-xs text-app-fg/45">{new Intl.DateTimeFormat(language === 'en' ? 'en-GB' : 'sk-SK', { dateStyle: 'medium' }).format(new Date(match.match_date))}</time></div>
+                      <div><p className="font-bold">{match.opponent_name}</p><time dateTime={match.match_date} className="mt-1 block text-xs text-app-fg/45">{new Intl.DateTimeFormat(language === 'nl' ? 'nl-NL' : language === 'en' ? 'en-GB' : 'sk-SK', { dateStyle: 'medium' }).format(new Date(match.match_date))}</time></div>
                       <div className="flex flex-wrap items-center gap-4"><p className="text-xs text-app-fg/55">{t('Sety', 'Sets')}: {match.sets_won} : {match.sets_lost} <span className="mx-1 text-app-fg/20">·</span> {t('Gemy', 'Games')}: {match.games_won} : {match.games_lost}</p><span className={`rounded-md px-2.5 py-1.5 text-[10px] font-black ${isWin ? 'bg-emerald-400/15 text-app-emerald-300' : 'bg-red-400/15 text-app-red-300'}`}>{isWin ? t('VÝHRA', 'WIN') : t('PREHRA', 'LOSS')}</span><MatchDetailButton matchId={match.id} onOpen={setDetailMatchId} /></div>
                     </div></li>
                   })}

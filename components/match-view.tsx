@@ -19,8 +19,10 @@ import { awardLivePoint, removeLastTeamPoint, resetLiveGame, getPointAnnouncemen
 import { useKioskInactivity } from '@/lib/use-kiosk-inactivity'
 import { PauseMatchDialog } from '@/components/pause-match-dialog'
 import { createMatchClickerHandler, type ClickerInputStatus } from '@/lib/match-clicker'
+import { isCountryCode, type CountryCode } from '@/lib/countries'
 
 type MatchRow = LiveScore & {
+  country_code: CountryCode
   scoring_type: 'golden_point' | 'advantage'
   set_format: 'standard' | 'pro_set' | 'seven_games_no_tiebreak'
   third_set_format: 'full_set' | 'super_tiebreak'
@@ -82,6 +84,7 @@ function formatDuration(totalSeconds: number): string {
 }
 
 function normalizeMatch(row: Record<string, unknown>): MatchRow {
+  if (!isCountryCode(row.country_code)) throw new Error('Zápas neobsahuje platnú krajinu. Spusti SQL migráciu 069.')
   const servingTeam = row.serving_team
   const streakTeam = row.streak_team
   const scoringType = row.scoring_type ?? 'golden_point'
@@ -144,6 +147,7 @@ function normalizeMatch(row: Record<string, unknown>): MatchRow {
 
   return {
     ended_early_at: toTimestamp(row.ended_early_at, 'predčasný koniec'),
+    country_code: row.country_code,
     paused_at: toTimestamp(row.paused_at, 'paused_at'),
     paused_seconds: row.paused_seconds,
     tiebreak_score: parseTiebreakScore(row.tiebreak_score),
@@ -289,7 +293,7 @@ function formatScore(score: number) {
   return String(score)
 }
 
-export function MatchView({ matchId, kioskMode = false, viewerMode = false }: { matchId: string; kioskMode?: boolean; viewerMode?: boolean }) {
+export function MatchView({ matchId, kioskMode = false, viewerMode = false, courtId = null }: { matchId: string; kioskMode?: boolean; viewerMode?: boolean; courtId?: string | null }) {
   const router = useRouter()
   const { language, setLanguage, t } = useLanguage()
   const languageRef = useRef(language)
@@ -298,6 +302,11 @@ export function MatchView({ matchId, kioskMode = false, viewerMode = false }: { 
   const audioRef = useRef<MatchAudio | null>(null)
   const [muted, setMuted] = useState(false)
   const [helperMode, setHelperMode] = useState(false)
+  const [androidHelper, setAndroidHelper] = useState(false)
+  const activeHelperMode = androidHelper || (!kioskMode && helperMode)
+  useEffect(() => {
+    setAndroidHelper(navigator.userAgent.includes('RivaAndroidKiosk/1'))
+  }, [])
   const mutedRef = useRef(false)
   const [match, setMatch] = useState<MatchRow | null>(null)
   const [clockNow, setClockNow] = useState<number | null>(null)
@@ -341,9 +350,9 @@ export function MatchView({ matchId, kioskMode = false, viewerMode = false }: { 
     } catch (resetError) {
       console.error('QR kioskový token sa nepodarilo odstrániť:', resetError)
     }
-    router.replace(kioskMode ? '/match?mode=kiosk' : '/match')
+    router.replace(kioskMode && courtId ? `/kiosk?courtId=${encodeURIComponent(courtId)}` : kioskMode ? '/match?mode=kiosk' : '/match')
     router.refresh()
-  }, [kioskMode, matchId, router])
+  }, [courtId, kioskMode, matchId, router])
 
   useKioskInactivity(!isLoading && match !== null && !match.finished_at && !match.paused_at && !confirmingEnd && !confirmingPause && !getMatchWinner(match), resetKiosk)
 
@@ -430,12 +439,12 @@ export function MatchView({ matchId, kioskMode = false, viewerMode = false }: { 
 
   const announce = useCallback((slovak: string, english: string) => {
     if (mutedRef.current) return
-    const currentLanguage = languageRef.current
+    const currentLanguage = languageRef.current === 'sk' ? 'sk' : 'en'
     void audioRef.current?.speak(currentLanguage === 'sk' ? slovak : english, currentLanguage)
   }, [])
 
   const celebrateWinner = useCallback((announcement: { sk: string; en: string }) => {
-    const currentLanguage = languageRef.current
+    const currentLanguage = languageRef.current === 'sk' ? 'sk' : 'en'
     void audioRef.current?.celebrate(announcement[currentLanguage], currentLanguage)
   }, [])
 
@@ -452,7 +461,7 @@ export function MatchView({ matchId, kioskMode = false, viewerMode = false }: { 
         }
         const { data, error: queryError } = await supabase
           .from('live_matches')
-          .select(`${MATCH_COLUMNS}, service_game_statistics, scoring_type, advantage_team, tiebreak_score`)
+          .select(`${MATCH_COLUMNS}, country_code, service_game_statistics, scoring_type, advantage_team, tiebreak_score`)
           .eq('id', matchId)
           .maybeSingle()
         if (queryError) throw queryError
@@ -599,7 +608,7 @@ export function MatchView({ matchId, kioskMode = false, viewerMode = false }: { 
         .filter('advantage_team', current.advantage_team === null ? 'is' : 'eq', current.advantage_team ?? 'null')
         .filter('tiebreak_score', current.tiebreak_score == null ? 'is' : 'eq', current.tiebreak_score == null ? 'null' : JSON.stringify(current.tiebreak_score))
         .eq('set_statistics', JSON.stringify(current.set_statistics))
-        .select(`${MATCH_COLUMNS}, service_game_statistics, scoring_type, advantage_team, tiebreak_score`)
+        .select(`${MATCH_COLUMNS}, country_code, service_game_statistics, scoring_type, advantage_team, tiebreak_score`)
         .single()
       if (updateError?.code === 'PGRST116') {
         throw new Error('Zápas sa medzičasom zmenil na inom zariadení. Obnov stránku a skús bod pridať znova.')
@@ -681,7 +690,7 @@ export function MatchView({ matchId, kioskMode = false, viewerMode = false }: { 
       setPauseReceipt(receipt)
       historyRef.current = []
       const { data: saved, error: reloadError } = await supabase.from('live_matches')
-        .select(`${MATCH_COLUMNS}, service_game_statistics, scoring_type, advantage_team, tiebreak_score`)
+        .select(`${MATCH_COLUMNS}, country_code, service_game_statistics, scoring_type, advantage_team, tiebreak_score`)
         .eq('id', matchId).single()
       if (reloadError) throw reloadError
       const paused = normalizeMatch(saved)
@@ -711,7 +720,7 @@ export function MatchView({ matchId, kioskMode = false, viewerMode = false }: { 
       if (endError) throw endError
       if (data?.matchId !== matchId) throw new Error('Databáza nepotvrdila ukončenie zápasu.')
       const { data: saved, error: reloadError } = await supabase.from('live_matches')
-        .select(`${MATCH_COLUMNS}, service_game_statistics, scoring_type, advantage_team, tiebreak_score`)
+        .select(`${MATCH_COLUMNS}, country_code, service_game_statistics, scoring_type, advantage_team, tiebreak_score`)
         .eq('id', matchId).single()
       if (reloadError) throw reloadError
       const ended = normalizeMatch(saved)
@@ -753,6 +762,12 @@ export function MatchView({ matchId, kioskMode = false, viewerMode = false }: { 
         p_previous_match_id: matchId, p_next_match_id: pending.id, p_device_token: pending.token,
         p_team_slots: [...teamSlots],
       })
+      if (creationError?.code === 'PGRST202') {
+        throw new Error(t(
+          'V Supabase chýba funkcia pre ďalší zápas s výberom dvojíc. V SQL Editore spusti celý súbor scripts/065_rematch_team_selection.sql a potom klikni znova.',
+          'The database is missing the next-match team selection function. Run scripts/065_rematch_team_selection.sql in the Supabase SQL Editor, then try again.',
+        ))
+      }
       if (creationError) throw creationError
       if (data !== pending.id) throw new Error('Databáza nepotvrdila vytvorenie ďalšieho zápasu.')
       audioRef.current?.stop()
@@ -844,7 +859,7 @@ export function MatchView({ matchId, kioskMode = false, viewerMode = false }: { 
     announce(`Podáva Tím ${team === 'TEAM_A' ? 1 : 2}, hráč ${player}.`, `Team ${team === 'TEAM_A' ? 1 : 2}, player ${player} serves.`)
   }
 
-  const clickerDiagnostic = useBleClicker(addTeamAPoint, addTeamBPoint, undoTeamPoint, undo, resetGame, Boolean(canEdit && !confirmingPause && !confirmingEnd && !match?.finished_at && !match?.paused_at && match?.initial_server_chosen && !getMatchWinner(match) && (match.challenge_id === null || match.is_pin_activated)), helperMode, () => writeInFlightRef.current)
+  const clickerDiagnostic = useBleClicker(addTeamAPoint, addTeamBPoint, undoTeamPoint, undo, resetGame, Boolean(canEdit && !confirmingPause && !confirmingEnd && !match?.finished_at && !match?.paused_at && match?.initial_server_chosen && !getMatchWinner(match) && (match.challenge_id === null || match.is_pin_activated)), activeHelperMode, () => writeInFlightRef.current)
 
   if (isLoading) {
     return <div className="mx-auto max-w-5xl py-24 text-center text-sm text-app-fg/60" role="status">Načítavam zápas…</div>
@@ -1005,6 +1020,7 @@ export function MatchView({ matchId, kioskMode = false, viewerMode = false }: { 
             <Check size={18} aria-hidden="true" />
             {isSaving ? t('Dokončujem zápas…', 'Finishing match…') : t('Ukončiť zápas', 'End match')}
           </button>
+          {error ? <p role="alert" className="w-full text-sm text-app-red-300">{error}</p> : null}
         </div>
         </div>
       </section>
@@ -1163,6 +1179,7 @@ export function MatchView({ matchId, kioskMode = false, viewerMode = false }: { 
         </section>
       ) : null}
 
+      {language === 'nl' ? <p className="court-status mt-3 text-center text-xs text-app-fg/55">{t('Hlasové hlásenia sú zatiaľ dostupné v angličtine.', 'Voice announcements are currently available in English.')}</p> : null}
       <p role="status" className={`court-status mt-3 text-center text-xs ${speechStatus === 'ready' ? 'text-app-fg/55' : 'text-app-amber-200'}`}>
         {muted ? t('Hlasové hlásenia sú stíšené.', 'Voice announcements are muted.') : speechStatus === 'ready'
           ? t('Hlas Jessa je zapnutý: slovenčina.', 'Jessa voice enabled: English.')
@@ -1178,16 +1195,19 @@ export function MatchView({ matchId, kioskMode = false, viewerMode = false }: { 
       </p>
 
       <p className="mt-4 text-center text-xs text-app-fg/35">Skratky: A = bod pre Tím 1 · L = bod pre Tím 2 · Z = späť · M = reset gemu</p>
-      {canEdit ? <label className="mt-4 flex items-center justify-center gap-2 text-sm text-app-fg/75">
+      {canEdit && !kioskMode && !androidHelper ? <label className="mt-4 flex items-center justify-center gap-2 text-sm text-app-fg/75">
         <input type="checkbox" data-match-clicker-helper checked={helperMode} onChange={(event) => setHelperMode(event.target.checked)} />
         {t('Windows pomocník pre dva rovnaké klikre', 'Windows helper for two identical clickers')}
       </label> : null}
-      <p role="status" className="mt-2 text-center text-xs text-app-fg/45">{helperMode
+      {androidHelper ? <p role="status" className="mt-4 text-center text-sm text-app-fg/75">{t('Android pomocník je automaticky zapnutý. Klikre priraď k tímom v hornej lište aplikácie.', 'Android helper is enabled automatically. Assign clickers to teams in the app toolbar.')}</p> : null}
+      <p role="status" className="mt-2 text-center text-xs text-app-fg/45">{androidHelper
+        ? t('Android: priradený kliker ovláda svoj tím. Po návrate do aplikácie alebo odpojení priraď klikre znova.', 'Android: each assigned clicker controls its team. Reassign after returning to the app or disconnecting.')
+        : activeHelperMode
         ? t('Pomocník: F13 = Tím 1 · F14 = Tím 2. Pôvodné mediálne klávesy sú ignorované. Po obnovení stránky zapni tento režim znova.', 'Helper: F13 = Team 1 · F14 = Team 2. Original media keys are ignored. Re-enable this mode after reloading.')
         : t('Bluetooth kliker: VolumeUp / medzerník = Tím 1 · VolumeDown / PlayPause / Enter = Tím 2.', 'Bluetooth clicker: VolumeUp / Space = Team 1 · VolumeDown / PlayPause / Enter = Team 2.')}</p>
       <p className="mt-2 text-center text-xs text-app-fg/55">{t('Kliker: 1 stlačenie = pridať bod (po 350 ms) · 2 rýchle stlačenia toho istého klikra = odobrať posledný bod jeho tímu. Platí aj po bode súpera. A/L pridávajú bod ihneď.', 'Clicker: 1 press = add a point (after 350 ms) · 2 quick presses of the same clicker = remove its team’s last point, even after an opponent’s point. A/L add points immediately.')}</p>
-      {helperMode ? <p role="status" className="mt-2 text-center text-xs text-app-fg/75">
-        {t('Vstup Windows pomocníka:', 'Windows helper input:')} {clickerDiagnostic
+      {activeHelperMode ? <p role="status" className="mt-2 text-center text-xs text-app-fg/75">
+        {androidHelper ? t('Vstup Android pomocníka:', 'Android helper input:') : t('Vstup Windows pomocníka:', 'Windows helper input:')} {clickerDiagnostic
           ? `${clickerDiagnostic.key} / ${clickerDiagnostic.code || '—'} (#${clickerDiagnostic.count}) — ${{
             received: t('prijatý vstup', 'input received'),
             context: t('ignorované: klikni na nadpis zápasu, mimo polí a dialógov', 'ignored: click the match heading, outside fields and dialogs'),

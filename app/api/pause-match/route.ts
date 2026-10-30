@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { setTimeout as delay } from 'node:timers/promises'
 import { sendPauseEmail } from '@/lib/match-pause-email'
+import { isAppLanguage, type AppLanguage } from '@/lib/countries'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -48,6 +49,16 @@ export async function POST(request: Request) {
       }
     }
     let failed = 0
+    const recipientLanguages = new Map<string, AppLanguage>()
+    if (data.length) {
+      const { data: recipients, error: recipientsError } = await admin.from('proffiles')
+        .select('email, preferred_language').in('email', data.map(job => job.recipient))
+      if (recipientsError) throw recipientsError
+      for (const recipient of recipients ?? []) {
+        if (!isAppLanguage(recipient.preferred_language)) throw new Error('Príjemca nemá platný jazyk e-mailu.')
+        recipientLanguages.set(recipient.email.trim().toLowerCase(), recipient.preferred_language)
+      }
+    }
     for (const [index, job] of data.entries()) {
       if (!job || typeof job.email_id !== 'string' || typeof job.recipient !== 'string'
         || typeof job.pin !== 'string' || !/^\d{4}$/.test(job.pin)) {
@@ -56,7 +67,9 @@ export async function POST(request: Request) {
       try {
         // Space submissions to avoid per-second provider rate limits.
         if (index > 0) await delay(600)
-        await sendPauseEmail(job, apiKey, from)
+        const language = recipientLanguages.get(job.recipient.trim().toLowerCase())
+        if (!language) throw new Error('Jazyk účastníka zápasu sa nepodarilo nájsť.')
+        await sendPauseEmail(job, apiKey, from, language)
         const { error: markError } = await admin.rpc('mark_match_pause_email_sent', { p_email_id: job.email_id })
         if (markError) throw markError
       } catch (sendError) {

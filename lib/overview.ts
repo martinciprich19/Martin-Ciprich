@@ -30,6 +30,7 @@ export async function fetchOverviewStats(email: string): Promise<OverviewStats |
       .from('proffiles')
       .select('id', { count: 'exact', head: true })
       .gt('elo_rating', elo)
+      .eq('country_code', row.country_code)
       .not('email', 'like', `%${DELETED_PROFILE_EMAIL_DOMAIN}`)
     if (rankError) throw rankError
     rank = (count ?? 0) + 1

@@ -112,4 +112,5 @@ $$;
 revoke all on function public.create_live_match_rematch(uuid, uuid, text, smallint[]) from public;
 grant execute on function public.create_live_match_rematch(uuid, uuid, text, smallint[]) to anon, authenticated;
 
+notify pgrst, 'reload schema';
 commit;

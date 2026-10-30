@@ -20,6 +20,14 @@ test('English selection prefers British English and allows another English local
   assert.equal(getMatchVoice([regional], 'sk'), regional)
 })
 
+test('Dutch device speech prefers the Netherlands and never selects English', () => {
+  const dutch = { name: 'Dutch', lang: 'nl-NL' }
+  const flemish = { name: 'Flemish', lang: 'nl-BE' }
+  assert.equal(getMatchVoice([american, flemish, dutch], 'nl'), dutch)
+  assert.equal(getMatchVoice([american, flemish], 'nl'), flemish)
+  assert.equal(getMatchVoice([american, british], 'nl'), undefined)
+})
+
 test('Switching languages sets the exact voice and cancels previous announcements', () => {
   const spoken = []
   let cancellations = 0

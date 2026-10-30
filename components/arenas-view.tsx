@@ -1,8 +1,9 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import { Clock, MapPin, Search } from 'lucide-react'
 import { useLanguage } from '@/components/language-provider'
+import { useLeague } from '@/components/league-provider'
 import type { Arena } from '@/lib/arenas'
 
 export const ALL_CITIES = 'Všetky mestá'
@@ -27,10 +28,18 @@ type ArenasViewProps = {
 
 export function ArenasView({ arenas, isLoading, loadError, region, setRegion, search, setSearch, onChallenge, onMatch, onSetHome }: ArenasViewProps) {
   const { t } = useLanguage()
-  const cities = useMemo(() => [...new Set(arenas.map((arena) => arena.city).filter(Boolean))].sort((a, b) => a.localeCompare(b)), [arenas])
-  const visibleArenas = arenas.filter((arena) =>
+  const { country, isLoading: leagueLoading } = useLeague()
+  useEffect(() => {
+    setRegion(ALL_CITIES)
+    setSearch('')
+  }, [country, setRegion, setSearch])
+  const countryArenas = useMemo(() => arenas.filter((arena) => arena.country_code === country), [arenas, country])
+  const cities = useMemo(() => [...new Set(countryArenas.map((arena) => arena.city).filter(Boolean))].sort((a, b) => a.localeCompare(b)), [countryArenas])
+  const visibleArenas = countryArenas.filter((arena) =>
     (region === ALL_CITIES || arena.city === region) &&
     `${arena.name} ${arena.city} ${arena.address}`.toLowerCase().includes(search.toLowerCase()))
+
+  if (leagueLoading) return null
 
   return (
     <div id="arenas" className="mx-auto max-w-[1120px]">
@@ -61,8 +70,8 @@ export function ArenasView({ arenas, isLoading, loadError, region, setRegion, se
       ) : visibleArenas.length === 0 ? (
         <div className="mt-8 flex min-h-[280px] flex-col items-center justify-center rounded-2xl border border-app-line/10 bg-app-panel p-6 text-center">
           <MapPin size={36} className="text-app-league" aria-hidden="true" />
-          <h2 className="mt-4 text-xl font-black">{arenas.length === 0 ? t('Zatiaľ žiadne partnerské arény') : t('V tomto výbere nie je žiadna aréna')}</h2>
-          <p className="mt-2 max-w-md text-sm leading-relaxed text-app-fg/45">{arenas.length === 0 ? t('Liga práve pripravuje spoluprácu s arénami. Prvé kluby sa tu zobrazia čoskoro.') : t('Skús iné mesto alebo vyhľadávanie.')}</p>
+          <h2 className="mt-4 text-xl font-black">{countryArenas.length === 0 ? t('Zatiaľ žiadne partnerské arény') : t('V tomto výbere nie je žiadna aréna')}</h2>
+          <p className="mt-2 max-w-md text-sm leading-relaxed text-app-fg/45">{countryArenas.length === 0 ? t('Liga práve pripravuje spoluprácu s arénami. Prvé kluby sa tu zobrazia čoskoro.') : t('Skús iné mesto alebo vyhľadávanie.')}</p>
         </div>
       ) : (
         <ul className="mt-6 grid gap-5 md:grid-cols-2 xl:grid-cols-3">

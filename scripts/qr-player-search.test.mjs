@@ -16,7 +16,8 @@ const compiled = transformSync(source, {
 
 function harness() {
   const states = [], effects = [], timers = new Map(), requests = [], selections = []
-  let cursor = 0, timerId = 0
+  let cursor = 0, timerId = 0, previousKey
+  let league = { country: 'SK', profileCountry: 'SK', isLoading: false }
   const react = {
     createElement,
     useState(initial) {
@@ -39,7 +40,7 @@ function harness() {
     from(table) {
       const query = { table }
       const builder = {}
-      for (const method of ['select', 'ilike', 'order', 'limit']) {
+      for (const method of ['select', 'ilike', 'order', 'limit', 'eq']) {
         builder[method] = (...args) => { query[method] = args; return builder }
       }
       builder.abortSignal = signal => new Promise(resolve => { requests.push({ ...query, signal, resolve }) })
@@ -50,6 +51,7 @@ function harness() {
   const mocks = {
     react,
     '@/components/language-provider': { useLanguage: () => ({ t: (sk) => sk }) },
+    '@/components/league-provider': { useLeague: () => league },
     '@/lib/supabase/client': { createClient: () => client },
     '@/lib/errors': { getErrorMessage: (error) => error.message },
     '@/components/player-avatar': { PlayerAvatar: () => null },
@@ -64,7 +66,17 @@ function harness() {
   function render(overrides = {}) {
     props = { ...props, ...overrides }
     cursor = 0
-    const tree = module.exports.QrPlayerSearch(props)
+    let tree = module.exports.QrPlayerSearch(props)
+    if (tree && typeof tree.type === 'function') {
+      if (previousKey !== undefined && previousKey !== tree.key) {
+        for (const effect of effects) effect?.cleanup?.()
+        states.length = 0
+        effects.length = 0
+        cursor = 0
+      }
+      previousKey = tree.key
+      tree = tree.type(tree.props)
+    }
     for (const effect of effects) {
       if (effect?.pending) {
         const callback = effect.pending
@@ -88,7 +100,8 @@ function harness() {
   function flush() {
     for (const [id, fn] of timers) { timers.delete(id); void fn() }
   }
-  return { render, change, flush, requests, selections, input, options, nodes }
+  return { render, change, flush, requests, selections, input, options, nodes,
+    setLeague: (updates) => { league = { ...league, ...updates }; return render() } }
 }
 
 const tick = () => new Promise(resolve => setImmediate(resolve))
@@ -137,4 +150,18 @@ test('stale results are aborted/ignored; failures offer retry and disabled searc
   assert.equal(h.requests.length, 4)
   h.render({ disabled: true }); h.change('Ev'); h.flush()
   assert.equal(h.requests.length, 4)
+})
+
+test('official search uses membership while browsing another country and aborts when country changes', async () => {
+  const h = harness()
+  h.setLeague({ country: 'NL', profileCountry: 'SK' })
+  h.change('Ma'); h.flush()
+  assert.deepEqual(Array.from(h.requests[0].eq), ['country_code', 'SK'])
+  h.setLeague({ country: 'SK', profileCountry: 'NL' })
+  assert.equal(h.requests[0].signal.aborted, true)
+  assert.equal(h.input(h.render()).props.value, '')
+  h.change('Ma'); h.flush()
+  assert.deepEqual(Array.from(h.requests[1].eq), ['country_code', 'NL'])
+  h.requests[1].resolve({ data: [], error: null })
+  await tick()
 })

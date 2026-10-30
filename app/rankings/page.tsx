@@ -1,8 +1,8 @@
-import { cookies } from 'next/headers'
+import { getPublicNavigation } from '@/lib/public-navigation'
 import { PublicShell } from '@/components/public-shell'
 import { RankingsView } from '@/components/rankings-view'
 
 export default async function RankingsPage() {
-  const kioskMode = (await cookies()).get('riva-kiosk-mode')?.value === '1'
-  return <PublicShell kioskMode={kioskMode}><RankingsView publicView /></PublicShell>
+  const navigation = await getPublicNavigation()
+  return <PublicShell {...navigation}><RankingsView publicView /></PublicShell>
 }

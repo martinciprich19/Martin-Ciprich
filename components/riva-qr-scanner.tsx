@@ -212,7 +212,7 @@ export function RivaQrScanner({ onClose, kioskMode = false }: { onClose: () => v
             }
           })()
         }, {
-          preferredCamera: 'environment',
+          preferredCamera: 'user',
           returnDetailedScanResult: true,
           highlightScanRegion: true,
           highlightCodeOutline: false,

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import useSWR from 'swr'
 import { Calendar, Check, MapPin, Send, Swords, Trash2, Users, X } from 'lucide-react'
 import { useLanguage } from '@/components/language-provider'
+import { useLeague } from '@/components/league-provider'
 import { createClient } from '@/lib/supabase/client'
 import type { Arena } from '@/lib/arenas'
 import { getErrorMessage } from '@/lib/errors'
@@ -42,8 +43,14 @@ type PairChallengeViewProps = {
 const winRate = (player: PairPlayer) => player.matches_played ? Math.round((player.matches_won / player.matches_played) * 100) : 0
 const pairElo = (pair: PlayerPair) => Math.round((pair.player_1.elo + pair.player_2.elo) / 2)
 
-export function PairChallengeView({ userId, arenas, initialArena, onOpenPairs, initialChallengedPair, onInitialPairApplied }: PairChallengeViewProps) {
+export function PairChallengeView(props: PairChallengeViewProps) {
+  const { country, isLoading } = useLeague()
+  return isLoading ? null : <CountryPairChallengeView key={country} {...props} arenas={props.arenas.filter((arena) => arena.country_code === country)} />
+}
+
+function CountryPairChallengeView({ userId, arenas, initialArena, onOpenPairs, initialChallengedPair, onInitialPairApplied }: PairChallengeViewProps) {
   const { language, t } = useLanguage()
+  const { country, regions } = useLeague()
   const [region, setRegion] = useState('')
   const [eloBand, setEloBand] = useState('')
   const [target, setTarget] = useState<PlayerPair | null>(null)
@@ -53,13 +60,12 @@ export function PairChallengeView({ userId, arenas, initialArena, onOpenPairs, i
   const [isDeleting, setIsDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState('')
 
-  const pairs = useSWR('league-pairs', fetchPairs)
+  const pairs = useSWR(['league-pairs', country], () => fetchPairs(country))
   const challenges = useSWR(userId ? ['pair-challenges', userId] : null, () => fetchMyPairChallenges(userId), { refreshInterval: 15000 })
-  const dateFormatter = new Intl.DateTimeFormat(language === 'en' ? 'en-GB' : 'sk-SK', { dateStyle: 'medium', timeStyle: 'short' })
+  const dateFormatter = new Intl.DateTimeFormat(language === 'nl' ? 'nl-NL' : language === 'en' ? 'en-GB' : 'sk-SK', { dateStyle: 'medium', timeStyle: 'short' })
 
   const allPairs = pairs.data ?? []
   const myPairs = allPairs.filter((pair) => pair.player_1_id === userId || pair.player_2_id === userId)
-  const regions = Array.from(new Set(allPairs.flatMap((pair) => [pair.player_1.region, pair.player_2.region]).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'sk'))
   const opponentPairs = allPairs
     .filter((pair) => !myPairs.includes(pair)
       && (!region || pair.player_1.region === region || pair.player_2.region === region)
@@ -132,9 +138,9 @@ export function PairChallengeView({ userId, arenas, initialArena, onOpenPairs, i
 
       <div className="mt-6 flex flex-wrap items-center gap-3">
         {showMyPairs ? <h2 className="text-lg font-black">{t('Moje dvojice')}</h2> : <label className="block w-full sm:w-72">
-          <span className="sr-only">{t('Filtrovať podľa kraja')}</span>
-          <select aria-label={t('Filtrovať podľa kraja')} value={region} onChange={(event) => setRegion(event.target.value)} className={inputClass}>
-            <option value="">{t('Všetky kraje')}</option>
+          <span className="sr-only">{country === 'NL' ? t('Provincia', 'Province') : t('Filtrovať podľa kraja')}</span>
+          <select aria-label={country === 'NL' ? t('Provincia', 'Province') : t('Filtrovať podľa kraja')} value={region} onChange={(event) => setRegion(event.target.value)} className={inputClass}>
+            <option value="">{country === 'NL' ? t('Všetky provincie', 'All provinces') : t('Všetky kraje')}</option>
             {regions.map((item) => <option key={item} value={item}>{item}</option>)}
           </select>
         </label>}

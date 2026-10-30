@@ -5,8 +5,9 @@ import { createClient } from '@/lib/supabase/client'
 import { DELETED_PROFILE_EMAIL_DOMAIN, type Gender } from '@/lib/profiles'
 import { withProfileGender } from '@/lib/profile-gender-query'
 import { PlayerAvatar } from '@/components/player-avatar'
+import { useLeague } from '@/components/league-provider'
+import { useLanguage } from '@/components/language-provider'
 
-const REGIONS = ['Bratislavský kraj', 'Trnavský kraj', 'Trenčiansky kraj', 'Nitriansky kraj', 'Žilinský kraj', 'Banskobystrický kraj', 'Prešovský kraj', 'Košický kraj']
 const LEVELS = ['Začiatočník', 'Mierne pokročilý', 'Pokročilý', 'Expert']
 const REQUEST_TYPES = [
   { value: 'potrebujeme_hraca', label: 'Potrebujeme jedného hráča', existingPlayers: 3 },
@@ -44,6 +45,14 @@ type Listing = {
 }
 
 export default function FindPlayerPage() {
+  const { country, isLoading } = useLeague()
+  return isLoading ? null : <CountryFindPlayerPage key={country} />
+}
+
+function CountryFindPlayerPage() {
+  const { country, regions: REGIONS } = useLeague()
+  const { t, language } = useLanguage()
+  const locale = language === 'nl' ? 'nl-NL' : language === 'en' ? 'en-GB' : 'sk-SK'
   const [activeTab, setActiveTab] = useState<'players' | 'listings'>('players')
   const [players, setPlayers] = useState<Player[]>([])
   const [listings, setListings] = useState<Listing[]>([])
@@ -93,7 +102,7 @@ export default function FindPlayerPage() {
 
       if (activeTab === 'players') {
         const { data, error: playersError } = await withProfileGender((columns) => {
-          let query = supabase.from('proffiles').select(columns).not('email', 'like', `%${DELETED_PROFILE_EMAIL_DOMAIN}`)
+          let query = supabase.from('proffiles').select(columns).eq('country_code', country).not('email', 'like', `%${DELETED_PROFILE_EMAIL_DOMAIN}`)
           const search = searchTerm.trim()
           if (search) query = query.ilike('full_name', `%${search}%`)
           return query.gte('elo_rating', filterEloMin).lte('elo_rating', filterEloMax).order('elo_rating', { ascending: false }).returns<Player[]>()
@@ -110,6 +119,7 @@ export default function FindPlayerPage() {
         const { data, error: listingsError } = await supabase
           .from('player_requests')
           .select('*, proffiles(full_name, email)')
+          .eq('country_code', country)
           .eq('is_active', true)
           .order('created_at', { ascending: false })
         if (listingsError) throw listingsError
@@ -124,7 +134,7 @@ export default function FindPlayerPage() {
     } finally {
       setLoading(false)
     }
-  }, [activeTab, searchTerm, filterRegion, filterLevel, filterEloMin, filterEloMax, listingRegion, listingLevel])
+  }, [country, activeTab, searchTerm, filterRegion, filterLevel, filterEloMin, filterEloMax, listingRegion, listingLevel])
 
   useEffect(() => {
     void fetchUserAndData()
@@ -134,13 +144,13 @@ export default function FindPlayerPage() {
     if (activeTab !== 'listings') return
     const supabase = createClient()
     const channel = supabase
-      .channel('player-requests-route-refresh')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'player_requests' }, () => {
+      .channel(`player-requests-route-refresh-${country}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'player_requests', filter: `country_code=eq.${country}` }, () => {
         void fetchUserAndData()
       })
       .subscribe()
     return () => { void supabase.removeChannel(channel) }
-  }, [activeTab, fetchUserAndData])
+  }, [country, activeTab, fetchUserAndData])
 
   function changeRequestType(value: string) {
     const nextCount = REQUEST_TYPES.find((type) => type.value === value)?.existingPlayers ?? 1
@@ -161,6 +171,7 @@ export default function FindPlayerPage() {
       return
     }
     const { error: insertError } = await createClient().from('player_requests').insert({
+      country_code: country,
       user_id: currentUserId,
       request_type: requestType,
       region,
@@ -231,7 +242,7 @@ export default function FindPlayerPage() {
           </div>
           <div className="mt-5 grid gap-4 rounded-xl border border-app-line/10 bg-app-surface p-4 md:grid-cols-5">
             <label className="grid gap-1.5 text-xs font-bold text-app-fg/55 md:col-span-5">Hľadať podľa mena<input type="search" value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Zadaj meno hráča" className={fieldClass} /></label>
-            <label className="grid gap-1.5 text-xs font-bold text-app-fg/55">Kraj<select value={filterRegion} onChange={(event) => setFilterRegion(event.target.value)} className={fieldClass}><option value="Všetky kraje">Všetky kraje</option>{REGIONS.map((item) => <option key={item}>{item}</option>)}</select></label>
+            <label className="grid gap-1.5 text-xs font-bold text-app-fg/55">{country === 'NL' ? t('Provincia', 'Province') : t('Kraj')}<select value={filterRegion} onChange={(event) => setFilterRegion(event.target.value)} className={fieldClass}><option value="Všetky kraje">{country === 'NL' ? t('Všetky provincie', 'All provinces') : t('Všetky kraje')}</option>{REGIONS.map((item) => <option key={item}>{item}</option>)}</select></label>
             <label className="grid gap-1.5 text-xs font-bold text-app-fg/55">Úroveň<select value={filterLevel} onChange={(event) => setFilterLevel(event.target.value)} className={fieldClass}><option value="">Všetky úrovne</option>{['Začiatočník', 'Mierne pokročilý', 'Pokročilý', 'Expert'].map((item) => <option key={item}>{item}</option>)}</select></label>
             <label className="grid gap-1.5 text-xs font-bold text-app-fg/55">Minimálne ELO: {filterEloMin}<input type="range" min="0" max="10000" step="100" value={filterEloMin} onChange={(event) => setFilterEloMin(Number(event.target.value))} /></label>
             <label className="grid gap-1.5 text-xs font-bold text-app-fg/55">Maximálne ELO: {filterEloMax}<input type="range" min="0" max="10000" step="100" value={filterEloMax} onChange={(event) => setFilterEloMax(Number(event.target.value))} /></label>
@@ -242,7 +253,7 @@ export default function FindPlayerPage() {
             <ul className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               {players.map((player) => <li key={player.id} className={cardClass}>
                 <div className="flex items-center gap-3"><PlayerAvatar name={player.full_name || '?'} src={player.avatar_url} gender={player.gender} className="size-12 text-lg" /><h3 className="text-lg font-bold">{player.full_name || 'Neznámy hráč'}</h3></div>
-                <p className="mt-1 text-sm text-app-fg/55">Kraj: {player.region || 'Nezadaný'}</p>
+                <p className="mt-1 text-sm text-app-fg/55">{country === 'NL' ? t('Provincia', 'Province') : t('Kraj')}: {player.region || t('Nezadaný', 'Not specified')}</p>
                 <p className="mt-1 text-sm text-app-fg/55">Úroveň: {player.level || 'Nezadaná'}</p>
                 <p className="mt-3 text-sm font-bold text-app-league">ELO: {player.elo_rating ?? 1000}</p>
               </li>)}
@@ -257,7 +268,7 @@ export default function FindPlayerPage() {
             <button type="button" onClick={() => setShowCreateModal(true)} className="rounded-lg bg-[#ccff00] px-4 py-2.5 text-sm font-black text-[#10150d]">+ Vytvoriť inzerát</button>
           </div>
           <div className="mt-5 grid max-w-2xl gap-3 sm:grid-cols-2">
-            <label className="grid gap-1.5 text-xs font-bold text-app-fg/55">Filtrovať podľa kraja<select value={listingRegion} onChange={(event) => setListingRegion(event.target.value)} className={fieldClass}><option value="">Všetky kraje</option>{REGIONS.map((item) => <option key={item}>{item}</option>)}</select></label>
+            <label className="grid gap-1.5 text-xs font-bold text-app-fg/55">{country === 'NL' ? t('Provincia', 'Province') : t('Filtrovať podľa kraja')}<select value={listingRegion} onChange={(event) => setListingRegion(event.target.value)} className={fieldClass}><option value="">{country === 'NL' ? t('Všetky provincie', 'All provinces') : t('Všetky kraje')}</option>{REGIONS.map((item) => <option key={item}>{item}</option>)}</select></label>
             <label className="grid gap-1.5 text-xs font-bold text-app-fg/55">Úroveň vyzývateľa<select value={listingLevel} onChange={(event) => setListingLevel(event.target.value)} className={fieldClass}><option value="">Všetky úrovne</option>{LEVELS.map((item) => <option key={item}>{item}</option>)}</select></label>
           </div>
           {error ? <p role="alert" className="mt-5 rounded-lg border border-red-400/30 bg-red-500/10 p-3 text-sm text-app-red-200">{error}</p> : null}
@@ -266,9 +277,9 @@ export default function FindPlayerPage() {
               {listings.map((listing) => <li key={listing.id} className={`${cardClass} flex flex-col justify-between`}>
                 <div>
                   <span className="rounded-full bg-[#ccff00]/10 px-2.5 py-1 text-xs font-semibold text-app-league">{REQUEST_TYPES.find((type) => type.value === listing.request_type)?.label ?? listing.request_type}</span>
-                  <p className="mt-3 text-sm">Kraj: {listing.region}</p>
+                  <p className="mt-3 text-sm">{country === 'NL' ? t('Provincia', 'Province') : t('Kraj')}: {listing.region}</p>
                   <p className="mt-1 text-sm text-app-fg/55">Úroveň: {listing.level || 'Neuvedená'}</p>
-                  {listing.match_date || listing.match_time ? <p className="mt-1 text-sm text-app-fg/55">Termín: {listing.match_date ? new Date(`${listing.match_date}T00:00:00`).toLocaleDateString('sk-SK') : ''}{listing.match_date && listing.match_time ? ' · ' : ''}{listing.match_time ?? ''}</p> : null}
+                  {listing.match_date || listing.match_time ? <p className="mt-1 text-sm text-app-fg/55">{t('Termín', 'Date')}: {listing.match_date ? new Date(listing.match_date.includes('T') ? listing.match_date : `${listing.match_date}T00:00:00`).toLocaleDateString(locale) : ''}{listing.match_date && listing.match_time ? ' · ' : ''}{listing.match_time ? (listing.match_time.includes('T') ? new Date(listing.match_time).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' }) : listing.match_time.slice(0, 5)) : ''}</p> : null}
                   {listing.participants_names?.trim() ? <p className="mt-2 text-sm text-app-fg/55">Hráči: {listing.participants_names}</p> : null}
                   {listing.note ? <p className="mt-3 rounded-lg bg-app-overlay/[0.04] p-3 text-sm italic text-app-fg/70">{listing.note}</p> : null}
                 </div>
@@ -288,7 +299,7 @@ export default function FindPlayerPage() {
           <h2 className="text-lg font-bold">Nový inzerát</h2>
           <form onSubmit={handleCreateListing} className="mt-4 space-y-4">
             <label className="grid gap-1.5 text-xs font-bold text-app-fg/55">Typ inzerátu<select value={requestType} onChange={(event) => changeRequestType(event.target.value)} className={fieldClass}>{REQUEST_TYPES.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}</select></label>
-            <label className="grid gap-1.5 text-xs font-bold text-app-fg/55">Kraj<select required value={region} onChange={(event) => setRegion(event.target.value)} className={fieldClass}><option value="">Vyber kraj</option>{REGIONS.map((item) => <option key={item}>{item}</option>)}</select></label>
+            <label className="grid gap-1.5 text-xs font-bold text-app-fg/55">{country === 'NL' ? t('Provincia', 'Province') : t('Kraj')}<select required value={region} onChange={(event) => setRegion(event.target.value)} className={fieldClass}><option value="">{country === 'NL' ? t('Vyber provinciu', 'Select province') : t('Vyber kraj')}</option>{REGIONS.map((item) => <option key={item}>{item}</option>)}</select></label>
             <label className="grid gap-1.5 text-xs font-bold text-app-fg/55">Dátum (voliteľné)<input type="date" value={matchDate} onChange={(event) => setMatchDate(event.target.value)} className={fieldClass} /></label>
             <label className="grid gap-1.5 text-xs font-bold text-app-fg/55">Čas (voliteľné)<input type="time" value={matchTime} onChange={(event) => setMatchTime(event.target.value)} className={fieldClass} /></label>
             <p className="text-xs text-app-fg/50">Úroveň vyzývateľa: <span className="font-semibold text-app-fg/75">{currentUserLevel || 'Neuvedená v profile'}</span></p>

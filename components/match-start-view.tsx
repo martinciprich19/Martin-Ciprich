@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { ArrowRight, Keyboard, LoaderCircle, ScanQrCode, Zap } from 'lucide-react'
 import { useLanguage } from '@/components/language-provider'
+import { useLeague } from '@/components/league-provider'
 import { MatchView } from '@/components/match-view'
 import { ScoringModeDialog } from '@/components/scoring-mode-dialog'
 import type { MatchSettings } from '@/lib/live-match-scoring'
@@ -17,8 +18,13 @@ export function MatchStartView({ kioskMode = false }: { kioskMode?: boolean }) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const matchId = searchParams.get('id')
+  const requestedCourtId = searchParams.get('courtId')
+  const courtId = requestedCourtId && /^[1-9]\d*$/.test(requestedCourtId) && Number.isSafeInteger(Number(requestedCourtId))
+    ? requestedCourtId
+    : null
   const viewerMode = searchParams.get('view') === 'viewer'
   const { t } = useLanguage()
+  const { country, isLoading: leagueLoading } = useLeague()
   const [isCreating, setIsCreating] = useState(false)
   const [error, setError] = useState('')
   const [isScanning, setIsScanning] = useState(false)
@@ -39,7 +45,7 @@ export function MatchStartView({ kioskMode = false }: { kioskMode?: boolean }) {
   useKioskInactivity(isScanning || choosingRules || isCreating, resetKioskFlow)
 
   async function startQuickGame(settings: MatchSettings) {
-    if (creatingRef.current) return
+    if (creatingRef.current || leagueLoading) return
     inactivityResetRef.current = false
     creatingRef.current = true
     setIsCreating(true)
@@ -49,6 +55,7 @@ export function MatchStartView({ kioskMode = false }: { kioskMode?: boolean }) {
         .from('live_matches')
         .insert({
           challenge_id: null,
+          country_code: country,
           ...settings,
           match_pin: null,
           is_pin_activated: false,
@@ -78,7 +85,7 @@ export function MatchStartView({ kioskMode = false }: { kioskMode?: boolean }) {
     }
   }
 
-  if (matchId !== null) return <MatchView key={matchId} matchId={matchId} kioskMode={kioskMode} viewerMode={viewerMode} />
+  if (matchId !== null) return <MatchView key={matchId} matchId={matchId} kioskMode={kioskMode} viewerMode={viewerMode} courtId={courtId} />
   if (isScanning) return <RivaQrScanner kioskMode={kioskMode} onClose={() => setIsScanning(false)} />
 
   const cardClass = 'group flex min-h-80 flex-col items-start rounded-3xl border bg-app-court/95 p-7 text-left shadow-xl transition duration-200 motion-safe:hover:-translate-y-1 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#a8e63c] sm:p-8'
@@ -94,7 +101,7 @@ export function MatchStartView({ kioskMode = false }: { kioskMode?: boolean }) {
       {error ? <p role="alert" className="mt-6 rounded-xl border border-red-400/25 bg-red-400/10 p-4 text-center text-sm text-app-red-200">{error}</p> : null}
 
       <div className="mt-10 grid gap-5 lg:grid-cols-3">
-        <button type="button" onClick={() => { inactivityResetRef.current = false; setError(''); setChoosingRules(true) }} disabled={isCreating} aria-busy={isCreating} className={`${cardClass} border-[#a8e63c]/25 hover:border-[#a8e63c]/70 hover:shadow-[0_16px_45px_rgba(168,230,60,0.12)] disabled:cursor-wait disabled:opacity-60`}>
+        <button type="button" onClick={() => { inactivityResetRef.current = false; setError(''); setChoosingRules(true) }} disabled={isCreating || leagueLoading} aria-busy={isCreating} className={`${cardClass} border-[#a8e63c]/25 hover:border-[#a8e63c]/70 hover:shadow-[0_16px_45px_rgba(168,230,60,0.12)] disabled:cursor-wait disabled:opacity-60`}>
           <span className="flex h-20 w-20 items-center justify-center rounded-2xl bg-[#a8e63c]/10 text-app-highlight">{isCreating ? <LoaderCircle size={38} className="animate-spin" aria-hidden="true" /> : <Zap size={38} aria-hidden="true" />}</span>
           <span className="mt-6 text-2xl font-black">{t('Rýchla hra', 'Quick game')}</span>
           <span className="mt-3 text-sm leading-6 text-app-fg/55">{t('Tréning alebo neoficiálny zápas. Začni ihneď bez PIN-u a bez vplyvu na ligové ELO.', 'Practice or play a friendly match. Start without a PIN or any effect on league ELO.')}</span>

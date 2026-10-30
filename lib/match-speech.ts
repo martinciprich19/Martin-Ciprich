@@ -1,7 +1,7 @@
 import type { Language } from '@/components/language-provider'
 
 export function getMatchVoice(voices: SpeechSynthesisVoice[], language: Language): SpeechSynthesisVoice | undefined {
-  const locale = language === 'sk' ? 'sk-SK' : 'en-GB'
+  const locale = language === 'sk' ? 'sk-SK' : language === 'nl' ? 'nl-NL' : 'en-GB'
   return voices.find((voice) => voice.lang.toLowerCase() === locale.toLowerCase())
     ?? voices.find((voice) => voice.lang.toLowerCase().split(/[-_]/)[0] === language)
 }

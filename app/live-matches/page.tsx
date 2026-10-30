@@ -1,9 +1,11 @@
 import { PublicShell } from '@/components/public-shell'
 import { LiveMatchesView } from '@/components/live-matches-view'
+import { getPublicNavigation } from '@/lib/public-navigation'
 
-export default function LiveMatchesPage() {
+export default async function LiveMatchesPage() {
+  const navigation = await getPublicNavigation()
   return (
-    <PublicShell showAuthLinks={false} showMenuButton={false}>
+    <PublicShell {...navigation} showAuthLinks={false} showMenuButton={false}>
       <LiveMatchesView />
     </PublicShell>
   )

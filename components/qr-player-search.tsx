@@ -3,18 +3,28 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { Search } from 'lucide-react'
 import { useLanguage } from '@/components/language-provider'
+import { useLeague } from '@/components/league-provider'
 import { createClient } from '@/lib/supabase/client'
 import { getErrorMessage } from '@/lib/errors'
 import { PlayerAvatar } from '@/components/player-avatar'
 
 type Player = { id: string; name: string; avatarUrl: string | null }
 
-export function QrPlayerSearch({ excludedIds, disabled, onSelect }: {
+type QrPlayerSearchProps = {
   excludedIds: string[]
   disabled: boolean
   onSelect: (player: { id: string; name: string }) => void
-}) {
+}
+
+export function QrPlayerSearch(props: QrPlayerSearchProps) {
+  const { country, profileCountry, isLoading } = useLeague()
+  return isLoading ? null : <CountryQrPlayerSearch key={`${country}-${profileCountry ?? ''}`} {...props} />
+}
+
+function CountryQrPlayerSearch({ excludedIds, disabled, onSelect }: QrPlayerSearchProps) {
   const { t } = useLanguage()
+  const { country, profileCountry, isLoading: leagueLoading } = useLeague()
+  const rosterCountry = profileCountry ?? country
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<Player[]>([])
   const [loading, setLoading] = useState(false)
@@ -31,7 +41,7 @@ export function QrPlayerSearch({ excludedIds, disabled, onSelect }: {
     setResults([])
     setError('')
     setActive(-1)
-    if (search.length < 2 || disabled) {
+    if (search.length < 2 || disabled || leagueLoading) {
       setLoading(false)
       return
     }
@@ -44,6 +54,7 @@ export function QrPlayerSearch({ excludedIds, disabled, onSelect }: {
         const pattern = `%${search.replace(/[\\%_]/g, '\\$&')}%`
         const { data, error: lookupError } = await createClient().from('proffiles')
           .select('id, full_name, avatar_url')
+          .eq('country_code', rosterCountry)
           .ilike('full_name', pattern)
           .order('full_name', { ascending: true })
           .limit(20)
@@ -69,14 +80,14 @@ export function QrPlayerSearch({ excludedIds, disabled, onSelect }: {
       controller.abort()
       window.clearTimeout(timer)
     }
-  }, [search, disabled, retry])
+  }, [search, disabled, retry, rosterCountry, leagueLoading])
 
   useEffect(() => {
     if (active >= 0) document.getElementById(`${listId}-${active}`)?.scrollIntoView({ block: 'nearest' })
   }, [active, listId])
 
   function choose(player: Player) {
-    if (disabled || excludedIds.includes(player.id)) return
+    if (disabled || leagueLoading || excludedIds.includes(player.id)) return
     onSelect(player)
     setQuery('')
     setResults([])
@@ -89,12 +100,13 @@ export function QrPlayerSearch({ excludedIds, disabled, onSelect }: {
       if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false)
     }}>
     <label htmlFor={`${listId}-input`} className="text-sm font-semibold">{t('Meno, priezvisko alebo prezývka', 'First name, surname or nickname')}</label>
+    <p className="mt-1 text-xs text-app-fg/55">{t('Hráči pre oficiálny zápas sa vyberajú z tvojej členskej ligy.', 'Players for official matches are selected from your membership league.')} ({rosterCountry})</p>
     <div className="relative mt-2">
       <Search size={18} aria-hidden="true" className="absolute left-3 top-4 text-app-accent" />
       <input id={`${listId}-input`} autoFocus autoComplete="off" role="combobox" aria-autocomplete="list"
         aria-expanded={open && search.length >= 2} aria-controls={listId}
         aria-activedescendant={active >= 0 && visible[active] ? `${listId}-${active}` : undefined}
-        aria-describedby={`${listId}-status`} value={query} disabled={disabled} maxLength={100}
+        aria-describedby={`${listId}-status`} value={query} disabled={disabled || leagueLoading} maxLength={100}
         onChange={(event) => { setQuery(event.target.value); setOpen(true); setActive(-1) }}
         onFocus={() => setOpen(true)}
         onKeyDown={(event) => {

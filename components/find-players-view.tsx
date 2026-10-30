@@ -6,11 +6,10 @@ import { useRouter } from 'next/navigation'
 import { Check, Clock3, MapPin, MessageSquare, RotateCcw, Search, UserPlus, UserRound, Users } from 'lucide-react'
 import { getErrorMessage } from '@/lib/errors'
 import { useLanguage } from '@/components/language-provider'
+import { useLeague } from '@/components/league-provider'
 import { emptyPlayerFilters, fetchLeaguePlayers, MAX_ELO, filterPlayers, PLAYER_LEVELS, type LeaguePlayer, type PlayerFilters } from '@/lib/players'
 import { fetchFriendshipStatuses, sendFriendRequest, type FriendshipStatus } from '@/lib/friendships'
 import { PlayerAvatar as GenderAvatar } from '@/components/player-avatar'
-
-const REGIONS = ['Bratislavský kraj', 'Trnavský kraj', 'Trenčiansky kraj', 'Nitriansky kraj', 'Žilinský kraj', 'Banskobystrický kraj', 'Prešovský kraj', 'Košický kraj']
 
 const fieldClass = 'w-full rounded-lg border border-app-line/10 bg-app-canvas px-3 py-2.5 text-sm text-app-fg outline-none transition placeholder:text-app-fg/30 focus:border-[#ccff00]/60 focus:ring-2 focus:ring-[#ccff00]/15'
 const labelClass = 'mb-1.5 block text-[11px] font-bold uppercase tracking-[0.14em] text-app-fg/45'
@@ -20,12 +19,20 @@ function PlayerAvatar({ player, size = 'md' }: { player: LeaguePlayer; size?: 'm
   return <GenderAvatar name={player.name} src={player.avatarUrl} gender={player.gender} className={dimensions} />
 }
 
-export function PlayerSearchView({ currentPlayerId, currentPlayerAvatarUrl, defaultRegion, onMessage, showCurrentPlayer = false }: { currentPlayerId?: string; currentPlayerAvatarUrl?: string | null; defaultRegion?: string; onMessage: (player: LeaguePlayer) => void; showCurrentPlayer?: boolean }) {
+type PlayerSearchViewProps = { currentPlayerId?: string; currentPlayerAvatarUrl?: string | null; defaultRegion?: string; onMessage: (player: LeaguePlayer) => void; showCurrentPlayer?: boolean }
+
+export function PlayerSearchView(props: PlayerSearchViewProps) {
+  const { country, isLoading } = useLeague()
+  return isLoading ? null : <CountryPlayerSearchView key={country} {...props} />
+}
+
+function CountryPlayerSearchView({ currentPlayerId, currentPlayerAvatarUrl, defaultRegion, onMessage, showCurrentPlayer = false }: PlayerSearchViewProps) {
   const router = useRouter()
   const { t } = useLanguage()
-  const { data: players = [], error, isLoading, mutate } = useSWR('league-players', fetchLeaguePlayers, { revalidateOnFocus: false })
+  const { country, regions } = useLeague()
+  const { data: players = [], error, isLoading, mutate } = useSWR(['league-players', country], () => fetchLeaguePlayers(country), { revalidateOnFocus: false })
   const friendships = useSWR(currentPlayerId ? ['friendship-statuses', currentPlayerId] : null, ([, profileId]) => fetchFriendshipStatuses(profileId))
-  const [filters, setFilters] = useState<PlayerFilters>({ ...emptyPlayerFilters, region: REGIONS.includes(defaultRegion ?? '') ? defaultRegion! : '' })
+  const [filters, setFilters] = useState<PlayerFilters>({ ...emptyPlayerFilters, region: regions.includes(defaultRegion ?? '') ? defaultRegion! : '' })
   const [requestingFriendId, setRequestingFriendId] = useState<string | null>(null)
   const visiblePlayers = useMemo(() => filterPlayers(players, filters, showCurrentPlayer ? undefined : currentPlayerId), [players, filters, currentPlayerId, showCurrentPlayer])
   const hasFilters = Object.values(filters).some(Boolean)
@@ -55,10 +62,10 @@ export function PlayerSearchView({ currentPlayerId, currentPlayerAvatarUrl, defa
         </div>
         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_120px_120px_auto] lg:items-end">
           <div>
-            <label htmlFor="player-region" className={labelClass}>{t('Kraj')}</label>
+            <label htmlFor="player-region" className={labelClass}>{country === 'NL' ? t('Provincia', 'Province') : t('Kraj')}</label>
             <select id="player-region" value={filters.region} onChange={(event) => update('region', event.target.value)} className={fieldClass}>
-              <option value="">{t('Všetky kraje')}</option>
-              {REGIONS.map((region) => <option key={region} value={region}>{region}</option>)}
+              <option value="">{country === 'NL' ? t('Všetky provincie', 'All provinces') : t('Všetky kraje')}</option>
+              {regions.map((region) => <option key={region} value={region}>{region}</option>)}
             </select>
           </div>
           <div>

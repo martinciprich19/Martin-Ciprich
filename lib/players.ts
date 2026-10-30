@@ -1,4 +1,5 @@
 import { fetchPlayerProfiles, type PlayerProfile } from '@/lib/profiles'
+import type { CountryCode } from '@/lib/countries'
 
 export const PLAYER_LEVELS = ['Začiatočník', 'Mierne pokročilý', 'Pokročilý', 'Expert'] as const
 export type PlayerLevel = (typeof PLAYER_LEVELS)[number]
@@ -15,6 +16,7 @@ export type LeaguePlayer = {
   losses: number
   avatarUrl: string | null
   gender: PlayerProfile['gender']
+  country_code: CountryCode
 }
 
 export type PlayerFilters = {
@@ -46,12 +48,13 @@ function toPlayer(row: PlayerProfile): LeaguePlayer {
     losses: Math.max(0, row.matches_played - row.matches_won),
     avatarUrl: row.avatar_url,
     gender: row.gender,
+    country_code: row.country_code,
   }
 }
 
 // select('*') keeps the query working whether or not optional columns (email, level) exist yet.
-export async function fetchLeaguePlayers(): Promise<LeaguePlayer[]> {
-  return (await fetchPlayerProfiles())
+export async function fetchLeaguePlayers(country?: CountryCode): Promise<LeaguePlayer[]> {
+  return (await fetchPlayerProfiles(country))
     .map(toPlayer)
     .filter((player) => player.id && player.name.trim().length > 0)
     .sort((a, b) => b.elo - a.elo || b.wins - a.wins)

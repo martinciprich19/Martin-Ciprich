@@ -5,6 +5,8 @@ IDs for two identical Bluetooth shutters. It does not contain the website,
 Supabase credentials, scoring actions, network permissions or Bluetooth scanning.
 Pair shutters through Android Settings before opening the app. It needs Android
 6.0 or newer. The app is a diagnostic, not the finished Android scoring helper.
+For the separate WebView kiosk with automatic scoring input, see
+[Android kiosk](android-kiosk.md).
 
 ## Build on Windows
 

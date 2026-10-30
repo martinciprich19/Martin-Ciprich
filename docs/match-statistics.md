@@ -354,6 +354,14 @@ games. A PIN challenge rematch is a new device-controlled registered game with
 the same participants, not a reuse of the challenge's unique activation PIN.
 Every newly completed rematch sends its own four approval notifications.
 
+Team selection requires
+[065_rematch_team_selection.sql](../scripts/065_rematch_team_selection.sql)
+after migration 063. If "Hrať ďalší zápas" reports `PGRST202`, run the entire
+065 script in the Supabase SQL Editor; migration 063 alone provides only the
+older three-argument RPC. Migration 065 also refreshes the PostgREST schema
+cache. Retry the button afterward. Rematch failures are displayed beside the
+buttons below the statistics, not just at the top of the results screen.
+
 ## Pausing and resuming a match
 
 If QR creation returns `PGRST202` for `create_qr_device_match_with_settings`,
@@ -490,6 +498,11 @@ its dropdown shows available arenas; typing filters names, cities and addresses
 without case/accent sensitivity. Arrow keys and Enter select an option; Escape
 closes the list. Custom arena names remain supported. Loading errors include a
 retry action and do not block manual entry. No database migration is needed.
+
+QR league registration requests the front-facing camera on Android and iOS,
+including kiosk mode and scanner retries. Camera access requires HTTPS and user
+permission. If no front camera is available, the scanner library falls back to
+an available camera. Verify on physical Android and iOS devices.
 
 The camera viewfinder covers the central 70% of the shorter video dimension.
 The scanner's crop and custom overlay share the same coordinates, including

@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/client'
+import type { CountryCode } from '@/lib/countries'
 
 export type PlayerPair = {
   id: string
@@ -7,6 +8,7 @@ export type PlayerPair = {
   player_1: PairPlayer
   player_2: PairPlayer
   created_at: string | null
+  country_code: CountryCode
 }
 
 export type PairPlayer = { full_name: string; region: string; elo: number; matches_played: number; matches_won: number }
@@ -17,6 +19,7 @@ const PAIR_INVITATIONS_SCHEMA_MESSAGE = 'Pozvania do dvojice nie sú v databáze
 
 type PairPlayerRow = { full_name: string | null; region: string | null; elo_rating: number | null; matches_played: number | null; matches_won: number | null }
 type PairRow = {
+  country_code: CountryCode
   id: string | number
   player_1_id: string | number
   player_2_id: string | number
@@ -33,10 +36,12 @@ function toPairPlayer(row: PairPlayerRow | null): PairPlayer {
   return { full_name: row?.full_name ?? 'Hráč', region: row?.region ?? '', elo: row?.elo_rating ?? 1000, matches_played: row?.matches_played ?? 0, matches_won: row?.matches_won ?? 0 }
 }
 
-export async function fetchPairs(): Promise<PlayerPair[]> {
-  const { data, error } = await createClient()
+export async function fetchPairs(country?: CountryCode): Promise<PlayerPair[]> {
+  let query = createClient()
     .from('pairs')
-    .select('id, player_1_id, player_2_id, created_at, player_1:proffiles!pairs_player_1_id_fkey(full_name, region, elo_rating, matches_played, matches_won), player_2:proffiles!pairs_player_2_id_fkey(full_name, region, elo_rating, matches_played, matches_won)')
+    .select('id, country_code, player_1_id, player_2_id, created_at, player_1:proffiles!pairs_player_1_id_fkey(full_name, region, elo_rating, matches_played, matches_won), player_2:proffiles!pairs_player_2_id_fkey(full_name, region, elo_rating, matches_played, matches_won)')
+  if (country) query = query.eq('country_code', country)
+  const { data, error } = await query
     .order('created_at', { ascending: false })
 
   if (error) throw error
@@ -51,6 +56,7 @@ export async function fetchPairs(): Promise<PlayerPair[]> {
       player_1: toPairPlayer(player1),
       player_2: toPairPlayer(player2),
       created_at: row.created_at,
+      country_code: row.country_code,
     }
   })
 }

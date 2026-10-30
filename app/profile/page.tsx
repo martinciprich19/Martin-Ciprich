@@ -50,6 +50,9 @@ import useSWR, { useSWRConfig } from 'swr'
 import { fetchArenas, type Arena } from '@/lib/arenas'
 import { ArenasView, ALL_CITIES } from '@/components/arenas-view'
 import { useLanguage } from '@/components/language-provider'
+import { useLeague } from '@/components/league-provider'
+import { LeagueSelector } from '@/components/league-selector'
+import { COUNTRY_DEFAULT_LANGUAGE, isAppLanguage, isCountryCode, regionsForCountry, subdivisionCode, type AppLanguage } from '@/lib/countries'
 import { PairChallengeView } from '@/components/pair-challenge-view'
 import { PairsView } from '@/components/pairs-view'
 import { PlayerMarketplaceView as FindPlayersView } from '@/components/player-marketplace-view'
@@ -112,6 +115,7 @@ const tabsFromUrl: ProfileTab[] = ['profile', 'challenges', 'matches', 'messages
 export default function ProfilePage() {
   const router = useRouter()
   const { language, setLanguage, t } = useLanguage()
+  const { country, profileCountry } = useLeague()
   const [activeTab, setActiveTab] = useState<ProfileTab>('overview')
   const [challenges, setChallenges] = useState<Challenge[]>([])
   const [opponentPlayers, setOpponentPlayers] = useState<OpponentPlayer[]>([])
@@ -126,12 +130,17 @@ export default function ProfilePage() {
   const [showPairsView, setShowPairsView] = useState(false)
   const [challengeForm, setChallengeForm] = useState({ opponentId: '', opponentName: '', arena: '', proposedDate: '', matchType: 'ranked' as 'ranked' | 'friendly', note: '' })
   const [menuOpen, setMenuOpen] = useState(false)
+  const [isArenaManager, setIsArenaManager] = useState(false)
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [qrProfileLoading, setQrProfileLoading] = useState(true)
   const [qrProfileError, setQrProfileError] = useState<string | null>(null)
   const [gender, setGender] = useState<Gender | null>(null)
-  const [arenas, setArenas] = useState<Arena[]>([])
-  const { isLoading: arenasLoading, error: arenasError, mutate: mutateArenas } = useSWR('arenas', fetchArenas, { onSuccess: setArenas })
+  const arenaCountry = activeTab === 'arenas' || activeTab === 'challenges' ? country : profileCountry
+  const { data: arenas = [], isLoading: arenasLoading, error: arenasError, mutate: mutateArenas } = useSWR(arenaCountry ? ['arenas', arenaCountry] : null, ([, selectedCountry]) => fetchArenas(selectedCountry))
+  const setArenas = (update: React.SetStateAction<Arena[]>) => {
+    void mutateArenas((current) => typeof update === 'function' ? update(current ?? []) : update, { revalidate: false })
+  }
+  useEffect(() => { setArenaRegion(ALL_CITIES); setArenaSearch('') }, [country])
   const [arenaRegion, setArenaRegion] = useState(ALL_CITIES)
   const [arenaSearch, setArenaSearch] = useState('')
   const isLeagueAdmin = false
@@ -228,7 +237,7 @@ export default function ProfilePage() {
   const [communicationAlertsSeen, setCommunicationAlertsSeen] = useState(false)
   const previousUnreadAlertCount = useRef(0)
   const overviewName = player.username || overview?.displayName || 'Hráč'
-  const memberSince = overview?.memberSince ? new Intl.DateTimeFormat(language === 'en' ? 'en-GB' : 'sk-SK', { month: 'long', year: 'numeric' }).format(new Date(overview.memberSince)) : null
+  const memberSince = overview?.memberSince ? new Intl.DateTimeFormat(language === 'nl' ? 'nl-NL' : language === 'en' ? 'en-GB' : 'sk-SK', { month: 'long', year: 'numeric' }).format(new Date(overview.memberSince)) : null
 
   useEffect(() => {
     if (unreadAlertCount > previousUnreadAlertCount.current) setCommunicationAlertsSeen(false)
@@ -403,6 +412,15 @@ export default function ProfilePage() {
         window.location.replace(`/auth/login?verification=required&email=${encodeURIComponent(user.email ?? '')}`)
         return
       }
+      const { data: arenaAssignments, error: arenaAssignmentsError } = await createClient()
+        .from('arena_admins')
+        .select('arena_id')
+        .limit(1)
+      if (arenaAssignmentsError) {
+        console.error('Priradenie správcu arény sa nepodarilo načítať:', arenaAssignmentsError)
+      } else {
+        setIsArenaManager((arenaAssignments ?? []).length > 0)
+      }
       if (!user.email) throw new Error('Prihlásený účet nemá e-mailovú adresu.')
       const { error: venueSyncError } = await createClient().rpc('refresh_my_auto_venue')
       if (venueSyncError) console.warn('Automatickú domovskú arénu sa nepodarilo obnoviť:', getErrorMessage(venueSyncError, 'Obnovenie arény zlyhalo.'))
@@ -424,6 +442,9 @@ export default function ProfilePage() {
           dominant_hand: metadata.dominant_hand ?? 'right',
           gender: metadata.gender === 'male' || metadata.gender === 'female' ? metadata.gender : null,
           home_venue_id: metadata.home_venue_id ?? null,
+          country_code: isCountryCode(metadata.country_code) ? metadata.country_code : 'SK',
+          preferred_language: isAppLanguage(metadata.preferred_language) ? metadata.preferred_language : COUNTRY_DEFAULT_LANGUAGE[isCountryCode(metadata.country_code) ? metadata.country_code : 'SK'],
+          subdivision_code: typeof metadata.subdivision_code === 'string' ? metadata.subdivision_code : null,
         })
         profile = await fetchPlayerProfile(user.email)
       }
@@ -516,6 +537,7 @@ export default function ProfilePage() {
             </Link>
             <button className="text-app-fg/50 lg:hidden" onClick={() => setMenuOpen(false)} aria-label="Zavrieť menu"><X size={20} /></button>
           </div>
+          <div className="mt-5"><LeagueSelector /></div>
 
           <nav className="mt-10 flex-1 space-y-1" aria-label="Hlavná navigácia">
             {navItems.map(({ label, href, icon: Icon }) => (
@@ -525,6 +547,12 @@ export default function ProfilePage() {
                 {label === 'Výsledky' && pendingMatchApprovalCount > 0 ? <span aria-label={t(`${pendingMatchApprovalCount} zápasov čaká na potvrdenie`, `${pendingMatchApprovalCount} matches awaiting confirmation`)} title={t('Zápasy čakajúce na tvoje potvrdenie', 'Matches awaiting your confirmation')} className="flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-black text-app-fg">{pendingMatchApprovalCount > 99 ? '99+' : pendingMatchApprovalCount}</span> : null}
               </Link>
             ))}
+            {isArenaManager ? (
+              <Link href="/arena-admin" onClick={() => setMenuOpen(false)} className="group flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium text-app-fg/55 hover:bg-app-overlay/[0.05] hover:text-app-fg">
+                <Building2 size={18} strokeWidth={1.8} />
+                <span>{t('Správa arény', 'Arena management')}</span>
+              </Link>
+            ) : null}
           </nav>
 
           <button onClick={handleLogout} className="flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium text-app-fg/45 hover:bg-app-overlay/[0.05] hover:text-app-fg"><LogOut size={18} />{t('Odhlásiť sa', 'Log out')}</button>
@@ -547,6 +575,7 @@ export default function ProfilePage() {
               <div className="flex items-center gap-2"><AvatarPreview src={avatarUrl} initials={player.username.slice(0, 2)} size="sm" /><span className="hidden text-sm font-semibold sm:block">{player.username}</span></div>
             </div>
           </header>
+          <div className="flex justify-end px-4 pt-3 lg:hidden"><LeagueSelector /></div>
 
           <div className="px-4 md:px-8 lg:px-10">
             <PushNotificationSettings visible={activeTab === 'overview' || (activeTab === 'settings' && settingsSection === 'notifications')} pushAllowed={settings.pushAlerts} onEnabled={() => setSettings((current) => ({ ...current, pushAlerts: true }))} />
@@ -564,7 +593,7 @@ export default function ProfilePage() {
 
             <div className="mt-6 grid gap-3 md:mt-9 md:grid-cols-2 md:gap-4 xl:grid-cols-4">
               <StatCard label={t('ELO rating', 'ELO rating')} value={overviewLoading ? '–' : `${overview?.elo ?? 1000}`} suffix="ELO" detail={t('Tvoje aktuálne hodnotenie', 'Your current rating')} icon={<Crosshair size={19} />} />
-              <StatCard label={t('Rebríček', 'Ranking')} value={overview?.rank ? `${overview.rank}.` : '–'} suffix={t('Celoslovensky', 'Nationwide')} detail={overview?.rank ? t('Aktuálna pozícia', 'Current position') : t('Zobrazí sa po prvom zápase', 'Shown after your first match')} icon={<Trophy size={19} />} onClick={() => { setActiveTab('leaderboards'); router.push('/rankings') }} />
+              <StatCard label={t('Rebríček', 'Ranking')} value={overview?.rank ? `${overview.rank}.` : '–'} suffix={t('Národne', 'Nationwide')} detail={overview?.rank ? t('Aktuálna pozícia', 'Current position') : t('Zobrazí sa po prvom zápase', 'Shown after your first match')} icon={<Trophy size={19} />} onClick={() => { setActiveTab('leaderboards'); router.push('/rankings') }} />
               <StatCard label={t('Zápasy / Výhry', 'Matches / Wins')} value={`${overview?.matchesPlayed ?? 0} / ${overview?.wins ?? 0}`} suffix="" detail={t('Celková bilancia', 'Overall record')} icon={<Swords size={19} />} onClick={() => setActiveTab('matches')} />
               <StatCard label={t('Úspešnosť', 'Win rate')} value={`${overview?.winRate ?? 0}%`} suffix="" detail={t('Úspešnosť zápasov', 'Match success rate')} icon={<Crosshair size={19} />} />
             </div>
@@ -583,7 +612,7 @@ export default function ProfilePage() {
                       const arena = arenas.find((item) => item.id === String(match.arena_id))
                       return <li key={match.id} className="space-y-2 py-4 first:pt-0">
                         <p className="break-words text-sm font-bold">{participantName(match.challenger_1)} &amp; {participantName(match.challenger_2)} <span className="text-app-fg/40">vs</span> {participantName(match.challenged_1)} &amp; {participantName(match.challenged_2)}</p>
-                        <p className="flex items-center gap-2 text-xs text-app-fg/60"><Calendar size={14} className="shrink-0" /><time dateTime={match.match_date}>{new Intl.DateTimeFormat(language === 'en' ? 'en-GB' : 'sk-SK', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(match.match_date))}</time></p>
+                        <p className="flex items-center gap-2 text-xs text-app-fg/60"><Calendar size={14} className="shrink-0" /><time dateTime={match.match_date}>{new Intl.DateTimeFormat(language === 'nl' ? 'nl-NL' : language === 'en' ? 'en-GB' : 'sk-SK', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(match.match_date))}</time></p>
                         <p className="flex items-center gap-2 text-xs text-app-fg/60"><MapPin size={14} className="shrink-0" />{arena ? `${arena.name} · ${arena.city}` : t('Aréna', 'Arena')}</p>
                         <span className="inline-flex items-center gap-1 text-xs font-bold text-app-emerald-300"><Check size={14} />{t('Potvrdené', 'Confirmed')}</span>
                         {match.match_pin && !match.is_pin_activated ? <p className="mt-2 rounded-lg border border-[#ccff00]/20 bg-[#ccff00]/[0.06] px-3 py-2 text-xs font-semibold text-app-league">Váš PIN pre kiosk: <span className="ml-1 font-black tracking-[0.2em]">{match.match_pin}</span></p> : null}
@@ -606,7 +635,7 @@ export default function ProfilePage() {
                         <p className="min-w-0 break-words text-sm font-bold">{match.opponent_name}</p>
                         <span className="flex shrink-0 items-center gap-1.5"><span className={`rounded-md px-2 py-1 text-[10px] font-bold ${match.result === 'win' ? 'bg-emerald-400/10 text-app-emerald-300' : 'bg-red-400/10 text-app-red-300'}`}>{match.result === 'win' ? t('Výhra', 'Win') : t('Prehra', 'Loss')}</span><ChevronRight size={15} aria-hidden="true" className="text-app-fg/25 transition-colors group-hover:text-app-league" /></span>
                       </div>
-                      <time dateTime={match.match_date} className="mt-2 block text-xs text-app-fg/45">{new Intl.DateTimeFormat(language === 'en' ? 'en-GB' : 'sk-SK', { dateStyle: 'medium' }).format(new Date(match.match_date))}</time>
+                      <time dateTime={match.match_date} className="mt-2 block text-xs text-app-fg/45">{new Intl.DateTimeFormat(language === 'nl' ? 'nl-NL' : language === 'en' ? 'en-GB' : 'sk-SK', { dateStyle: 'medium' }).format(new Date(match.match_date))}</time>
                       <p className="mt-2 text-xs text-app-fg/65">{t('Sety', 'Sets')}: <span className="font-bold text-app-fg">{match.sets_won} : {match.sets_lost}</span><span className="mx-2 text-app-fg/25">·</span>{t('Gemy', 'Games')}: {match.games_won} : {match.games_lost}</p>
                       {match.status === 'rejected' || match.status === 'disputed' ? <p className="mt-1 text-[10px] font-semibold text-app-amber-300">{t('Výsledok je sporný', 'Result disputed')}</p> : null}
                       <div className="mt-3"><MatchDetailButton matchId={match.id} onOpen={setDetailMatchId} /></div>
@@ -680,16 +709,19 @@ function DeleteAccountModal({ onClose }: { onClose: () => void }) {
   )
 }
 
-const SettingsView = memo(function SettingsView({ language, setLanguage, t, onSaveEmail, settings, setSettings, section, setSection, arenas, toast, setToast, deleteModalOpen, setDeleteModalOpen }: { language: 'sk' | 'en'; setLanguage: (language: 'sk' | 'en') => void; t: (sk: string, en?: string) => string; onSaveEmail: (email: string) => void; settings: ProfileSettings; setSettings: React.Dispatch<React.SetStateAction<ProfileSettings>>; section: string; setSection: (value: string) => void; arenas: Arena[]; toast: boolean; setToast: (value: boolean) => void; deleteModalOpen: boolean; setDeleteModalOpen: (value: boolean) => void }) {
+const SettingsView = memo(function SettingsView({ language, setLanguage, t, onSaveEmail, settings, setSettings, section, setSection, toast, setToast, deleteModalOpen, setDeleteModalOpen }: { language: AppLanguage; setLanguage: (language: AppLanguage) => void; t: (sk: string, en?: string) => string; onSaveEmail: (email: string) => void; settings: ProfileSettings; setSettings: React.Dispatch<React.SetStateAction<ProfileSettings>>; section: string; setSection: (value: string) => void; arenas: Arena[]; toast: boolean; setToast: (value: boolean) => void; deleteModalOpen: boolean; setDeleteModalOpen: (value: boolean) => void }) {
+  const { profileCountry } = useLeague()
+  const membershipCountry = profileCountry ?? 'SK'
+  const membershipRegions = regionsForCountry(membershipCountry)
   const update = (key: string, value: unknown) => setSettings((current) => ({ ...current, [key]: value }))
   const toggleSlot = (slot: string) => update('preferredTimeSlots', settings.preferredTimeSlots.includes(slot) ? settings.preferredTimeSlots.filter((item) => item !== slot) : slot === 'any_day' ? ['any_day'] : [...settings.preferredTimeSlots.filter((item) => item !== 'any_day'), slot])
   const save = async () => {
-    if (!settings.email) {
+    if (!settings.email || !profileCountry) {
       window.alert(t('Profil sa ešte načítava, skús to o chvíľu.', 'Your profile is still loading, please try again in a moment.'))
       return
     }
     try {
-      await updatePlayerProfile(settings.email, { full_name: settings.displayName, email: settings.email, phone: settings.phone, region: settings.region, level: settings.level, bio: settings.bio, phone_visibility: settings.showPhone, dominant_hand: settings.dominantHand, home_venue_id: settings.homeArenaId || null })
+      await updatePlayerProfile(settings.email, { full_name: settings.displayName, email: settings.email, phone: settings.phone, region: settings.region, subdivision_code: subdivisionCode(membershipCountry, settings.region), preferred_language: language, level: settings.level, bio: settings.bio, phone_visibility: settings.showPhone, dominant_hand: settings.dominantHand, home_venue_id: settings.homeArenaId || null })
       const preferences: PlayerPreferences = { preferredSide: settings.preferredSide, racketBrand: settings.racketBrand, emailChallenges: settings.emailChallenges, emailMatchApproval: settings.emailMatchApproval, emailMessages: settings.emailMessages, emailTournaments: settings.emailTournaments, pushAlerts: settings.pushAlerts, rankingAlerts: settings.rankingAlerts, publicStats: settings.publicStats, allowDirectMessages: settings.allowDirectMessages, preferredTimeSlots: settings.preferredTimeSlots }
       const saved = await updatePlayerPreferences(settings.email, preferences)
       setSettings((current) => ({ ...current, ...saved }))
@@ -705,8 +737,29 @@ const SettingsView = memo(function SettingsView({ language, setLanguage, t, onSa
   }
   const nav = [{ id: 'profile', label: 'Hráčsky profil & údaje', icon: UserCog }, { id: 'notifications', label: 'Notifikácie & upozornenia', icon: Bell }, { id: 'privacy', label: 'Súkromie & viditeľnosť', icon: Eye }, { id: 'security', label: 'Zabezpečenie & účet', icon: Lock }]
   const Toggle = ({ label, checked, onChange }: { label: string; checked: boolean; onChange: (value: boolean) => void }) => <button type="button" role="switch" aria-checked={checked} onClick={() => onChange(!checked)} className="flex w-full items-center justify-between gap-4 rounded-xl border border-app-line/[0.07] bg-app-canvas/60 px-4 py-3 text-left"><span className="text-sm text-app-fg/75">{label}</span><span className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${checked ? 'bg-[#ccff00]' : 'bg-app-overlay/15'}`}><span className={`absolute top-1 h-4 w-4 rounded-full transition-transform ${checked ? 'translate-x-6 bg-app-green' : 'translate-x-1 bg-app-overlay/70'}`} /></span></button>
-  const field = (label: string, key: string, type = 'text') => key === 'displayName' ? <><label className="grid gap-2 text-xs font-bold text-app-fg/55">{t(label)}<input type={type} value={settings.displayName} onChange={(event) => update(key, event.target.value)} className="rounded-lg border border-app-line/10 bg-app-canvas px-3 py-2.5 text-sm text-app-fg outline-none focus:border-[#ccff00]" /></label><label className="grid gap-2 text-xs font-bold text-app-fg/55">{t('Kraj')}<select value={settings.region} onChange={(event) => update('region', event.target.value)} className="rounded-lg border border-app-line/10 bg-app-canvas px-3 py-2.5 text-sm text-app-fg">{['Bratislavský kraj', 'Trnavský kraj', 'Trenčiansky kraj', 'Nitriansky kraj', 'Žilinský kraj', 'Banskobystrický kraj', 'Prešovský kraj', 'Košický kraj'].map((region) => <option key={region}>{region}</option>)}</select></label><label className="grid gap-2 text-xs font-bold text-app-fg/55">{t('Úroveň')}<select value={settings.level} onChange={(event) => update('level', event.target.value)} className="rounded-lg border border-app-line/10 bg-app-canvas px-3 py-2.5 text-sm text-app-fg">{['Začiatočník', 'Mierne pokročilý', 'Pokročilý', 'Expert'].map((level) => <option key={level}>{level}</option>)}</select></label></> : <label className="grid gap-2 text-xs font-bold text-app-fg/55">{t(label)}<input type={type} readOnly={key === 'email'} value={(settings as unknown as Record<string, string>)[key] ?? ''} onChange={(event) => update(key, event.target.value)} className="rounded-lg border border-app-line/10 bg-app-canvas px-3 py-2.5 text-sm text-app-fg outline-none focus:border-[#ccff00] read-only:opacity-70" /></label>
-  return <div className="mx-auto max-w-[1120px]"><div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end"><div><p className="text-xs font-bold uppercase tracking-[0.22em] text-app-league">RIVA /</p><h1 className="mt-2 text-2xl font-black md:text-3xl">{t('Nastavenia', 'Settings')}</h1><p className="mt-2 text-sm text-app-fg/45">{t('Spravuj svoj profil, súkromie a herné preferencie.', 'Manage your profile, privacy, and game preferences.')}</p></div><button type="button" onClick={save} className="inline-flex items-center gap-2 rounded-lg bg-[#ccff00] px-4 py-3 text-xs font-black text-[#10150d]"><Save size={15} /> {t('Uložiť zmeny', 'Save changes')}</button></div><div className="mt-6 rounded-xl border border-app-line/[0.08] bg-app-canvas/60 p-4"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="text-sm font-black">{t('Jazyk', 'Language')}</h2><p className="mt-1 text-xs text-app-fg/45">{t('Vyber si jazyk, ktorý sa použije v celej aplikácii.', 'Choose the language used throughout the application.')}</p></div><div className="flex items-center gap-2" role="group" aria-label={t('Jazyk', 'Language')}><button type="button" onClick={() => setLanguage('sk')} aria-label="Slovenčina" aria-pressed={language === 'sk'} className={`flex h-11 w-14 items-center justify-center rounded-lg border overflow-hidden p-1.5 transition-colors ${language === 'sk' ? 'border-[#ccff00] bg-[#ccff00]/15 ring-2 ring-[#ccff00]/30' : 'border-app-line/10 bg-app-panel opacity-60 hover:opacity-100'}`}><img src="/images/flags/sk.svg" alt="" className="h-full w-full rounded-sm object-cover" /></button><button type="button" onClick={() => setLanguage('en')} aria-label="English" aria-pressed={language === 'en'} className={`flex h-11 w-14 items-center justify-center rounded-lg border overflow-hidden p-1.5 transition-colors ${language === 'en' ? 'border-[#ccff00] bg-[#ccff00]/15 ring-2 ring-[#ccff00]/30' : 'border-app-line/10 bg-app-panel opacity-60 hover:opacity-100'}`}><img src="/images/flags/gb.svg" alt="" className="h-full w-full rounded-sm object-cover" /></button></div></div></div><div className="mt-8 grid gap-6 lg:grid-cols-[260px_1fr]"><aside className="space-y-1">{nav.map(({ id, label, icon: Icon }) => <button type="button" key={id} onClick={() => setSection(id)} className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-bold ${section === id ? 'bg-[#ccff00]/10 text-app-league' : 'text-app-fg/50 hover:bg-app-overlay/5 hover:text-app-fg'}`}><Icon size={17} /> {t(label, ({ 'Hráčsky profil & údaje': 'Player profile & details', 'Notifikácie & upozornenia': 'Notifications & alerts', 'Súkromie & viditeľnosť': 'Privacy & visibility', 'Kluby & dostupnosť': 'Clubs & availability', 'Zabezpečenie & účet': 'Security & account' } as Record<string, string>)[label] ?? label)}</button>)}</aside><main className="rounded-2xl border border-app-line/[0.08] bg-app-panel p-5 sm:p-8">{section === 'profile' ? <div><h2 className="text-xl font-black">Hráčsky profil & údaje</h2><p className="mt-1 text-sm text-app-fg/40">{t('Tieto údaje sa zobrazia súperom v RIVA Padel.', 'These details are visible to opponents in RIVA Padel.')}</p><div className="mt-6 grid gap-4 sm:grid-cols-2">{field('Zobrazované meno', 'displayName')}{field('E-mail', 'email', 'email')}{field('Telefónne číslo', 'phone', 'tel')}</div><div className="mt-4 grid gap-4 sm:grid-cols-2"><label className="grid gap-2 text-xs font-bold text-app-fg/55">Dominantná ruka<select value={settings.dominantHand} onChange={(event) => update('dominantHand', event.target.value)} className="rounded-lg border border-app-line/10 bg-app-canvas px-3 py-2.5 text-sm text-app-fg"><option value="right">Pravák</option><option value="left">Ľavák</option></select></label></div><label className="mt-4 grid gap-2 text-xs font-bold text-app-fg/55">Krátky profilový popis / Bio<textarea value={settings.bio} onChange={(event) => update('bio', event.target.value)} className="min-h-28 rounded-lg border border-app-line/10 bg-app-canvas px-3 py-3 text-sm text-app-fg outline-none focus:border-[#ccff00]" /></label></div> : section === 'notifications' ? <div><h2 className="text-xl font-black">Notifikácie & upozornenia</h2><div className="mt-6 grid gap-3"><Toggle label="Nová prijatá výzva od hráča" checked={settings.emailChallenges} onChange={(value) => update('emailChallenges', value)} /><Toggle label="Nová súkromná správa v čate" checked={settings.emailMessages} onChange={(value) => update('emailMessages', value)} /><Toggle label="Pozvánky na turnaje a ligové novinky" checked={settings.emailTournaments} onChange={(value) => update('emailTournaments', value)} /></div></div> : section === 'privacy' ? <div><h2 className="text-xl font-black">Súkromie & viditeľnosť</h2><div className="mt-6 grid gap-4"><label className="grid gap-2 text-xs font-bold text-app-fg/55">Telefónne číslo súperom<select value={settings.showPhone} onChange={(event) => update('showPhone', event.target.value)} className="rounded-lg border border-app-line/10 bg-app-canvas px-3 py-2.5 text-sm text-app-fg"><option value="everyone">Zobraziť všetkým</option><option value="accepted_only">Len po prijatí výzvy</option><option value="never">Nikdy</option></select></label></div></div> : <div><h2 className="text-xl font-black">Zabezpečenie & účet</h2><div className="mt-6 grid max-w-xl gap-5">{([['Aktuálne heslo', 'Current password', 'currentPassword', 'current-password'], ['Nové heslo', 'New password', 'newPassword', 'new-password'], ['Potvrdenie nového hesla', 'Confirm new password', 'confirmPassword', 'new-password']] as const).map(([sk, en, key, autoComplete]) => <label key={key} className="grid gap-2 text-sm font-bold text-app-fg/60">{t(sk, en)}<input type="password" autoComplete={autoComplete} value={(settings as unknown as Record<string, string>)[key] ?? ''} onChange={(event) => update(key, event.target.value)} className="h-12 w-full rounded-lg border border-app-line/10 bg-app-canvas px-4 text-base text-app-fg outline-none focus:border-[#ccff00]" /></label>)}</div><button type="button" onClick={save} className="mt-5 rounded-lg border border-app-line/10 px-4 py-2.5 text-xs font-bold text-app-fg/70">Zmeniť heslo</button><div className="mt-10 rounded-xl border border-red-400/25 bg-red-500/[0.04] p-5"><h3 className="font-black text-app-red-200">Červená zóna</h3><p className="mt-2 text-sm text-app-fg/45">Trvalé vymazanie účtu a všetkých tvojich dát. Táto akcia sa nedá vrátiť späť.</p><div className="mt-4 flex flex-wrap gap-3"><button type="button" onClick={() => setDeleteModalOpen(true)} className="rounded-lg bg-red-500/15 px-3 py-2 text-xs font-black text-app-red-200">Vymazať účet a dáta</button></div></div></div>}</main></div>{toast ? <div role="status" className="fixed bottom-6 right-6 z-50 rounded-xl border border-[#ccff00]/30 bg-app-panel px-4 py-3 text-sm font-bold text-app-league">Nastavenia boli úspešne uložené</div> : null}{deleteModalOpen ? <DeleteAccountModal onClose={() => setDeleteModalOpen(false)} /> : null}</div>
+  const field = (label: string, key: string, type = 'text') => key === 'displayName' ? <>
+    <label className="grid gap-2 text-xs font-bold text-app-fg/55">{t(label)}<input type={type} value={settings.displayName} onChange={(event) => update(key, event.target.value)} className="rounded-lg border border-app-line/10 bg-app-canvas px-3 py-2.5 text-sm text-app-fg outline-none focus:border-[#ccff00]" /></label>
+    <label className="grid gap-2 text-xs font-bold text-app-fg/55">{t(membershipCountry === 'NL' ? 'Provincia' : 'Kraj')}
+      <select value={settings.region} onChange={(event) => update('region', event.target.value)} className="rounded-lg border border-app-line/10 bg-app-canvas px-3 py-2.5 text-sm text-app-fg">
+        {!membershipRegions.includes(settings.region) ? <option value={settings.region}>{settings.region || t('Vyber región', 'Select region')}</option> : null}
+        {membershipRegions.map((region) => <option key={region} value={region}>{region}</option>)}
+      </select>
+    </label>
+    <label className="grid gap-2 text-xs font-bold text-app-fg/55">{t('Úroveň')}<select value={settings.level} onChange={(event) => update('level', event.target.value)} className="rounded-lg border border-app-line/10 bg-app-canvas px-3 py-2.5 text-sm text-app-fg">{['Začiatočník', 'Mierne pokročilý', 'Pokročilý', 'Expert'].map((level) => <option key={level} value={level}>{t(level)}</option>)}</select></label>
+  </> : <label className="grid gap-2 text-xs font-bold text-app-fg/55">{t(label)}<input type={type} readOnly={key === 'email'} value={(settings as unknown as Record<string, string>)[key] ?? ''} onChange={(event) => update(key, event.target.value)} className="rounded-lg border border-app-line/10 bg-app-canvas px-3 py-2.5 text-sm text-app-fg outline-none focus:border-[#ccff00] read-only:opacity-70" /></label>
+  return <div className="mx-auto max-w-[1120px]"><div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end"><div><p className="text-xs font-bold uppercase tracking-[0.22em] text-app-league">RIVA /</p><h1 className="mt-2 text-2xl font-black md:text-3xl">{t('Nastavenia', 'Settings')}</h1><p className="mt-2 text-sm text-app-fg/45">{t('Spravuj svoj profil, súkromie a herné preferencie.', 'Manage your profile, privacy, and game preferences.')}</p></div><button type="button" onClick={save} className="inline-flex items-center gap-2 rounded-lg bg-[#ccff00] px-4 py-3 text-xs font-black text-[#10150d]"><Save size={15} /> {t('Uložiť zmeny', 'Save changes')}</button></div><div className="mt-6 rounded-xl border border-app-line/[0.08] bg-app-canvas/60 p-4"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="text-sm font-black">{t('Jazyk', 'Language')}</h2><p className="mt-1 text-xs text-app-fg/45">{t('Vyber si jazyk, ktorý sa použije v celej aplikácii.', 'Choose the language used throughout the application.')}</p></div>
+    <div className="flex items-center gap-2" role="group" aria-label={t('Jazyk', 'Language')}>
+      {([
+        { code: 'sk', label: 'Slovenčina', flag: 'sk' },
+        { code: 'nl', label: 'Nederlands', flag: 'nl' },
+        { code: 'en', label: 'English', flag: 'gb' },
+      ] as const).map(({ code, label, flag }) => (
+        <button key={code} type="button" onClick={() => setLanguage(code)} aria-label={label} aria-pressed={language === code} className={`flex h-11 w-14 items-center justify-center rounded-lg border overflow-hidden p-1.5 transition-colors ${language === code ? 'border-[#ccff00] bg-[#ccff00]/15 ring-2 ring-[#ccff00]/30' : 'border-app-line/10 bg-app-panel opacity-60 hover:opacity-100'}`}>
+          <img src={`/images/flags/${flag}.svg`} alt="" className="h-full w-full rounded-sm object-cover" />
+        </button>
+      ))}
+    </div>
+  </div></div><div className="mt-8 grid gap-6 lg:grid-cols-[260px_1fr]"><aside className="space-y-1">{nav.map(({ id, label, icon: Icon }) => <button type="button" key={id} onClick={() => setSection(id)} className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-bold ${section === id ? 'bg-[#ccff00]/10 text-app-league' : 'text-app-fg/50 hover:bg-app-overlay/5 hover:text-app-fg'}`}><Icon size={17} /> {t(label, ({ 'Hráčsky profil & údaje': 'Player profile & details', 'Notifikácie & upozornenia': 'Notifications & alerts', 'Súkromie & viditeľnosť': 'Privacy & visibility', 'Kluby & dostupnosť': 'Clubs & availability', 'Zabezpečenie & účet': 'Security & account' } as Record<string, string>)[label] ?? label)}</button>)}</aside><main className="rounded-2xl border border-app-line/[0.08] bg-app-panel p-5 sm:p-8">{section === 'profile' ? <div><h2 className="text-xl font-black">Hráčsky profil & údaje</h2><p className="mt-1 text-sm text-app-fg/40">{t('Tieto údaje sa zobrazia súperom v RIVA Padel.', 'These details are visible to opponents in RIVA Padel.')}</p><div className="mt-6 grid gap-4 sm:grid-cols-2">{field('Zobrazované meno', 'displayName')}{field('E-mail', 'email', 'email')}{field('Telefónne číslo', 'phone', 'tel')}</div><div className="mt-4 grid gap-4 sm:grid-cols-2"><label className="grid gap-2 text-xs font-bold text-app-fg/55">Dominantná ruka<select value={settings.dominantHand} onChange={(event) => update('dominantHand', event.target.value)} className="rounded-lg border border-app-line/10 bg-app-canvas px-3 py-2.5 text-sm text-app-fg"><option value="right">Pravák</option><option value="left">Ľavák</option></select></label></div><label className="mt-4 grid gap-2 text-xs font-bold text-app-fg/55">Krátky profilový popis / Bio<textarea value={settings.bio} onChange={(event) => update('bio', event.target.value)} className="min-h-28 rounded-lg border border-app-line/10 bg-app-canvas px-3 py-3 text-sm text-app-fg outline-none focus:border-[#ccff00]" /></label></div> : section === 'notifications' ? <div><h2 className="text-xl font-black">Notifikácie & upozornenia</h2><div className="mt-6 grid gap-3"><Toggle label="Nová prijatá výzva od hráča" checked={settings.emailChallenges} onChange={(value) => update('emailChallenges', value)} /><Toggle label="Nová súkromná správa v čate" checked={settings.emailMessages} onChange={(value) => update('emailMessages', value)} /><Toggle label="Pozvánky na turnaje a ligové novinky" checked={settings.emailTournaments} onChange={(value) => update('emailTournaments', value)} /></div></div> : section === 'privacy' ? <div><h2 className="text-xl font-black">Súkromie & viditeľnosť</h2><div className="mt-6 grid gap-4"><label className="grid gap-2 text-xs font-bold text-app-fg/55">Telefónne číslo súperom<select value={settings.showPhone} onChange={(event) => update('showPhone', event.target.value)} className="rounded-lg border border-app-line/10 bg-app-canvas px-3 py-2.5 text-sm text-app-fg"><option value="everyone">Zobraziť všetkým</option><option value="accepted_only">Len po prijatí výzvy</option><option value="never">Nikdy</option></select></label></div></div> : <div><h2 className="text-xl font-black">Zabezpečenie & účet</h2><div className="mt-6 grid max-w-xl gap-5">{([['Aktuálne heslo', 'Current password', 'currentPassword', 'current-password'], ['Nové heslo', 'New password', 'newPassword', 'new-password'], ['Potvrdenie nového hesla', 'Confirm new password', 'confirmPassword', 'new-password']] as const).map(([sk, en, key, autoComplete]) => <label key={key} className="grid gap-2 text-sm font-bold text-app-fg/60">{t(sk, en)}<input type="password" autoComplete={autoComplete} value={(settings as unknown as Record<string, string>)[key] ?? ''} onChange={(event) => update(key, event.target.value)} className="h-12 w-full rounded-lg border border-app-line/10 bg-app-canvas px-4 text-base text-app-fg outline-none focus:border-[#ccff00]" /></label>)}</div><button type="button" onClick={save} className="mt-5 rounded-lg border border-app-line/10 px-4 py-2.5 text-xs font-bold text-app-fg/70">Zmeniť heslo</button><div className="mt-10 rounded-xl border border-red-400/25 bg-red-500/[0.04] p-5"><h3 className="font-black text-app-red-200">Červená zóna</h3><p className="mt-2 text-sm text-app-fg/45">Trvalé vymazanie účtu a všetkých tvojich dát. Táto akcia sa nedá vrátiť späť.</p><div className="mt-4 flex flex-wrap gap-3"><button type="button" onClick={() => setDeleteModalOpen(true)} className="rounded-lg bg-red-500/15 px-3 py-2 text-xs font-black text-app-red-200">Vymazať účet a dáta</button></div></div></div>}</main></div>{toast ? <div role="status" className="fixed bottom-6 right-6 z-50 rounded-xl border border-[#ccff00]/30 bg-app-panel px-4 py-3 text-sm font-bold text-app-league">Nastavenia boli úspešne uložené</div> : null}{deleteModalOpen ? <DeleteAccountModal onClose={() => setDeleteModalOpen(false)} /> : null}</div>
 })
 
 const OpponentsView = memo(function OpponentsView({ player, players, onBack, onChallenge, onMessage }: { player: Player; players: OpponentPlayer[]; onBack: () => void; onChallenge: (player: OpponentPlayer) => void; onMessage: (player: OpponentPlayer) => void }) {
@@ -726,7 +779,7 @@ const MessagesView = memo(function MessagesView({ category, setCategory, notific
   const [challengeResponseError, setChallengeResponseError] = useState<{ id: string; message: string } | null>(null)
   const [respondingInvitationId, setRespondingInvitationId] = useState<string | null>(null)
   const [pairInvitationError, setPairInvitationError] = useState('')
-  const dateFormatter = { format: (date: Date) => Number.isNaN(date.getTime()) ? '' : new Intl.DateTimeFormat(language === 'en' ? 'en-GB' : 'sk-SK', { day: 'numeric', month: 'short', year: 'numeric' }).format(date) }
+  const dateFormatter = { format: (date: Date) => Number.isNaN(date.getTime()) ? '' : new Intl.DateTimeFormat(language === 'nl' ? 'nl-NL' : language === 'en' ? 'en-GB' : 'sk-SK', { day: 'numeric', month: 'short', year: 'numeric' }).format(date) }
   useEffect(() => {
     if (category !== 'notifications') return
     document.querySelector('#messages li[role="button"]')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
@@ -941,7 +994,7 @@ const MatchesView = memo(function MatchesView({ initialArena, modalOpen, setModa
       const { data: { user } } = await createClient().auth.getUser()
       const profile = user?.email ? await fetchPlayerProfile(user.email) : null
       if (!profile) throw new Error('Tvoj profil sa nepodarilo nájsť podľa e-mailu.')
-      const profiles = await fetchPlayerProfiles()
+      const profiles = await fetchPlayerProfiles(profile.country_code)
       const playerValidation = validateMatchPlayers(playerSlots, profiles)
       if (!playerValidation.isValid) throw new Error(playerValidation.summary || Object.values(playerValidation.errors)[0] || 'Skontroluj výber hráčov.')
       const profileById = new Map(profiles.map((item) => [String(item.id), item]))
@@ -1043,7 +1096,7 @@ const MatchesView = memo(function MatchesView({ initialArena, modalOpen, setModa
         const waitingFor = match.participants.filter((participant) => !approvedSet.has(participant.id))
         return <li key={match.id} onClick={() => onOpenMatch(match.id)} className="group cursor-pointer rounded-lg border border-app-line/10 bg-app-panel p-5 transition-colors hover:border-[#ccff00]/30 hover:bg-app-hover">
           <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="min-w-0"><p className="break-words font-bold"><button type="button" onClick={(event) => { event.stopPropagation(); onOpenMatch(match.id) }} className="text-left hover:text-app-league focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#ccff00]" aria-label={`Detail zápasu: ${match.team1Name} vs ${match.team2Name}`}>{match.team1Name} <span className="text-app-fg/40">vs</span> {match.team2Name}</button></p><p className="mt-1 text-xs text-app-fg/45">{match.arena} · {new Date(match.date).toLocaleDateString(language === 'en' ? 'en-GB' : 'sk-SK')}</p></div>
+            <div className="min-w-0"><p className="break-words font-bold"><button type="button" onClick={(event) => { event.stopPropagation(); onOpenMatch(match.id) }} className="text-left hover:text-app-league focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#ccff00]" aria-label={`Detail zápasu: ${match.team1Name} vs ${match.team2Name}`}>{match.team1Name} <span className="text-app-fg/40">vs</span> {match.team2Name}</button></p><p className="mt-1 text-xs text-app-fg/45">{match.arena} · {new Date(match.date).toLocaleDateString(language === 'nl' ? 'nl-NL' : language === 'en' ? 'en-GB' : 'sk-SK')}</p></div>
             <span className={`rounded-md px-2 py-1 text-xs font-bold ${status === 'confirmed' ? 'bg-emerald-400/10 text-app-emerald-300' : status === 'rejected' ? 'bg-red-400/10 text-app-red-300' : ownApproval ? 'bg-amber-400/10 text-app-amber-200' : 'bg-app-overlay/5 text-app-fg/60'}`}>{status === 'pending' ? (ownApproval ? `Čaká sa na ostatných hráčov (${approvedCount}/${requiredCount})` : `Čaká na schválenie (${approvedCount}/${requiredCount})`) : status === 'confirmed' ? 'Potvrdené' : status === 'cancelled' ? 'Zrušené' : 'Odmietnuté'}</span>
           </div>
           {match.sets.length ? <div aria-label={language === 'en' ? 'Set scores' : 'Skóre jednotlivých setov'} className="mt-3 space-y-1">
@@ -1082,12 +1135,13 @@ function formatSeason(seasonStart: string | null, language: string) {
   const [year, month] = seasonStart ? seasonStart.split('-').map(Number) : [now.getFullYear(), now.getMonth() < 6 ? 1 : 7]
   const start = new Date(year, month - 1, 1)
   const end = new Date(year, month + 5, 0)
-  const format = new Intl.DateTimeFormat(language === 'en' ? 'en-GB' : 'sk-SK', { day: 'numeric', month: 'numeric', year: 'numeric' })
+  const format = new Intl.DateTimeFormat(language === 'nl' ? 'nl-NL' : language === 'en' ? 'en-GB' : 'sk-SK', { day: 'numeric', month: 'numeric', year: 'numeric' })
   return `${format.format(start)} – ${format.format(end)}`
 }
 
 const ProfileView = memo(function ProfileView({ player, phone, avatarUrl, avatarInputRef, handleAvatarChange, removeAvatar, matches, profileMatches, profileMatchesLoading, profileMatchesError, matchStats, matchModalOpen, setMatchModalOpen, matchForm, setMatchForm, submitMatch, approveMatch, onOpenMatch }: { onOpenMatch: (matchId: string) => void; player: Player; phone: string; avatarUrl: string | null; avatarInputRef: React.RefObject<HTMLInputElement | null>; handleAvatarChange: (event: React.ChangeEvent<HTMLInputElement>) => void; removeAvatar: () => void; matches: Match[]; profileMatches: ProfileMatch[]; profileMatchesLoading: boolean; profileMatchesError: unknown; matchStats: { total: number; wins: number; losses: number; winRate: number; wonSets: number; lostSets: number; wonGames: number; lostGames: number; elo: number }; matchModalOpen: boolean; setMatchModalOpen: (open: boolean) => void; matchForm: { date: string; arena: string; teammate: string; opponents: string; set1: string; set2: string; set3: string }; setMatchForm: React.Dispatch<React.SetStateAction<{ date: string; arena: string; teammate: string; opponents: string; set1: string; set2: string; set3: string }>>; submitMatch: (event: React.FormEvent) => void; approveMatch: () => void }) {
-  const { data: arenas = [] } = useSWR<Arena[]>('arenas', fetchArenas)
+  const { profileCountry } = useLeague()
+  const { data: arenas = [] } = useSWR<Arena[]>(profileCountry ? ['arenas', profileCountry] : null, () => fetchArenas(profileCountry!))
   const { data: profile } = useSWR(player.email ? ['profile-bio', player.email] : null, ([, email]) => fetchPlayerProfile(email))
   const { language, t } = useLanguage()
   const effectiveVenueId = player.home_venue_id || player.auto_venue_id
@@ -1098,7 +1152,7 @@ const ProfileView = memo(function ProfileView({ player, phone, avatarUrl, avatar
     <div className="mb-8 flex items-end justify-between"><div><p className="text-xs font-bold uppercase tracking-[0.22em] text-app-league">RIVA /</p><h1 className="mt-2 text-3xl font-black">Môj profil</h1></div><div className="hidden items-center gap-3 sm:flex"><div className="text-right"><p className="font-bold">{player.username}</p><p className="text-xs text-app-fg/45">{player.region}</p></div><AvatarPreview src={avatarUrl} initials={player.username.slice(0, 1)} /></div></div>
     <section className="rounded-2xl border border-app-line/[0.08] bg-app-surface p-6 sm:p-10"><div className="flex flex-col gap-6 sm:flex-row sm:items-center"><div className="relative"><AvatarPreview src={avatarUrl} initials={player.username.slice(0, 1)} size="lg" /><label htmlFor="profile-avatar-upload" className="absolute -bottom-2 -right-2 flex h-12 w-12 cursor-pointer items-center justify-center rounded-xl bg-[var(--profile-avatar-color,#ccff00)] text-xl font-black text-[#10150d]">⌾</label></div><div className="flex-1"><h2 className="text-4xl font-black">{player.username}</h2><p className="mt-1 text-lg text-app-fg/45">{player.email}</p><div className="mt-4 flex flex-wrap gap-2"><span className="rounded-lg bg-[var(--profile-avatar-color,#ccff00)] px-3 py-2 text-xs font-black text-[#10150d]">{player.region}</span><span className="rounded-lg bg-app-selected px-3 py-2 text-xs font-bold">{player.level}</span><span className="rounded-lg border border-[var(--profile-avatar-color,#ccff00)] bg-app-overlay/5 px-3 py-2 text-xs font-bold text-[var(--profile-avatar-color,#ccff00)]">{matchStats.elo} ELO</span></div></div></div></section>
     <section className="mt-6 rounded-xl border border-app-line/[0.08] bg-app-surface p-5"><h2 className="text-sm font-bold">{t('Profilový popis', 'About me')}</h2><p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-app-fg/65">{profile?.bio.trim() || t('Bio zatiaľ nie je vyplnené.', 'No Bio added yet.')}</p></section><input ref={avatarInputRef} id="profile-avatar-upload" type="file" accept="image/*" onChange={handleAvatarChange} className="sr-only" />
-    <div className="mt-8 grid gap-6 lg:grid-cols-2"><InfoCard title="Osobné údaje"><InfoRow label="Meno:" value={player.username} /><InfoRow label="Kraj:" value={player.region} /><InfoRow label="Úroveň:" value={player.level} /><HomeArenaInfoRow email={player.email} arenas={arenas} homeVenueId={player.home_venue_id} autoVenueId={player.auto_venue_id} /><DominantHandInfoRow email={player.email} value={player.dominant_hand} /><InfoRow label="Telefón:" value={phone || 'Neuvedené'} /><InfoRow label="Dátum registrácie:" value={player.created_at ? new Intl.DateTimeFormat(language === 'en' ? 'en-GB' : 'sk-SK', { day: 'numeric', month: 'long', year: 'numeric' }).format(new Date(player.created_at)) : 'Neuvedené'} /></InfoCard><InfoCard title="Štatistiky ELO"><InfoRow label="Aktuálne ELO:" value={`${player.elo} ELO`} highlight /><InfoRow label="ELO od registrácie:" value={`${player.career_elo} ELO`} /><InfoRow label="Najvyššie ELO:" value={`${player.highest_elo} ELO`} /><InfoRow label="Aktuálna sezóna:" value={formatSeason(player.elo_season_start, language)} /><InfoRow label="Krajská pozícia:" value="1. miesto" /><InfoRow label="Celoslovenská pozícia:" value="1. miesto" /></InfoCard></div>
+    <div className="mt-8 grid gap-6 lg:grid-cols-2"><InfoCard title="Osobné údaje"><InfoRow label="Meno:" value={player.username} /><InfoRow label={profileCountry === 'NL' ? t('Provincia:') : t('Kraj:')} value={player.region} /><InfoRow label="Úroveň:" value={player.level} /><HomeArenaInfoRow email={player.email} arenas={arenas} homeVenueId={player.home_venue_id} autoVenueId={player.auto_venue_id} /><DominantHandInfoRow email={player.email} value={player.dominant_hand} /><InfoRow label="Telefón:" value={phone || 'Neuvedené'} /><InfoRow label="Dátum registrácie:" value={player.created_at ? new Intl.DateTimeFormat(language === 'nl' ? 'nl-NL' : language === 'en' ? 'en-GB' : 'sk-SK', { day: 'numeric', month: 'long', year: 'numeric' }).format(new Date(player.created_at)) : 'Neuvedené'} /></InfoCard><InfoCard title="Štatistiky ELO"><InfoRow label="Aktuálne ELO:" value={`${player.elo} ELO`} highlight /><InfoRow label="ELO od registrácie:" value={`${player.career_elo} ELO`} /><InfoRow label="Najvyššie ELO:" value={`${player.highest_elo} ELO`} /><InfoRow label="Aktuálna sezóna:" value={formatSeason(player.elo_season_start, language)} /><InfoRow label="Krajská pozícia:" value="1. miesto" /><InfoRow label={t('Národná pozícia:', 'National ranking:')} value="1. miesto" /></InfoCard></div>
     <div className="mt-8"><h2 className="text-xl font-black">Štatistiky zápasov</h2></div>
     <section className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><MatchStatCard label="Odohraté zápasy" value={profileMatchesLoading || profileMatchesError ? '–' : String(matchStats.total)} detail="Celkový počet zápasov" /><MatchStatCard label="Výhry" value={profileMatchesLoading || profileMatchesError ? '–' : String(matchStats.wins)} detail="Vyhraté zápasy" /><MatchStatCard label="Prehry" value={profileMatchesLoading || profileMatchesError ? '–' : String(matchStats.losses)} detail="Ostatné zápasy" /><MatchStatCard label="Úspešnosť" value={profileMatchesLoading || profileMatchesError ? '–' : `${matchStats.winRate}%`} detail="Win rate" progress={matchStats.winRate} /><MatchStatCard label="Vyhraté sety" value={profileMatchesLoading || profileMatchesError ? '–' : String(matchStats.wonSets)} detail="Celkový počet" /><MatchStatCard label="Prehraté sety" value={profileMatchesLoading || profileMatchesError ? '–' : String(matchStats.lostSets)} detail="Celkový počet" /><MatchStatCard label="Vyhraté gemy" value={profileMatchesLoading || profileMatchesError ? '–' : String(matchStats.wonGames)} detail="Celkový počet" /><MatchStatCard label="Prehraté gemy" value={profileMatchesLoading || profileMatchesError ? '–' : String(matchStats.lostGames)} detail="Celkový počet" />    <ProfileServeStatistics profileId={player.profile_id} /><RecentFormCard matches={profileMatches.filter(isCountedMatch)} isLoading={profileMatchesLoading} error={profileMatchesError} /></section><section className="mt-8 rounded-2xl border border-app-line/[0.08] bg-app-surface p-6 sm:p-8">
       <div className="flex items-end justify-between border-b border-app-line/[0.08] pb-5">
@@ -1141,8 +1195,9 @@ const ProfileView = memo(function ProfileView({ player, phone, avatarUrl, avatar
 })
 
 const MatchRecordModal = memo(function MatchRecordModal({ form, setForm, slots, setSlot, submit, onClose }: { form: Record<string, string>; setForm: React.Dispatch<React.SetStateAction<Record<string, string>>>; slots: MatchPlayerSlots; setSlot: (field: MatchPlayerField, slot: MatchPlayerSlot) => void; submit: (event: React.FormEvent) => void; onClose: () => void }) {
-  const { data: arenas = [] } = useSWR('arenas', fetchArenas)
-  const { data: players = [], isLoading: playersLoading, error: playersError } = useSWR('match-result-players', fetchPlayerProfiles)
+  const { profileCountry } = useLeague()
+  const { data: arenas = [] } = useSWR(profileCountry ? ['arenas', profileCountry] : null, ([, membership]) => fetchArenas(membership))
+  const { data: players = [], isLoading: playersLoading, error: playersError } = useSWR(profileCountry ? ['match-result-players', profileCountry] : null, ([, membership]) => fetchPlayerProfiles(membership))
   const [activePlayerField, setActivePlayerField] = useState<string | null>(null)
   const [highlightedPlayer, setHighlightedPlayer] = useState(0)
   const [submitAttempted, setSubmitAttempted] = useState(false)
@@ -1235,7 +1290,8 @@ const MatchRecordModal = memo(function MatchRecordModal({ form, setForm, slots, 
 })
 
 const MatchModal = memo(function MatchModal({ matchForm, setMatchForm, submitMatch, onClose }: { matchForm: { date: string; arena: string; teammate: string; opponents: string; set1: string; set2: string; set3: string }; setMatchForm: React.Dispatch<React.SetStateAction<{ date: string; arena: string; teammate: string; opponents: string; set1: string; set2: string; set3: string }>>; submitMatch: (event: React.FormEvent) => void; onClose: () => void }) {
-  const { data: arenas = [] } = useSWR('arenas', fetchArenas)
+  const { profileCountry } = useLeague()
+  const { data: arenas = [] } = useSWR(profileCountry ? ['arenas', profileCountry] : null, ([, membership]) => fetchArenas(membership))
   const field = (key: keyof typeof matchForm, label: string, type = 'text') => key === 'arena' ? (
     <label className="grid gap-2 text-xs font-bold text-app-fg/60">{label}<select required value={matchForm.arena} onChange={(event) => setMatchForm((current) => ({ ...current, arena: event.target.value }))} className="rounded-lg border border-app-line/10 bg-app-canvas px-3 py-2.5 text-sm text-app-fg"><option value="">Vyber arénu</option>{arenas.map((arena) => <option key={arena.id} value={arena.name}>{arena.name} · {arena.city}</option>)}</select></label>
   ) : <label className="grid gap-2 text-xs font-bold text-app-fg/60">{label}<input required={key !== 'set3'} type={type} value={matchForm[key]} onChange={(event) => setMatchForm((current) => ({ ...current, [key]: event.target.value }))} className="rounded-lg border border-app-line/10 bg-app-canvas px-3 py-2.5 text-sm text-app-fg outline-none focus:border-[#ccff00]" /></label>
@@ -1246,7 +1302,7 @@ const MatchStatCard = memo(function MatchStatCard({ label, value, suffix, progre
 
 const ProfileMatchHistoryItem = memo(function ProfileMatchHistoryItem({ match, onOpen }: { match: ProfileMatch; onOpen: (matchId: string) => void }) {
   const { language } = useLanguage()
-  const date = new Intl.DateTimeFormat(language === 'en' ? 'en-GB' : 'sk-SK', { dateStyle: 'medium' }).format(new Date(match.match_date))
+  const date = new Intl.DateTimeFormat(language === 'nl' ? 'nl-NL' : language === 'en' ? 'en-GB' : 'sk-SK', { dateStyle: 'medium' }).format(new Date(match.match_date))
   const isWin = match.result === 'win'
   return <div onClick={() => onOpen(match.id)} className="group -mx-3 flex w-[calc(100%+1.5rem)] cursor-pointer flex-col gap-3 rounded-lg px-3 py-5 text-left transition-colors hover:bg-app-overlay/[0.03] sm:flex-row sm:items-center sm:justify-between">
     <div><p className="text-sm font-bold">{date}</p><p className="mt-1 text-sm text-app-fg/55">Súper: {match.opponent_name}</p><p className="mt-1 text-xs text-app-fg/40">Sety {match.sets_won} : {match.sets_lost} · Gemy {match.games_won} : {match.games_lost}</p></div>

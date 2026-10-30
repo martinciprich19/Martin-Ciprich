@@ -18,4 +18,5 @@ test('safeNextPath rejects open redirects and falls back', () => {
 test('emailRedirectUrl points to the auth callback with an encoded next path', () => {
   assert.equal(emailRedirectUrl('http://localhost:3000'), 'http://localhost:3000/auth/callback?next=%2Fprofile')
   assert.equal(emailRedirectUrl('https://spl.sk', '//evil.com'), 'https://spl.sk/auth/callback?next=%2Fprofile')
+  assert.equal(emailRedirectUrl('https://www.rivapadel.app', '/auth/update-password'), 'https://www.rivapadel.app/auth/callback?next=%2Fauth%2Fupdate-password')
 })

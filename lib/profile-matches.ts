@@ -1,7 +1,9 @@
 import { createClient } from '@/lib/supabase/client'
 import { fetchPlayerProfiles } from '@/lib/profiles'
+import type { CountryCode } from '@/lib/countries'
 
 export type ProfileMatch = {
+  country_code: CountryCode
   id: string
   match_date: string
   status: 'approved' | 'confirmed' | 'rejected' | 'disputed'
@@ -15,6 +17,7 @@ export type ProfileMatch = {
 }
 
 export type ParticipantMatch = {
+  country_code: CountryCode
   id: string
   date: string
   arena: string
@@ -93,7 +96,7 @@ export async function fetchParticipantMatches(profileId: string | number): Promi
   if (!/^[1-9]\d*$/.test(id)) throw new Error('Neplatné ID hráča.')
   const { data, error } = await createClient()
     .from('matches')
-    .select('id, player1_id, player2_id, team1_player2_id, team2_player2_id, match_date, status, result_sets, arena_name, approved_profile_ids, player1_sets_won, player2_sets_won, elo_delta_team1, elo_delta_team2')
+    .select('id, country_code, player1_id, player2_id, team1_player2_id, team2_player2_id, match_date, status, result_sets, arena_name, approved_profile_ids, player1_sets_won, player2_sets_won, elo_delta_team1, elo_delta_team2')
     .or(`player1_id.eq.${id},player2_id.eq.${id},team1_player2_id.eq.${id},team2_player2_id.eq.${id}`)
     .order('created_at', { ascending: false, nullsFirst: false })
     .order('id', { ascending: false })
@@ -110,6 +113,7 @@ export async function fetchParticipantMatches(profileId: string | number): Promi
     const team2Ids = [row.player2_id, row.team2_player2_id].filter((value) => value != null).map(String)
     return {
       id: String(row.id),
+      country_code: row.country_code as CountryCode,
       date: String(row.match_date),
       arena: String(row.arena_name ?? ''),
       team1Ids,
@@ -129,6 +133,7 @@ export async function fetchParticipantMatches(profileId: string | number): Promi
 }
 
 type MatchRow = {
+  country_code: CountryCode
   id: number | string
   player1_id: number | string
   player2_id: number | string
@@ -148,7 +153,7 @@ export async function fetchProfileMatches(profileId: string): Promise<ProfileMat
   const [{ data, error }, profiles] = await Promise.all([
     supabase
       .from('matches')
-      .select('id, player1_id, player2_id, team1_player2_id, team2_player2_id, winner_id, match_date, status, player1_sets_won, player1_games_won, player2_sets_won, player2_games_won')
+      .select('id, country_code, player1_id, player2_id, team1_player2_id, team2_player2_id, winner_id, match_date, status, player1_sets_won, player1_games_won, player2_sets_won, player2_games_won')
       .or(`player1_id.eq.${profileId},player2_id.eq.${profileId},team1_player2_id.eq.${profileId},team2_player2_id.eq.${profileId}`)
       .in('status', ['approved', 'confirmed', 'rejected', 'disputed'])
       .not('winner_id', 'is', null)
@@ -173,6 +178,7 @@ export async function fetchProfileMatches(profileId: string): Promise<ProfileMat
 
     return {
       id: String(row.id),
+      country_code: row.country_code,
       match_date: row.match_date,
       status: ['approved', 'confirmed', 'rejected', 'disputed'].includes(row.status) ? row.status as ProfileMatch['status'] : 'confirmed',
       opponent_id: opponentIds.join(','),

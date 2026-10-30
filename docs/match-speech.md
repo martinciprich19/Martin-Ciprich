@@ -10,6 +10,8 @@ monotonous announcements. Slovak game scores are sent as words (for example,
 configured voice. Completed game scores that are tied omit the team attribution
 (for example, "Stav gemov: jeden jeden.") in both languages.
 Slovak/English selection controls both spoken text and the server-selected voice.
+Dutch interface selection uses English announcements and displays an explicit
+fallback notice. It never submits the unsupported `nl` language to the audio API.
 Requests without a language retain the Slovak voice for older clients. Unsupported
 language values are rejected. The audio cache is separated by voice and text.
 The browser receives MP3 audio, not the provider API key.

@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/client'
 import { fetchFriendshipStatus } from '@/lib/friendships'
 import { withProfileGender } from '@/lib/profile-gender-query'
+import { COUNTRY_DEFAULT_LANGUAGE, isAppLanguage, isCountryCode, type AppLanguage, type CountryCode } from '@/lib/countries'
 
 export type DominantHand = 'right' | 'left' | 'both'
 export type Gender = 'male' | 'female'
@@ -27,9 +28,12 @@ export type PlayerProfile = {
   auto_venue_id: string | null
   elo_season_start: string | null
   created_at: string | null
+  country_code: CountryCode
+  preferred_language: AppLanguage
+  subdivision_code: string | null
 }
 
-export type PlayerProfileInput = Omit<PlayerProfile, 'id' | 'created_at' | 'career_elo' | 'elo_season_start' | 'highest_elo' | 'home_venue_id' | 'auto_venue_id' | 'bio' | 'avatar_url' | 'phone_visibility' | 'gender'> & Partial<Pick<PlayerProfile, 'highest_elo' | 'home_venue_id' | 'auto_venue_id' | 'bio' | 'avatar_url' | 'phone_visibility' | 'gender'>>
+export type PlayerProfileInput = Omit<PlayerProfile, 'id' | 'created_at' | 'career_elo' | 'elo_season_start' | 'highest_elo' | 'home_venue_id' | 'auto_venue_id' | 'bio' | 'avatar_url' | 'phone_visibility' | 'gender' | 'country_code' | 'preferred_language' | 'subdivision_code'> & Partial<Pick<PlayerProfile, 'highest_elo' | 'home_venue_id' | 'auto_venue_id' | 'bio' | 'avatar_url' | 'phone_visibility' | 'gender' | 'country_code' | 'preferred_language' | 'subdivision_code'>>
 export type PlayerProfileUpdate = Partial<PlayerProfileInput>
 
 const LEGACY_PROFILE_COLUMNS = 'id, full_name, email, phone, elo_rating, highest_elo, matches_played, matches_won, region, level, bio, avatar_url, phone_visibility, dominant_hand, home_venue_id, auto_venue_id, created_at'
@@ -38,12 +42,13 @@ const PUBLIC_PROFILE_COLUMNS = 'id, full_name, email, elo_rating, highest_elo, m
 const PUBLIC_PLAYER_PROFILE_COLUMNS = 'id, full_name, email, elo_rating, highest_elo, matches_played, matches_won, region, level, gender, bio, avatar_url, home_venue_id, auto_venue_id'
 // Added by migration 034; queries fall back to the columns without them until it is applied.
 const SEASON_ELO_COLUMNS = 'career_elo, elo_season_start'
+const LEAGUE_COLUMNS = 'country_code, preferred_language, subdivision_code'
 
 type QueryResult = { data: unknown; error: { code: string; message: string } | null }
 async function withSeasonColumns<T extends QueryResult>(run: (columns: string) => PromiseLike<T>, baseColumns: string): Promise<T> {
-  const result = await withProfileGender(run, `${baseColumns}, ${SEASON_ELO_COLUMNS}`)
+  const result = await withProfileGender(run, `${baseColumns}, ${LEAGUE_COLUMNS}, ${SEASON_ELO_COLUMNS}`)
   const missingColumn = result.error && ['42703', 'PGRST204'].includes(result.error.code) && /career_elo|elo_season_start/.test(result.error.message)
-  return missingColumn ? withProfileGender(run, baseColumns) : result
+  return missingColumn ? withProfileGender(run, `${baseColumns}, ${LEAGUE_COLUMNS}`) : result
 }
 
 type ProfileRow = Omit<Partial<PlayerProfile>, 'id' | 'home_venue_id' | 'auto_venue_id'> & {
@@ -53,6 +58,7 @@ type ProfileRow = Omit<Partial<PlayerProfile>, 'id' | 'home_venue_id' | 'auto_ve
 }
 
 function normalizeProfile(row: ProfileRow): PlayerProfile {
+  const country = isCountryCode(row.country_code) ? row.country_code : 'SK'
   return {
     id: Number(row.id),
     full_name: row.full_name ?? '',
@@ -74,6 +80,9 @@ function normalizeProfile(row: ProfileRow): PlayerProfile {
     auto_venue_id: row.auto_venue_id == null ? null : String(row.auto_venue_id),
     elo_season_start: row.elo_season_start ?? null,
     created_at: row.created_at ?? null,
+    country_code: country,
+    preferred_language: isAppLanguage(row.preferred_language) ? row.preferred_language : COUNTRY_DEFAULT_LANGUAGE[country],
+    subdivision_code: row.subdivision_code ?? null,
   }
 }
 
@@ -134,9 +143,12 @@ export async function fetchVisiblePlayerPhone(profileId: string): Promise<string
   return friendship === 'accepted' ? String(target.phone) : null
 }
 
-export async function fetchPlayerProfiles({ includeDeleted = false }: { includeDeleted?: boolean } = {}): Promise<PlayerProfile[]> {
+export async function fetchPlayerProfiles(countryOrOptions?: CountryCode | { includeDeleted?: boolean }, options: { includeDeleted?: boolean } = {}): Promise<PlayerProfile[]> {
+  const country = typeof countryOrOptions === 'string' ? countryOrOptions : undefined
+  const { includeDeleted = false } = typeof countryOrOptions === 'object' ? countryOrOptions : options
   const { data, error } = await withSeasonColumns((columns) => {
-    const query = createClient().from('proffiles').select(columns)
+    let query = createClient().from('proffiles').select(columns)
+    if (country) query = query.eq('country_code', country)
     return (includeDeleted ? query : query.not('email', 'like', `%${DELETED_PROFILE_EMAIL_DOMAIN}`)).order('full_name', { ascending: true })
   }, PUBLIC_PROFILE_COLUMNS)
   if (error) throw error

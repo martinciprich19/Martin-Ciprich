@@ -1,9 +1,11 @@
 import { createClient } from '@/lib/supabase/client'
+import type { CountryCode } from '@/lib/countries'
 
 export type PairChallengeStatus = 'pending' | 'accepted' | 'confirmed' | 'declined' | 'cancelled'
 export type ChallengeProfile = { full_name: string | null } | { full_name: string | null }[] | null
 
 export type PairChallenge = {
+  country_code: CountryCode
   id: string
   challenger_1_id: string
   challenger_2_id: string
@@ -23,7 +25,7 @@ export type PairChallenge = {
   challenged_2: ChallengeProfile
 }
 
-const PAIR_CHALLENGE_SELECT = 'id, challenger_1_id, challenger_2_id, challenged_1_id, challenged_2_id, arena_id, match_date, status, challenger_2_accepted, challenged_1_accepted, challenged_2_accepted, challenger_1:proffiles!challenges_challenger_1_id_fkey(full_name), challenger_2:proffiles!challenges_challenger_2_id_fkey(full_name), challenged_1:proffiles!challenges_challenged_1_id_fkey(full_name), challenged_2:proffiles!challenges_challenged_2_id_fkey(full_name)'
+const PAIR_CHALLENGE_SELECT = 'id, country_code, challenger_1_id, challenger_2_id, challenged_1_id, challenged_2_id, arena_id, match_date, status, challenger_2_accepted, challenged_1_accepted, challenged_2_accepted, challenger_1:proffiles!challenges_challenger_1_id_fkey(full_name), challenger_2:proffiles!challenges_challenger_2_id_fkey(full_name), challenged_1:proffiles!challenges_challenged_1_id_fkey(full_name), challenged_2:proffiles!challenges_challenged_2_id_fkey(full_name)'
 
 async function attachLiveMatchPins(challenges: PairChallenge[]): Promise<PairChallenge[]> {
   if (!challenges.length) return challenges

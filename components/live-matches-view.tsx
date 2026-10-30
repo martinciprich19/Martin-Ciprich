@@ -4,10 +4,13 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { ArrowRight, MapPin, Radio, RefreshCw } from 'lucide-react'
 import { useLanguage } from '@/components/language-provider'
+import { useLeague } from '@/components/league-provider'
 import { uiTranslations } from '@/lib/i18n/ui-translations'
 import { createClient } from '@/lib/supabase/client'
+import type { CountryCode } from '@/lib/countries'
 
 type LiveMatch = {
+  country_code: CountryCode
   id: string
   team_a_player1_name: string
   team_a_player2_name: string
@@ -30,7 +33,13 @@ const ALL_REGIONS = 'all-regions'
 const ALL_ARENAS = 'all-arenas'
 
 export function LiveMatchesView() {
+  const { country, isLoading } = useLeague()
+  return isLoading ? null : <CountryLiveMatchesView key={country} />
+}
+
+function CountryLiveMatchesView() {
   const { t } = useLanguage()
+  const { country, regions } = useLeague()
   const [matches, setMatches] = useState<LiveMatch[]>([])
   const [selectedRegion, setSelectedRegion] = useState(ALL_REGIONS)
   const [selectedArena, setSelectedArena] = useState(ALL_ARENAS)
@@ -43,10 +52,10 @@ export function LiveMatchesView() {
     else setIsLoading(true)
 
     try {
-      const { data, error } = await createClient().rpc('get_public_live_matches')
+      const { data, error } = await createClient().rpc('get_public_live_matches', { p_country_code: country })
       if (error) throw error
       if (!isActive()) return
-      setMatches((data ?? []) as LiveMatch[])
+      setMatches(((data ?? []) as LiveMatch[]).filter((match) => match.country_code === country))
       setLoadError(false)
     } catch (error: unknown) {
       console.error('Načítanie prebiehajúcich zápasov zlyhalo:', error)
@@ -57,7 +66,7 @@ export function LiveMatchesView() {
         setIsRefreshing(false)
       }
     }
-  }, [])
+  }, [country])
 
   useEffect(() => {
     let active = true
@@ -70,7 +79,6 @@ export function LiveMatchesView() {
     }
   }, [loadMatches])
 
-  const regions = useMemo(() => [...new Set(matches.map((match) => match.region).filter((region): region is string => Boolean(region)))].sort((a, b) => a.localeCompare(b)), [matches])
   const arenas = useMemo(() => {
     const filtered = selectedRegion === ALL_REGIONS ? matches : matches.filter((match) => match.region === selectedRegion)
     return [...new Map(filtered.filter((match) => match.arena_id !== null && match.arena_name).map((match) => [String(match.arena_id), match.arena_name as string])).entries()]
@@ -90,9 +98,9 @@ export function LiveMatchesView() {
 
       <div className="mt-7 grid gap-3 sm:grid-cols-2">
         <label>
-          <span className="mb-1.5 block text-xs font-semibold text-app-fg/65">{t('Kraj', 'Region')}</span>
+          <span className="mb-1.5 block text-xs font-semibold text-app-fg/65">{country === 'NL' ? t('Provincia', 'Province') : t('Kraj', 'Region')}</span>
           <select value={selectedRegion} onChange={(event) => { setSelectedRegion(event.target.value); setSelectedArena(ALL_ARENAS) }} className="w-full rounded-xl border border-app-line/10 bg-app-panel px-4 py-3 text-sm text-app-fg outline-none focus:border-[#a8e63c]">
-            <option value={ALL_REGIONS}>{t('Všetky kraje', 'All regions')}</option>
+            <option value={ALL_REGIONS}>{country === 'NL' ? t('Všetky provincie', 'All provinces') : t('Všetky kraje', 'All regions')}</option>
             {regions.map((region) => <option key={region} value={region}>{t(region, uiTranslations[region] ?? region)}</option>)}
           </select>
         </label>
@@ -113,7 +121,7 @@ export function LiveMatchesView() {
       </div>
 
       {loadError ? (
-        <p role="alert" className="mt-6 rounded-2xl border border-red-400/30 bg-red-500/10 p-6 text-center text-sm text-app-red-200">{t('Prebiehajúce zápasy sa nepodarilo načítať. Skontroluj nasadenie SQL migrácie 067.', 'Could not load live matches. Check that SQL migration 067 has been applied.')}</p>
+        <p role="alert" className="mt-6 rounded-2xl border border-red-400/30 bg-red-500/10 p-6 text-center text-sm text-app-red-200">{t('Prebiehajúce zápasy sa nepodarilo načítať. Skontroluj nasadenie SQL migrácií 067–069.', 'Could not load live matches. Check that SQL migrations 067–069 have been applied.')}</p>
       ) : isLoading ? (
         <p role="status" className="mt-6 rounded-2xl border border-app-line/10 bg-app-panel p-8 text-center text-sm text-app-fg/50">{t('Načítavam zápasy…', 'Loading matches…')}</p>
       ) : visibleMatches.length === 0 ? (
@@ -141,7 +149,7 @@ export function LiveMatchesView() {
                     <p className="truncate text-sm font-bold text-app-fg">{match.team_b_player1_name} / {match.team_b_player2_name}</p>
                   </div>
                   <div className="shrink-0 text-right">
-                    <p className="text-[10px] font-semibold uppercase tracking-wide text-app-fg/40">{t('Sady', 'Sets')}</p>
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-app-fg/40">{t('Sety', 'Sets')}</p>
                     <p className="mt-1 text-xl font-black tabular-nums text-app-fg">{match.team_a_sets} : {match.team_b_sets}</p>
                   </div>
                 </div>

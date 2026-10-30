@@ -21,43 +21,49 @@ export async function GET(request: Request) {
   const type = url.searchParams.get('type') as EmailOtpType | null
   const errorCode = url.searchParams.get('error_code')
   const errorDescription = url.searchParams.get('error_description')
+  const isRecovery = type === 'recovery'
+    || safeNextPath(url.searchParams.get('next')) === '/auth/update-password'
+
+  function verificationFailed(reason: 'expired' | 'failed' | 'login') {
+    if (!isRecovery) return loginRedirect(request, reason)
+    const destination = new URL('/auth/update-password', request.url)
+    destination.searchParams.set('recovery', reason === 'expired' ? 'expired' : 'failed')
+    return NextResponse.redirect(destination, { headers: { 'Cache-Control': 'no-store' } })
+  }
 
   if (errorCode || url.searchParams.get('error')) {
     console.error('Overenie e-mailu zlyhalo:', errorCode, errorDescription)
-    return loginRedirect(request, errorCode === 'otp_expired' ? 'expired' : 'failed')
+    return verificationFailed(errorCode === 'otp_expired' ? 'expired' : 'failed')
   }
 
   const supabase = await createClient()
-  let verifiedType: EmailOtpType | null = null
 
   if (tokenHash && type && EMAIL_OTP_TYPES.includes(type)) {
     const { error } = await supabase.auth.verifyOtp({ type, token_hash: tokenHash })
     if (error) {
       console.error('Overenie e-mailového tokenu zlyhalo:', error.code, error.message)
-      return loginRedirect(request, error.code === 'otp_expired' ? 'expired' : 'failed')
+      return verificationFailed(error.code === 'otp_expired' ? 'expired' : 'failed')
     }
-    verifiedType = type
   } else if (code) {
     const { error } = await supabase.auth.exchangeCodeForSession(code)
     if (error) {
       // Typically the link was opened in a different browser than the sign-up (no PKCE verifier).
       // Supabase has already confirmed the e-mail at this point, so the user can simply log in.
       console.error('Výmena overovacieho kódu zlyhala:', error.code, error.message)
-      return loginRedirect(request, 'login')
+      return verificationFailed('login')
     }
   } else {
-    return loginRedirect(request, 'failed')
+    return verificationFailed('failed')
   }
 
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return loginRedirect(request, 'failed')
+  if (!user) return verificationFailed('failed')
   if (!user.email_confirmed_at) {
     await supabase.auth.signOut()
-    return loginRedirect(request, 'failed', user.email)
+    return isRecovery ? verificationFailed('failed') : loginRedirect(request, 'failed', user.email)
   }
 
-  const fallback = verifiedType === 'recovery' ? '/auth/update-password' : '/profile'
-  const destination = new URL(safeNextPath(url.searchParams.get('next'), fallback), request.url)
-  if (verifiedType !== 'recovery' && destination.pathname === '/profile') destination.searchParams.set('verified', '1')
+  const destination = new URL(isRecovery ? '/auth/update-password' : safeNextPath(url.searchParams.get('next')), request.url)
+  if (!isRecovery && destination.pathname === '/profile') destination.searchParams.set('verified', '1')
   return NextResponse.redirect(destination, { headers: { 'Cache-Control': 'no-store' } })
 }

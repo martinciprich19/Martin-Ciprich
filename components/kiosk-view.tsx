@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import { ScoringModeDialog } from '@/components/scoring-mode-dialog'
 import type { MatchSettings } from '@/lib/live-match-scoring'
 import { getErrorMessage } from '@/lib/errors'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useKioskInactivity } from '@/lib/use-kiosk-inactivity'
 import { createQrDeviceToken, saveQrDeviceToken } from '@/lib/qr-match-device'
 
@@ -14,6 +14,11 @@ const PIN_LENGTH = 4
 
 export function KioskView() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const requestedCourtId = searchParams.get('courtId')
+  const courtId = requestedCourtId && /^[1-9]\d*$/.test(requestedCourtId) && Number.isSafeInteger(Number(requestedCourtId))
+    ? Number(requestedCourtId)
+    : null
   const [resuming, setResuming] = useState(false)
   const [pin, setPin] = useState('')
   const [isVerifying, setIsVerifying] = useState(false)
@@ -27,8 +32,8 @@ export function KioskView() {
     setPin('')
     setChoosingRules(false)
     setError('')
-    router.replace('/match?mode=kiosk')
-  }, [router])
+    router.replace(courtId === null ? '/match?mode=kiosk' : `/kiosk?courtId=${courtId}`)
+  }, [courtId, router])
 
   useKioskInactivity(true, resetKiosk)
 
@@ -55,7 +60,8 @@ export function KioskView() {
       saveQrDeviceToken(result.matchId, token)
       window.sessionStorage.removeItem(pendingKey)
       if (inactivityResetRef.current) return
-      window.location.assign(`/match?id=${encodeURIComponent(result.matchId)}&mode=kiosk`)
+      const courtQuery = courtId === null ? '' : `&courtId=${encodeURIComponent(String(courtId))}`
+      window.location.assign(`/match?id=${encodeURIComponent(result.matchId)}&mode=kiosk${courtQuery}`)
     } catch (error) {
       console.error('Obnovenie zápasu pomocou PIN-u zlyhalo:', error)
       setPin('')
@@ -64,7 +70,7 @@ export function KioskView() {
       isVerifyingRef.current = false
       setIsVerifying(false)
     }
-  }, [resuming])
+  }, [courtId, resuming])
 
   const activatePin = useCallback(async (value: string, settings: MatchSettings) => {
     if (!/^\d{4}$/.test(value) || isVerifyingRef.current) return
@@ -73,19 +79,32 @@ export function KioskView() {
     setIsVerifying(true)
     setError('')
     try {
-      const { data, error: rpcError } = await createClient().rpc('activate_live_match_pin_with_settings', {
-        p_match_pin: value,
-        p_scoring_type: settings.scoring_type,
-        p_set_format: settings.set_format,
-        p_third_set_format: settings.third_set_format,
-      })
-      if (rpcError?.code === 'PGRST202') throw new Error('V Supabase spusti SQL migráciu 057 pre nastavenia zápasu.')
+      const { data, error: rpcError } = courtId === null
+        ? await createClient().rpc('activate_live_match_pin_with_settings', {
+          p_match_pin: value,
+          p_scoring_type: settings.scoring_type,
+          p_set_format: settings.set_format,
+          p_third_set_format: settings.third_set_format,
+        })
+        : await createClient().rpc('activate_live_match_pin_for_court', {
+          p_match_pin: value,
+          p_scoring_type: settings.scoring_type,
+          p_set_format: settings.set_format,
+          p_third_set_format: settings.third_set_format,
+          p_court_id: courtId,
+        })
+      if (rpcError?.code === 'PGRST202') {
+        throw new Error(courtId === null
+          ? 'V Supabase spusti SQL migráciu 057 pre nastavenia zápasu.'
+          : 'V Supabase spusti SQL migráciu 072 pre obrazovky kurtov.')
+      }
       if (rpcError) throw rpcError
       if (typeof data !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(data)) {
         throw new Error('Overenie nevrátilo platný zápas.')
       }
       if (inactivityResetRef.current) return
-      window.location.assign(`/match?id=${encodeURIComponent(data)}&mode=kiosk`)
+      const courtQuery = courtId === null ? '' : `&courtId=${encodeURIComponent(String(courtId))}`
+      window.location.assign(`/match?id=${encodeURIComponent(data)}&mode=kiosk${courtQuery}`)
     } catch (verifyError: unknown) {
       console.error('Overenie PIN-u kiosku zlyhalo:', verifyError)
       setPin('')
@@ -95,7 +114,7 @@ export function KioskView() {
       isVerifyingRef.current = false
       setIsVerifying(false)
     }
-  }, [])
+  }, [courtId])
 
   const appendDigit = useCallback((digit: string) => {
     if (isVerifyingRef.current) return

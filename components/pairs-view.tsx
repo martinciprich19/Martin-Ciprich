@@ -4,15 +4,26 @@ import { useState } from 'react'
 import useSWR from 'swr'
 import { ArrowLeft, Plus, Search, Swords, Trash2, Users, X } from 'lucide-react'
 import { useLanguage } from '@/components/language-provider'
+import { useLeague } from '@/components/league-provider'
 import { deletePair, fetchPairs, sendPairInvitation, type PlayerPair } from '@/lib/pairs'
 import { fetchFriends } from '@/lib/friendships'
+import { fetchLeaguePlayers } from '@/lib/players'
 import { getErrorMessage } from '@/lib/errors'
 
 const fieldClass = 'w-full rounded-lg border border-app-line/10 bg-app-canvas px-3 py-2.5 text-sm text-app-fg outline-none focus:border-[#ccff00]'
 
-export function PairsView({ currentPlayerId, onChallenge, onBack }: { currentPlayerId: string | null; onChallenge: (pair: PlayerPair) => void; onBack: () => void }) {
+type PairsViewProps = { currentPlayerId: string | null; onChallenge: (pair: PlayerPair) => void; onBack: () => void }
+
+export function PairsView(props: PairsViewProps) {
+  const { country, isLoading } = useLeague()
+  return isLoading ? null : <CountryPairsView key={country} {...props} />
+}
+
+function CountryPairsView({ currentPlayerId, onChallenge, onBack }: PairsViewProps) {
   const { t } = useLanguage()
-  const pairs = useSWR('league-pairs', fetchPairs)
+  const { country, regions } = useLeague()
+  const pairs = useSWR(['league-pairs', country], () => fetchPairs(country))
+  const players = useSWR(['league-players', country], () => fetchLeaguePlayers(country))
   const friends = useSWR(currentPlayerId ? ['friends', currentPlayerId] : null, ([, id]) => fetchFriends(id))
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [friendId, setFriendId] = useState('')
@@ -25,8 +36,8 @@ export function PairsView({ currentPlayerId, onChallenge, onBack }: { currentPla
   const [isDeleting, setIsDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState('')
 
-  const eligibleFriends = friends.data ?? []
-  const regions = Array.from(new Set((pairs.data ?? []).flatMap((pair) => [pair.player_1.region, pair.player_2.region]).filter(Boolean))).sort((left, right) => left.localeCompare(right, 'sk'))
+  const leaguePlayerIds = new Set((players.data ?? []).map((player) => player.id))
+  const eligibleFriends = (friends.data ?? []).filter((friend) => leaguePlayerIds.has(friend.id))
   const visiblePairs = (pairs.data ?? [])
     .filter((pair) => {
       const normalizedSearch = search.trim().toLocaleLowerCase('sk')
@@ -96,7 +107,7 @@ export function PairsView({ currentPlayerId, onChallenge, onBack }: { currentPla
 
     <div className="mt-6 grid gap-3 sm:grid-cols-[minmax(0,1fr)_260px]">
       <label className="relative block"><span className="sr-only">{t('Vyhľadať dvojicu')}</span><Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-app-fg/35" /><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t('Vyhľadať hráča v dvojici')} className={`${fieldClass} pl-9`} /></label>
-      <label className="block"><span className="sr-only">{t('Filtrovať podľa kraja')}</span><select aria-label={t('Filtrovať podľa kraja')} value={regionFilter} onChange={(event) => setRegionFilter(event.target.value)} className={fieldClass}><option value="">{t('Všetky kraje')}</option>{regions.map((region) => <option key={region} value={region}>{region}</option>)}</select></label>
+      <label className="block"><span className="sr-only">{country === 'NL' ? t('Provincia', 'Province') : t('Filtrovať podľa kraja')}</span><select aria-label={country === 'NL' ? t('Provincia', 'Province') : t('Filtrovať podľa kraja')} value={regionFilter} onChange={(event) => setRegionFilter(event.target.value)} className={fieldClass}><option value="">{country === 'NL' ? t('Všetky provincie', 'All provinces') : t('Všetky kraje')}</option>{regions.map((region) => <option key={region} value={region}>{region}</option>)}</select></label>
     </div>
 
     {feedback ? <p role="status" className="mt-4 rounded-lg border border-emerald-400/20 bg-emerald-400/10 px-3 py-2 text-sm text-app-emerald-300">{feedback}</p> : null}
