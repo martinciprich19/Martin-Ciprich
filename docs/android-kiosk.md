@@ -2,8 +2,11 @@
 
 This is a separate app from RIVA Clicker Test. It opens the HTTPS kiosk in an
 Android WebView and enables the Android helper automatically. It does not work
-alongside Chrome or in the background. Windows helper controls are hidden in
-kiosk mode and in this Android app.
+alongside Chrome or in the background. Kiosk mode and this Android app display
+the generic **Pomocník pre rozpoznávanie klikrov** checkbox, not the Windows label.
+It enables/disables F13/F14 handling and is checked by default in the native app.
+In an ordinary kiosk browser it starts unchecked and does not create a native
+connection by itself. Diagnostic input appears underneath while checked.
 
 ## Build and installation
 
@@ -31,7 +34,8 @@ JavaScript interface is exposed.
 2. Tap **Prirad Tim 1**, then press only the first physical clicker.
 3. Tap **Prirad Tim 2**, then press only the other clicker.
 4. Open a match and select its initial server. Touch the match heading to focus
-   the web content. The helper is already enabled; there is no Windows checkbox.
+   the web content. The generic helper checkbox is already checked in the native
+   app; leave it checked to accept clicker input.
 5. Alternate three presses per team, at least one second apart. Verify each
    changes only that team's score and that the score is saved.
 6. Double-click one clicker 60-349 ms apart. Verify it removes that team's last
@@ -40,6 +44,15 @@ JavaScript interface is exposed.
    after completion. Leaving the app cancels queued input and clears assignments.
    Reassign both clickers after returning, reconnecting or restarting.
 8. Test QR scanning and permission denial on the physical tablet.
+
+Version 1.1 no longer filters assigned devices by the event source-class flag.
+While foreground, unassigned physical shutter/media input is consumed with an
+explicit device-ID message instead of silently changing volume. Virtual or
+missing device identities are reported without scoring. Native toolbar
+Enter/Space remains usable for unassigned keyboards. The delivery message
+distinguishes web-consumed, unhandled and hidden-page input; consumed input does
+not prove that a point was saved (for example, held/media input can be ignored).
+Install the updated APK over version 1.0 and reassign both clickers.
 
 The native activity routes distinct Android input-device IDs to F13/F14 DOM
 events, using the existing web handler, save guards and double-click logic.

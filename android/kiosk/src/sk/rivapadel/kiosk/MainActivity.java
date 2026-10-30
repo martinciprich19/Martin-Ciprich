@@ -158,14 +158,23 @@ public final class MainActivity extends Activity implements InputManager.InputDe
     }
 
     @Override public boolean dispatchKeyEvent(KeyEvent event) {
-        InputDevice device = event.getDevice();
-        if (!foreground || !clickerKey(event.getKeyCode()) || device == null || device.isVirtual()
-            || (event.getSource() & InputDevice.SOURCE_CLASS_BUTTON) == 0)
+        if (!foreground || !clickerKey(event.getKeyCode()))
             return super.dispatchKeyEvent(event);
-        int id = device.getId();
+        InputDevice device = event.getDevice();
+        int id = event.getDeviceId();
+        int team = assigned[0] == id ? 0 : assigned[1] == id ? 1 : -1;
+        // Keep typing/activation in the native toolbar usable for unassigned keyboards.
+        if (learning < 0 && team < 0
+            && (event.getKeyCode() == KeyEvent.KEYCODE_ENTER || event.getKeyCode() == KeyEvent.KEYCODE_SPACE))
+            return super.dispatchKeyEvent(event);
+        if (device == null || device.isVirtual()) {
+            if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0)
+                status.setText("Vstup bez fyzickej identity: ID " + id + ". Android neposkytol identitu klikra.");
+            return true;
+        }
         if (learning >= 0) {
             if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0) {
-                int team = learning;
+                team = learning;
                 if (assigned[1 - team] == id) {
                     message("ROVNAKE ID: stlac iny fyzicky kliker. Android ich musi rozlisovat.");
                 } else {
@@ -173,14 +182,20 @@ public final class MainActivity extends Activity implements InputManager.InputDe
                     descriptors[team] = device.getDescriptor();
                     buttons[team].setText("Tim " + (team + 1) + ": priradeny");
                     learning = -1;
-                    status.setText("Priradene. Stlacenie bude spracovane iba v aktivnom zapase.");
+                    status.setText("Tim " + (team + 1) + " priradeny: ID " + id
+                        + ". Stlacenie bude spracovane iba v aktivnom zapase.");
                     web.requestFocus();
                 }
             }
             return true;
         }
-        int team = assigned[0] == id ? 0 : assigned[1] == id ? 1 : -1;
-        if (team < 0) return super.dispatchKeyEvent(event);
+        if (team < 0) {
+            if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0)
+                status.setText("Nepriradeny vstup: ID " + id + ", "
+                    + KeyEvent.keyCodeToString(event.getKeyCode())
+                    + ". Prirad tento kliker cez Prirad Tim 1 alebo Prirad Tim 2.");
+            return true;
+        }
         if (event.getAction() != KeyEvent.ACTION_DOWN || event.getRepeatCount() != 0) return true;
         if (!device.getDescriptor().equals(descriptors[team])) {
             cancelPending();
@@ -197,10 +212,20 @@ public final class MainActivity extends Activity implements InputManager.InputDe
             return true;
         }
         String key = team == 0 ? "F13" : "F14";
-        web.evaluateJavascript("(function(){if(document.visibilityState!=='visible')return;"
-            + "(document.activeElement||document.body).dispatchEvent(new KeyboardEvent('keydown',"
-            + "{key:'" + key + "',code:'" + key + "',bubbles:true,cancelable:true}));})()", null);
-        status.setText("Vstup Tim " + (team + 1) + " odoslany. Over ulozene skore na obrazovke.");
+        final int teamNumber = team + 1;
+        web.evaluateJavascript("(function(){if(document.visibilityState!=='visible')return 'hidden';"
+            + "return (document.activeElement||document.body).dispatchEvent(new KeyboardEvent('keydown',"
+            + "{key:'" + key + "',code:'" + key + "',bubbles:true,cancelable:true}))"
+            + "?'unhandled':'handled';})()", result -> {
+                if (!foreground) return;
+                if ("\"handled\"".equals(result))
+                    status.setText("Tim " + teamNumber + ": web spracoval vstup. Over ulozene skore.");
+                else if ("\"hidden\"".equals(result))
+                    status.setText("Kliker ignorovany: web nie je viditelny.");
+                else
+                    status.setText("Tim " + teamNumber
+                        + ": web vstup neprijal. Over podanie, pauzu a nasadenie aktualnej webovej aplikacie.");
+            });
         return true;
     }
 

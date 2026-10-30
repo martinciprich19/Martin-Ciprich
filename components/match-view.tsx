@@ -303,9 +303,11 @@ export function MatchView({ matchId, kioskMode = false, viewerMode = false, cour
   const [muted, setMuted] = useState(false)
   const [helperMode, setHelperMode] = useState(false)
   const [androidHelper, setAndroidHelper] = useState(false)
-  const activeHelperMode = androidHelper || (!kioskMode && helperMode)
+  const activeHelperMode = helperMode
   useEffect(() => {
-    setAndroidHelper(navigator.userAgent.includes('RivaAndroidKiosk/1'))
+    const isAndroidHelper = navigator.userAgent.includes('RivaAndroidKiosk/1')
+    setAndroidHelper(isAndroidHelper)
+    if (isAndroidHelper) setHelperMode(true)
   }, [])
   const mutedRef = useRef(false)
   const [match, setMatch] = useState<MatchRow | null>(null)
@@ -1195,19 +1197,21 @@ export function MatchView({ matchId, kioskMode = false, viewerMode = false, cour
       </p>
 
       <p className="mt-4 text-center text-xs text-app-fg/35">Skratky: A = bod pre Tím 1 · L = bod pre Tím 2 · Z = späť · M = reset gemu</p>
-      {canEdit && !kioskMode && !androidHelper ? <label className="mt-4 flex items-center justify-center gap-2 text-sm text-app-fg/75">
+      {canEdit ? <label className="mt-4 flex items-center justify-center gap-2 text-sm text-app-fg/75">
         <input type="checkbox" data-match-clicker-helper checked={helperMode} onChange={(event) => setHelperMode(event.target.checked)} />
-        {t('Windows pomocník pre dva rovnaké klikre', 'Windows helper for two identical clickers')}
+        {kioskMode || androidHelper
+          ? t('Pomocník pre rozpoznávanie klikrov', 'Clicker recognition helper')
+          : t('Windows pomocník pre dva rovnaké klikre', 'Windows helper for two identical clickers')}
       </label> : null}
-      {androidHelper ? <p role="status" className="mt-4 text-center text-sm text-app-fg/75">{t('Android pomocník je automaticky zapnutý. Klikre priraď k tímom v hornej lište aplikácie.', 'Android helper is enabled automatically. Assign clickers to teams in the app toolbar.')}</p> : null}
-      <p role="status" className="mt-2 text-center text-xs text-app-fg/45">{androidHelper
+      {androidHelper ? <p className="mt-4 text-center text-sm text-app-fg/75">{t('V Android aplikácii je pomocník predvolene zapnutý. Klikre priraď k tímom v hornej lište aplikácie.', 'In the Android app, the helper is enabled by default. Assign clickers to teams in the app toolbar.')}</p> : kioskMode ? <p className="mt-4 text-center text-sm text-app-fg/75">{t('Prepínač povoľuje vstup z pomocníka, ale sám nerozpoznáva zariadenia. Pre dva rovnaké Android klikre otvor kiosk v RIVA Android Kiosk a priraď ich k tímom.', 'This toggle enables helper input but does not identify devices itself. For two identical Android clickers, open the kiosk in RIVA Android Kiosk and assign them to teams.')}</p> : null}
+      <p role="status" className="mt-2 text-center text-xs text-app-fg/45">{androidHelper && activeHelperMode
         ? t('Android: priradený kliker ovláda svoj tím. Po návrate do aplikácie alebo odpojení priraď klikre znova.', 'Android: each assigned clicker controls its team. Reassign after returning to the app or disconnecting.')
         : activeHelperMode
         ? t('Pomocník: F13 = Tím 1 · F14 = Tím 2. Pôvodné mediálne klávesy sú ignorované. Po obnovení stránky zapni tento režim znova.', 'Helper: F13 = Team 1 · F14 = Team 2. Original media keys are ignored. Re-enable this mode after reloading.')
         : t('Bluetooth kliker: VolumeUp / medzerník = Tím 1 · VolumeDown / PlayPause / Enter = Tím 2.', 'Bluetooth clicker: VolumeUp / Space = Team 1 · VolumeDown / PlayPause / Enter = Team 2.')}</p>
       <p className="mt-2 text-center text-xs text-app-fg/55">{t('Kliker: 1 stlačenie = pridať bod (po 350 ms) · 2 rýchle stlačenia toho istého klikra = odobrať posledný bod jeho tímu. Platí aj po bode súpera. A/L pridávajú bod ihneď.', 'Clicker: 1 press = add a point (after 350 ms) · 2 quick presses of the same clicker = remove its team’s last point, even after an opponent’s point. A/L add points immediately.')}</p>
       {activeHelperMode ? <p role="status" className="mt-2 text-center text-xs text-app-fg/75">
-        {androidHelper ? t('Vstup Android pomocníka:', 'Android helper input:') : t('Vstup Windows pomocníka:', 'Windows helper input:')} {clickerDiagnostic
+        {androidHelper ? t('Vstup Android pomocníka:', 'Android helper input:') : kioskMode ? t('Vstup pomocníka:', 'Helper input:') : t('Vstup Windows pomocníka:', 'Windows helper input:')} {clickerDiagnostic
           ? `${clickerDiagnostic.key} / ${clickerDiagnostic.code || '—'} (#${clickerDiagnostic.count}) — ${{
             received: t('prijatý vstup', 'input received'),
             context: t('ignorované: klikni na nadpis zápasu, mimo polí a dialógov', 'ignored: click the match heading, outside fields and dialogs'),
