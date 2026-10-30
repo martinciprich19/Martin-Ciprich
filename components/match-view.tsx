@@ -20,6 +20,7 @@ import { useKioskInactivity } from '@/lib/use-kiosk-inactivity'
 import { PauseMatchDialog } from '@/components/pause-match-dialog'
 import { createMatchClickerHandler, type ClickerInputStatus } from '@/lib/match-clicker'
 import { isCountryCode, type CountryCode } from '@/lib/countries'
+import { FullyClickerBridge } from '@/components/fully-clicker-bridge'
 
 type MatchRow = LiveScore & {
   country_code: CountryCode
@@ -1203,7 +1204,8 @@ export function MatchView({ matchId, kioskMode = false, viewerMode = false, cour
           ? t('Pomocník pre rozpoznávanie klikrov', 'Clicker recognition helper')
           : t('Windows pomocník pre dva rovnaké klikre', 'Windows helper for two identical clickers')}
       </label> : null}
-      {androidHelper ? <p className="mt-4 text-center text-sm text-app-fg/75">{t('V Android aplikácii je pomocník predvolene zapnutý. Klikre priraď k tímom v hornej lište aplikácie.', 'In the Android app, the helper is enabled by default. Assign clickers to teams in the app toolbar.')}</p> : kioskMode ? <p className="mt-4 text-center text-sm text-app-fg/75">{t('Prepínač povoľuje vstup z pomocníka, ale sám nerozpoznáva zariadenia. Pre dva rovnaké Android klikre otvor kiosk v RIVA Android Kiosk a priraď ich k tímom.', 'This toggle enables helper input but does not identify devices itself. For two identical Android clickers, open the kiosk in RIVA Android Kiosk and assign them to teams.')}</p> : null}
+      {androidHelper ? <p className="mt-4 text-center text-sm text-app-fg/75">{t('V Android aplikácii je pomocník predvolene zapnutý. Klikre priraď k tímom v hornej lište aplikácie.', 'In the Android app, the helper is enabled by default. Assign clickers to teams in the app toolbar.')}</p> : null}
+      {canEdit && kioskMode && !androidHelper ? <FullyClickerBridge enabled={activeHelperMode} /> : null}
       <p role="status" className="mt-2 text-center text-xs text-app-fg/45">{androidHelper && activeHelperMode
         ? t('Android: priradený kliker ovláda svoj tím. Po návrate do aplikácie alebo odpojení priraď klikre znova.', 'Android: each assigned clicker controls its team. Reassign after returning to the app or disconnecting.')
         : activeHelperMode

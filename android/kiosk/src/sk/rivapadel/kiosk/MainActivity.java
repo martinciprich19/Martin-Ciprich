@@ -8,10 +8,12 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.view.InputDevice;
 import android.view.KeyEvent;
+import android.view.View;
 import android.view.WindowManager;
 import android.webkit.PermissionRequest;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceError;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Button;
@@ -23,6 +25,7 @@ import android.widget.Toast;
 public final class MainActivity extends Activity implements InputManager.InputDeviceListener {
     private WebView web;
     private TextView status;
+    private TextView inputStatus;
     private EditText address;
     private Button[] buttons = new Button[2];
     private final int[] assigned = {-1, -1};
@@ -32,6 +35,12 @@ public final class MainActivity extends Activity implements InputManager.InputDe
     private String origin;
     private PermissionRequest cameraRequest;
     private InputManager inputs;
+    private int inputCount;
+    private boolean pageLoadFailed;
+    private String matchId;
+    private boolean setupRequired;
+    private TextView setupPrompt;
+    private Button beginMatch;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -45,12 +54,15 @@ public final class MainActivity extends Activity implements InputManager.InputDe
             return insets;
         });
         setContentView(root);
+        TextView title = new TextView(this);
+        title.setText("RIVA Padel - nativny kiosk 1.3 (bez Pristupnosti)");
+        root.addView(title);
         address = new EditText(this);
         address.setSingleLine(true);
         address.setHint("https://tvoja-aplikacia/kiosk?courtId=1");
         address.setInputType(android.text.InputType.TYPE_CLASS_TEXT
             | android.text.InputType.TYPE_TEXT_VARIATION_URI);
-        address.setText(getPreferences(MODE_PRIVATE).getString("url", ""));
+        address.setText(getPreferences(MODE_PRIVATE).getString("url", "https://www.rivapadel.app/kiosk"));
         root.addView(address);
         Button open = new Button(this);
         open.setText("Otvorit kiosk");
@@ -61,8 +73,20 @@ public final class MainActivity extends Activity implements InputManager.InputDe
             final int team = i;
             buttons[i] = new Button(this);
             buttons[i].setOnClickListener(v -> {
+                if (team == 1 && assigned[0] < 0) {
+                    message("Najprv potvrd kliker Timu 1.");
+                    return;
+                }
                 cancelPending();
+                if (team == 0) resetAssignments();
+                else {
+                    assigned[team] = -1;
+                    descriptors[team] = null;
+                    buttons[team].setText("Prirad Tim " + (team + 1));
+                }
+                setupRequired = matchId != null;
                 learning = team;
+                updateSetup();
                 status.setText("Stlac iba kliker pre Tim " + (team + 1));
             });
             teams.addView(buttons[i], new LinearLayout.LayoutParams(0, -2, 1));
@@ -70,6 +94,26 @@ public final class MainActivity extends Activity implements InputManager.InputDe
         root.addView(teams);
         status = new TextView(this);
         root.addView(status);
+        inputStatus = new TextView(this);
+        inputStatus.setText("Zachytene stlacenia: 0. Stlac fyzicky kliker v tejto aplikacii.");
+        root.addView(inputStatus);
+        setupPrompt = new TextView(this);
+        setupPrompt.setTextSize(22);
+        root.addView(setupPrompt);
+        beginMatch = new Button(this);
+        beginMatch.setText("Klikre potvrdene - pokracovat do zapasu");
+        beginMatch.setOnClickListener(v -> {
+            if (!foreground || matchId == null || assigned[0] < 0 || assigned[1] < 0) {
+                message("Pred zapasom musis potvrdit oba rozne klikre.");
+                return;
+            }
+            setupRequired = false;
+            learning = -1;
+            updateSetup();
+            status.setText("Oba klikre potvrdene. Vyber uvodne podanie v zapase.");
+            web.requestFocus();
+        });
+        root.addView(beginMatch);
         web = new WebView(this);
         web.getSettings().setJavaScriptEnabled(true);
         web.getSettings().setDomStorageEnabled(true);
@@ -84,6 +128,32 @@ public final class MainActivity extends Activity implements InputManager.InputDe
             }
             @Override public void onPageStarted(WebView view, String url, android.graphics.Bitmap icon) {
                 denyCamera();
+                pageLoadFailed = false;
+                trackMatch(url);
+                status.setText("Nacitavam RIVA...");
+            }
+            @Override public void doUpdateVisitedHistory(WebView view, String url, boolean isReload) {
+                trackMatch(url);
+            }
+            @Override public void onPageFinished(WebView view, String url) {
+                trackMatch(url);
+                if (trusted(url) && !pageLoadFailed) {
+                    status.setText(setupRequired ? "Pred zapasom potvrd oba klikre podla pokynov."
+                        : "Stranka nacitana. Vyber hru alebo uvodne podanie.");
+                }
+            }
+            @Override public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
+                if (request.isForMainFrame()) {
+                    pageLoadFailed = true;
+                    message("Stranku sa nepodarilo nacitat: " + error.getDescription());
+                }
+            }
+            @Override public void onReceivedHttpError(WebView view, WebResourceRequest request,
+                    android.webkit.WebResourceResponse response) {
+                if (request.isForMainFrame()) {
+                    pageLoadFailed = true;
+                    message("Server vratil chybu HTTP " + response.getStatusCode() + ".");
+                }
             }
         });
         web.setWebChromeClient(new WebChromeClient() {
@@ -122,13 +192,17 @@ public final class MainActivity extends Activity implements InputManager.InputDe
         String url = address.getText().toString().trim();
         Uri uri = Uri.parse(url);
         if (!"https".equals(uri.getScheme()) || uri.getHost() == null
-            || uri.getUserInfo() != null || !"/kiosk".equals(uri.getPath())) {
-            message("Zadaj HTTPS adresu kiosku, napr. https://tvoja-domena/kiosk?courtId=1");
+            || uri.getUserInfo() != null
+            || !("/kiosk".equals(uri.getPath())
+                || ("/match".equals(uri.getPath()) && "kiosk".equals(uri.getQueryParameter("mode"))))) {
+            message("Zadaj HTTPS adresu /kiosk alebo /match?mode=kiosk, napr. https://www.rivapadel.app/kiosk");
             return;
         }
         cancelPending();
         origin = "https://" + uri.getEncodedAuthority();
+        matchId = null;
         resetAssignments();
+        trackMatch(url);
         getPreferences(MODE_PRIVATE).edit().putString("url", url).apply();
         web.loadUrl(url);
         web.requestFocus();
@@ -147,10 +221,47 @@ public final class MainActivity extends Activity implements InputManager.InputDe
             buttons[i].setText("Prirad Tim " + (i + 1));
         }
         status.setText("Android pomocnik zapnuty. Prirad oba fyzicke klikre.");
+        setupRequired = matchId != null;
+        if (setupRequired) learning = 0;
+        updateSetup();
+    }
+
+    private void trackMatch(String url) {
+        String next = null;
+        if (trusted(url)) {
+            Uri uri = Uri.parse(url);
+            if ("/match".equals(uri.getPath())) {
+                String id = uri.getQueryParameter("id");
+                if (id != null && !id.isEmpty()) next = id;
+            }
+        }
+        if (next == null ? matchId != null : !next.equals(matchId)) {
+            cancelPending();
+            matchId = next;
+            resetAssignments();
+        }
+        updateSetup();
+    }
+
+    private void updateSetup() {
+        boolean blocked = matchId != null && setupRequired;
+        buttons[1].setEnabled(assigned[0] >= 0);
+        setupPrompt.setVisibility(blocked ? View.VISIBLE : View.GONE);
+        beginMatch.setVisibility(blocked ? View.VISIBLE : View.GONE);
+        beginMatch.setEnabled(assigned[0] >= 0 && assigned[1] >= 0);
+        if (blocked) {
+            setupPrompt.setText(assigned[0] < 0
+                ? "1/2: Stlac a uvolni kliker Timu 1. Toto stlacenie neprida bod."
+                : assigned[1] < 0
+                    ? "2/2: Tim 1 potvrdeny. Stlac a uvolni iny kliker pre Tim 2."
+                    : "Oba klikre potvrdene. Pokracuj tlacidlom do zapasu.");
+        }
+        web.setVisibility(blocked ? View.INVISIBLE : View.VISIBLE);
     }
 
     private static boolean clickerKey(int key) {
         return key == KeyEvent.KEYCODE_VOLUME_UP || key == KeyEvent.KEYCODE_VOLUME_DOWN
+            || key == KeyEvent.KEYCODE_VOLUME_MUTE
             || key == KeyEvent.KEYCODE_CAMERA || key == KeyEvent.KEYCODE_FOCUS
             || key == KeyEvent.KEYCODE_HEADSETHOOK || key == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE
             || key == KeyEvent.KEYCODE_MEDIA_PLAY || key == KeyEvent.KEYCODE_MEDIA_PAUSE
@@ -158,8 +269,9 @@ public final class MainActivity extends Activity implements InputManager.InputDe
     }
 
     @Override public boolean dispatchKeyEvent(KeyEvent event) {
-        if (!foreground || !clickerKey(event.getKeyCode()))
+        if (!clickerKey(event.getKeyCode()))
             return super.dispatchKeyEvent(event);
+        if (foreground) trackMatch(web.getUrl());
         InputDevice device = event.getDevice();
         int id = event.getDeviceId();
         int team = assigned[0] == id ? 0 : assigned[1] == id ? 1 : -1;
@@ -167,6 +279,17 @@ public final class MainActivity extends Activity implements InputManager.InputDe
         if (learning < 0 && team < 0
             && (event.getKeyCode() == KeyEvent.KEYCODE_ENTER || event.getKeyCode() == KeyEvent.KEYCODE_SPACE))
             return super.dispatchKeyEvent(event);
+        if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0) {
+            inputCount++;
+            inputStatus.setText("Zachytene stlacenia: " + inputCount + " | ID " + id + " | "
+                + KeyEvent.keyCodeToString(event.getKeyCode())
+                + (device == null ? "" : " | " + device.getName()));
+        }
+        if (!foreground) {
+            if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0)
+                status.setText("Kliker zachyteny, ale zapas nie je v popredi. Bod nebol odoslany.");
+            return true;
+        }
         if (device == null || device.isVirtual()) {
             if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0)
                 status.setText("Vstup bez fyzickej identity: ID " + id + ". Android neposkytol identitu klikra.");
@@ -180,11 +303,12 @@ public final class MainActivity extends Activity implements InputManager.InputDe
                 } else {
                     assigned[team] = id;
                     descriptors[team] = device.getDescriptor();
-                    buttons[team].setText("Tim " + (team + 1) + ": priradeny");
-                    learning = -1;
+                    buttons[team].setText("Tim " + (team + 1) + ": ID " + id);
+                    learning = assigned[1] < 0 && team == 0 ? 1 : -1;
+                    updateSetup();
                     status.setText("Tim " + (team + 1) + " priradeny: ID " + id
                         + ". Stlacenie bude spracovane iba v aktivnom zapase.");
-                    web.requestFocus();
+                    if (!setupRequired) web.requestFocus();
                 }
             }
             return true;
@@ -197,6 +321,10 @@ public final class MainActivity extends Activity implements InputManager.InputDe
             return true;
         }
         if (event.getAction() != KeyEvent.ACTION_DOWN || event.getRepeatCount() != 0) return true;
+        if (setupRequired) {
+            message("Klikre su potvrdene. Najprv stlac Pokracovat do zapasu. Bod nebol pridany.");
+            return true;
+        }
         if (!device.getDescriptor().equals(descriptors[team])) {
             cancelPending();
             resetAssignments();
@@ -206,7 +334,7 @@ public final class MainActivity extends Activity implements InputManager.InputDe
             message("Najprv prirad oba klikre.");
             return true;
         }
-        if (!trusted(web.getUrl()) || !"/match".equals(Uri.parse(web.getUrl()).getPath())
+        if (matchId == null || !trusted(web.getUrl()) || !"/match".equals(Uri.parse(web.getUrl()).getPath())
             || !web.hasFocus()) {
             status.setText("Kliker ignorovany: otvor aktivny zapas a klikni do jeho obrazovky.");
             return true;

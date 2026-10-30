@@ -1,5 +1,8 @@
 # Android kiosk with clicker input
 
+To keep using Fully Kiosk Browser instead of this standalone WebView, use the
+separate [Fully clicker bridge](fully-clicker.md).
+
 This is a separate app from RIVA Clicker Test. It opens the HTTPS kiosk in an
 Android WebView and enables the Android helper automatically. It does not work
 alongside Chrome or in the background. Kiosk mode and this Android app display
@@ -7,6 +10,10 @@ the generic **Pomocník pre rozpoznávanie klikrov** checkbox, not the Windows l
 It enables/disables F13/F14 handling and is checked by default in the native app.
 In an ordinary kiosk browser it starts unchecked and does not create a native
 connection by itself. Diagnostic input appears underneath while checked.
+
+This native app does not require Accessibility permission. A RIVA Padel icon
+installed through Chrome is a different app and cannot identify Android input
+device IDs. Launch **RIVA Android Kiosk** for native input.
 
 ## Build and installation
 
@@ -22,6 +29,9 @@ private device testing, not Play Store distribution.
 
 Deploy the updated website before testing. Enter the full deployed kiosk URL,
 for example `https://your-domain/kiosk?courtId=1`, and tap **Otvorit kiosk**.
+Version 1.2 defaults to `https://www.rivapadel.app/kiosk` and also accepts
+`https://www.rivapadel.app/match?mode=kiosk`. Opening the URL clears assignments;
+assign both clickers afterwards. The heading identifies the installed native version.
 `localhost` points at the tablet, not the development computer. Only HTTPS and
 navigation within the configured origin are allowed. The address is saved
 locally; it must point at a trusted RIVA deployment. Camera permission is used
@@ -30,10 +40,20 @@ JavaScript interface is exposed.
 
 ## Clickers
 
-1. Pair both clickers in Android Bluetooth settings.
-2. Tap **Prirad Tim 1**, then press only the first physical clicker.
-3. Tap **Prirad Tim 2**, then press only the other clicker.
-4. Open a match and select its initial server. Touch the match heading to focus
+Version 1.3 requires sequential confirmation inside the native app before a
+match can be operated. Game selection stays available; when a URL with
+`/match?id=...` opens (including client-side navigation), the match WebView is
+hidden until both distinct devices are assigned and the continuation button is
+pressed. This is a local native UI gate, not a server authorization change or a
+Chrome/PWA feature. No new web/native JavaScript interface is exposed.
+
+1. Pair both clickers in Android Bluetooth settings and choose a game in RIVA.
+2. At **1/2**, press and release only the clicker for Team 1.
+3. At **2/2**, press and release the different clicker for Team 2. Duplicate IDs
+   are rejected. These setup presses never dispatch scoring events.
+4. Tap **Klikre potvrdene - pokracovat do zapasu** and select the initial server.
+   The match cannot be operated by touch or clicker before this confirmation.
+   Touch the match heading to focus
    the web content. The generic helper checkbox is already checked in the native
    app; leave it checked to accept clicker input.
 5. Alternate three presses per team, at least one second apart. Verify each
@@ -53,6 +73,20 @@ Enter/Space remains usable for unassigned keyboards. The delivery message
 distinguishes web-consumed, unhandled and hidden-page input; consumed input does
 not prove that a point was saved (for example, held/media input can be ignored).
 Install the updated APK over version 1.0 and reassign both clickers.
+
+Version 1.2 adds a separate persistent press counter, Android device ID and
+key name above the page, including unassigned input. The team buttons show
+assigned IDs. A received clicker event while the activity is paused is consumed
+and explicitly reported without scoring, rather than passed to Android volume
+handling. Volume mute is handled too. Main-page network/HTTP errors remain visible.
+If volume changes but the counter stays at zero, this activity did not receive
+the event: confirm the native heading is visible and report the device behavior.
+The counter is evidence of native receipt, not a saved point.
+
+Each different match requires fresh confirmation. Reloading the same match
+without leaving the app preserves confirmation. Leaving the app, device
+invalidation or manually reassigning a clicker locks the current match again.
+There is no touch-only skip in the native app; ordinary browsers are unchanged.
 
 The native activity routes distinct Android input-device IDs to F13/F14 DOM
 events, using the existing web handler, save guards and double-click logic.

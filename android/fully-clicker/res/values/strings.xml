@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">RIVA Fully Clicker</string>
+    <string name="service_description">Rozlisuje dva priradene Bluetooth klikre pre bodovanie v RIVA vo Fully Kiosk Browser. Zachytava klavesy iba pri priradovani a ked je Fully v popredi. Necita obsah obrazovky. Vybrane udalosti posiela lokalne do Fully; nepouziva internet. Sluzbu mozes kedykolvek vypnut v Pristupnosti.</string>
+</resources>
