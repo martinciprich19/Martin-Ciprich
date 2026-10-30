@@ -42,7 +42,7 @@ export function MatchStartView({ kioskMode = false }: { kioskMode?: boolean }) {
     router.replace(kioskMode ? '/match?mode=kiosk' : '/match')
   }, [kioskMode, router])
 
-  useKioskInactivity(isScanning || choosingRules || isCreating, resetKioskFlow)
+  useKioskInactivity(matchId === null && (isScanning || choosingRules || isCreating), resetKioskFlow)
 
   async function startQuickGame(settings: MatchSettings) {
     if (creatingRef.current || leagueLoading) return
@@ -65,8 +65,8 @@ export function MatchStartView({ kioskMode = false }: { kioskMode?: boolean }) {
           team_b_player2_name: nicknames[3].trim() || 'Hráč 2',
           team_a_game_score: 0,
           team_b_game_score: 0,
-          serving_team: Math.random() < 0.5 ? 'TEAM_A' : 'TEAM_B',
-          initial_server_chosen: true,
+          serving_team: null,
+          initial_server_chosen: false,
         })
         .select('id')
         .single()

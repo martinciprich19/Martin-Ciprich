@@ -88,6 +88,11 @@ without leaving the app preserves confirmation. Leaving the app, device
 invalidation or manually reassigning a clicker locks the current match again.
 There is no touch-only skip in the native app; ordinary browsers are unchanged.
 
+The live match view does not return to game selection on inactivity, in either
+the native app or a browser. Between points the match must stay open even without
+touch input. The existing 60-second inactivity reset remains on setup/selection
+screens. Returning from a match uses the explicit match actions.
+
 The native activity routes distinct Android input-device IDs to F13/F14 DOM
 events, using the existing web handler, save guards and double-click logic.
 Outside the native Android app, a kiosk browser does not automatically gain

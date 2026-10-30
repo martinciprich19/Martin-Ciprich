@@ -16,7 +16,6 @@ import { speakMatchAnnouncement } from '@/lib/match-speech'
 import { MatchAudio, type MatchSpeechStatus } from '@/lib/match-audio'
 import { isTiebreak, isSuperTiebreak, getTiebreakScore, parsePointHistory, parseTiebreakScore } from '@/lib/live-match-scoring'
 import { awardLivePoint, removeLastTeamPoint, resetLiveGame, getPointAnnouncement, getMatchWinner, getWinnerAnnouncement, parseSetStatistics, parseServiceGameStatistics, type LiveScore, type Team, type GameScore } from '@/lib/live-match-scoring'
-import { useKioskInactivity } from '@/lib/use-kiosk-inactivity'
 import { PauseMatchDialog } from '@/components/pause-match-dialog'
 import { createMatchClickerHandler, type ClickerInputStatus } from '@/lib/match-clicker'
 import { isCountryCode, type CountryCode } from '@/lib/countries'
@@ -356,8 +355,6 @@ export function MatchView({ matchId, kioskMode = false, viewerMode = false, cour
     router.replace(kioskMode && courtId ? `/kiosk?courtId=${encodeURIComponent(courtId)}` : kioskMode ? '/match?mode=kiosk' : '/match')
     router.refresh()
   }, [courtId, kioskMode, matchId, router])
-
-  useKioskInactivity(!isLoading && match !== null && !match.finished_at && !match.paused_at && !confirmingEnd && !confirmingPause && !getMatchWinner(match), resetKiosk)
 
   const leagueMatch = Boolean(match && (match.qr_created_by !== null || match.challenge_id !== null))
   useEffect(() => {
