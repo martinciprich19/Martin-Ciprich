@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { RivaLogo } from '@/components/riva-logo'
 import { useState } from 'react'
 import { useLanguage } from '@/components/language-provider'
+import { PageReloadButton } from '@/components/page-reload-button'
 
 const navItems = [
   { label: 'Ako to funguje', href: '/how-it-works' },
@@ -36,6 +37,7 @@ export default function HowItWorksView({ kioskMode, signedIn = false }: { kioskM
           {navItems.map((item) => <Link key={item.label} href={item.href} className="text-[11px] font-medium text-app-fg/70 transition hover:text-app-accent">{t(item.label)}</Link>)}
         </nav>
         <div className="flex shrink-0 items-center gap-2 lg:gap-3">
+          <PageReloadButton />
           {!kioskMode && !signedIn ? <>
             <Link href="/auth/login" className="whitespace-nowrap rounded-lg border border-app-line/15 px-3 py-2 text-[10px] font-semibold text-app-fg transition hover:border-app-line/35 sm:px-4 sm:py-2.5 sm:text-[11px]">{t('Prihlásiť sa')}</Link>
             <Link href="/auth/sign-up" className="whitespace-nowrap rounded-lg bg-[#a8e63c] px-3 py-2 text-[10px] font-bold text-[#061016] transition hover:bg-[#c1fa66] sm:px-4 sm:py-2.5 sm:text-[11px]">{t('Registrovať sa')}</Link>

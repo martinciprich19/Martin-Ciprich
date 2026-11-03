@@ -31,6 +31,7 @@ export async function deliverPush(tokens: string[], data: { title: string; body:
       tokens: batch,
       data,
       webpush: { headers: { TTL: '3600', Urgency: 'high' } },
+      android: { priority: 'high', ttl: 60 * 60 * 1000 },
     })
     sent += result.successCount
     failed += result.failureCount

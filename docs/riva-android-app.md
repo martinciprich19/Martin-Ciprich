@@ -7,12 +7,12 @@ web pages and backend; nothing is copied into a separate database.
 
 ## Isolation and installation
 
-- App name: **RIVA Padel Test**, version 1.8.
+- App name: **RIVA Padel Test**, version 1.9.
 - Package: `sk.rivapadel.apptest`, distinct from the Chrome-installed PWA,
   standalone kiosk and Fully helper. It installs alongside them.
 - Cookies, login state and storage are private to this app. Log in separately.
-- No changes to the production website, database schema or other APKs are needed.
-  Existing uncommitted web fixes are not included until separately deployed.
+- No database schema migration or changes to other APKs are needed. Deploy the
+  matching web app changes before enabling native notifications.
 - **Tests against the deployed backend can create real matches, points and uploads.**
   Uninstalling the APK does not undo those records. Use deliberate test data.
 
@@ -33,6 +33,26 @@ The APK is locally debug-signed for private testing, not a Play Store release.
 The build and APK are ignored by Git. No credentials are embedded.
 Return to the previous app at any time; uninstall only **RIVA Padel Test** if desired.
 
+## Native Android notifications
+
+Version 1.9 adds Firebase Cloud Messaging to the Android app. Register the
+Android package `sk.rivapadel.apptest` in the same Firebase project used by the
+server, then save its `google-services.json` as
+`android/riva-app/app/google-services.json` (this local config is ignored by Git).
+The Android app ID and Firebase project must match the server's Firebase
+configuration. Rebuild and install the APK as an update; do not uninstall the
+existing app, so its signing identity and login data remain intact.
+
+In the signed-in RIVA profile, enable **Natívne notifikácie** and grant Android's
+notification permission when prompted. The app obtains its own FCM token and
+registers it through the signed-in user's existing Supabase session. Firebase
+server credentials remain on the server and are never included in the APK.
+Disabling notifications removes that device token from the user's registration.
+Android 13 and later require notification permission; notifications can also be
+disabled in Android's app settings. Tapping one opens the RIVA profile. Delivery
+and visible notification behavior should be checked on a physical Android
+device, both while the app is open and while it is in the background.
+
 ## Web features
 
 All same-origin HTTPS pages remain inside the WebView. **Domov** opens the full
@@ -41,10 +61,12 @@ JavaScript, DOM storage and first-party cookies are enabled. Web permissions and
 authorization remain the responsibility of the existing website.
 
 The shared web layout includes a circular **Obnoviť stránku** (Reload page)
-button at the bottom right on every page, including match/kiosk and login pages.
+button in the top toolbar on every page, including match/kiosk and login pages.
+On profile and public pages it is an inline header control with its own layout
+space, not a floating overlay; pages without that header get a small top toolbar.
 It fully reloads the current URL, preserving its query parameters and existing
 login/device storage. Unsaved form edits or unsent points are not recovered.
-The button respects device safe-area insets and stays below modal overlays.
+The button does not overlap the bottom navigation or other controls.
 This requires web deployment, not a new APK.
 
 Android's document picker supports single and multiple file inputs for profile

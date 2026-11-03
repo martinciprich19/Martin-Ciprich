@@ -263,6 +263,7 @@ test('send-push exposes the same authenticated and validated webhook handler', a
 test('webhook rejects unauthorized/invalid events and uses stored content and recipients', async () => {
   let delivered
   let bulk = false
+  let finishedAlerts = []
   let notification = { type: 'challenge_request', message: 'Stored challenge' }
   const ranges = []
   const route = await loadModule('../app/api/push/webhook/route.ts', {
@@ -270,7 +271,15 @@ test('webhook rejects unauthorized/invalid events and uses stored content and re
     'next/server': { NextResponse: Response },
     '@/lib/firebase-admin': {
       createPushAdminClient: () => ({
-        from: () => ({ select: () => ({ eq: () => ({ single: async () => ({ data: notification, error: null }) }) }) }),
+        from: () => ({ select: () => {
+          const filters = {}
+          const query = {
+            eq: (field, value) => { filters[field] = value; return query },
+            single: async () => ({ data: notification, error: null }),
+            limit: async () => ({ data: finishedAlerts.filter(row => row.type === filters.type && row.match_id === filters.match_id), error: null }),
+          }
+          return query
+        } }),
         rpc: () => ({ range: async (start) => {
           ranges.push(start)
           return { data: bulk && start === 0 ? Array.from({ length: 1000 }, (_, index) => `device-${index}`) : [tokenA], error: null }
@@ -291,6 +300,20 @@ test('webhook rejects unauthorized/invalid events and uses stored content and re
   notification = { type: 'match_result', message: 'Potvrď výsledok 2:0' }
   assert.equal((await route.POST(request(event))).status, 200)
   assert.equal(delivered.data.title, 'Potvrď výsledok')
+  assert.equal(delivered.data.body, notification.message)
+  notification = { type: 'match_result', match_id: 'match-1', message: 'Potvrď výsledok 2:0' }
+  finishedAlerts = [{ type: 'match_finished', match_id: 'match-1' }]
+  const skippedResult = await route.POST(request(event))
+  assert.equal(skippedResult.status, 200)
+  assert.equal((await skippedResult.json()).skipped, true)
+  finishedAlerts = []
+  notification = { type: 'match_finished', title: 'Prehra v zápase', message: 'Tvoj tím prehral 0:2.' }
+  assert.equal((await route.POST(request(event))).status, 200)
+  assert.equal(delivered.data.title, notification.title)
+  assert.equal(delivered.data.body, notification.message)
+  notification = { type: 'match_paused', title: 'Zápas prerušený', message: 'PIN 0042' }
+  assert.equal((await route.POST(request(event))).status, 200)
+  assert.equal(delivered.data.title, notification.title)
   assert.equal(delivered.data.body, notification.message)
   notification = { type: 'friend_request', message: 'Alice ti poslala žiadosť.' }
   assert.equal((await route.POST(request(event))).status, 200)
@@ -326,6 +349,28 @@ test('match-result notifications have a readable title and preserve the approval
   assert.equal(result[0].matchId, '63')
   assert.equal(result[0].challenge_id, null)
   assert.equal(result[0].read, false)
+})
+
+test('completed match and pause alerts use stored copy without duplicating match-result alerts', async () => {
+  const rows = [
+    { id: 'result', user_id: 1, type: 'match_result', message: 'Potvrď výsledok', match_id: 'match-1', is_read: false },
+    { id: 'finished', user_id: 1, type: 'match_finished', title: 'Výhra v zápase', body: 'Tvoj tím vyhral 2:0.', message: 'Tvoj tím vyhral 2:0.', match_id: 'match-1', is_read: false },
+    { id: 'paused', user_id: 1, type: 'match_paused', title: 'Zápas prerušený', body: 'PIN 0042', message: 'PIN 0042', is_read: false },
+  ]
+  const module = await loadModule('../lib/notifications.ts', {
+    '@/lib/supabase/client': { createClient: () => ({
+      from: () => ({ select: () => ({ or: () => ({ order: () => ({
+        limit: async () => ({ data: rows, error: null }),
+      }) }) }) }),
+    }) },
+    '@/lib/firebase-client': { getFirebasePushConfig: () => ({}) },
+  })
+  const result = await module.fetchNotifications(1)
+  assert.deepEqual(result.map(item => item.type), ['match_finished', 'match_paused'])
+  assert.equal(result[0].title, 'Výhra v zápase')
+  assert.equal(result[0].matchId, 'match-1')
+  assert.equal(result[1].title, 'Zápas prerušený')
+  assert.equal(result[1].body, 'PIN 0042')
 })
 
 test('communication notifications use profile sender IDs even with UUID legacy senders', async () => {
@@ -429,6 +474,50 @@ test('client permission, token persistence, refresh errors and device opt-out', 
   await assert.rejects(client.enablePushNotifications(alice), /HTTPS/)
 })
 
+test('native Android notification permission and FCM token use the authenticated registration RPC', async () => {
+  const stored = new Map()
+  const order = []
+  let nativeResult
+  const bridge = {
+    hasNotificationPermission: () => true,
+    requestPushToken: (requestId) => nativeResult(requestId, tokenA, null),
+  }
+  const supabase = {
+    auth: { getUser: async () => ({ data: { user: { id: alice } }, error: null }) },
+    rpc: async (name, args) => {
+      assert.equal(name, 'register_push_token')
+      assert.equal(args.p_token, tokenA)
+      assert.equal(args.p_enable_alerts, true)
+      order.push('save')
+      return { error: null }
+    },
+    from: () => ({ delete: () => ({ eq: () => ({ eq: async () => { order.push('delete-db'); return { error: null } } }) }) }),
+  }
+  const context = {
+    localStorage: { getItem: (key) => stored.get(key) ?? null, setItem: (key, value) => stored.set(key, value), removeItem: (key) => stored.delete(key) },
+    window: {
+      isSecureContext: true,
+      RivaNativePush: bridge,
+      setTimeout,
+      clearTimeout,
+      dispatchEvent() {},
+    },
+    Event,
+  }
+  const client = await loadModule('../lib/notifications.ts', {
+    '@/lib/supabase/client': { createClient: () => supabase },
+    '@/lib/firebase-client': { getFirebasePushConfig: () => { throw new Error('Native app must not use web push config') } },
+    'firebase/messaging': { deleteToken: async () => { throw new Error('Native token must not use web SDK') } },
+  }, context)
+  nativeResult = (requestId, token, error) => context.window.__rivaNativePushResult(requestId, token, error)
+  await client.enablePushNotifications(alice)
+  assert.deepEqual(order, ['save'])
+  assert.equal(client.getPushDevice().token, tokenA)
+  await client.disablePushNotifications()
+  assert.equal(client.getPushDevice(), null)
+  assert.deepEqual(order, ['save', 'delete-db'])
+})
+
 test('FCM delivery batches 500 devices, uses data-only payloads and removes expired tokens', async () => {
   const batches = []
   let deleted
@@ -458,6 +547,8 @@ test('FCM delivery batches 500 devices, uses data-only payloads and removes expi
   assert.equal(batches[0].tokens.length, 500)
   assert.equal(batches[1].tokens.length, 1)
   assert.equal(batches[0].notification, undefined)
+  assert.equal(batches[0].android.priority, 'high')
+  assert.equal(batches[0].android.ttl, 60 * 60 * 1000)
   assert.equal(batches[0].data.title, 'Test')
   assert.equal(deleted[0], tokenA)
 })

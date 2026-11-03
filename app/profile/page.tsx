@@ -5,6 +5,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { RivaLogo } from '@/components/riva-logo'
 import { InstallAppButton } from '@/components/install-app-button'
+import { PageReloadButton } from '@/components/page-reload-button'
 import { PushNotificationSettings } from '@/components/push-notifications'
 import { disablePushNotifications } from '@/lib/notifications'
 import { playerAccentColor } from '@/lib/player-accent'
@@ -131,6 +132,7 @@ export default function ProfilePage() {
   const [challengeForm, setChallengeForm] = useState({ opponentId: '', opponentName: '', arena: '', proposedDate: '', matchType: 'ranked' as 'ranked' | 'friendly', note: '' })
   const [menuOpen, setMenuOpen] = useState(false)
   const [isArenaManager, setIsArenaManager] = useState(false)
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false)
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [qrProfileLoading, setQrProfileLoading] = useState(true)
   const [qrProfileError, setQrProfileError] = useState<string | null>(null)
@@ -407,6 +409,7 @@ export default function ProfilePage() {
     void createClient().auth.getUser().then(async ({ data }) => {
       const user = data.user
       if (!user) { window.location.replace('/auth/login?next=/profile'); return }
+      setIsSuperAdmin(user.app_metadata?.role === 'super_admin')
       if (!user.email_confirmed_at) {
         await createClient().auth.signOut({ scope: 'local' })
         window.location.replace(`/auth/login?verification=required&email=${encodeURIComponent(user.email ?? '')}`)
@@ -530,7 +533,7 @@ export default function ProfilePage() {
     <main className="photo-layout relative isolate min-h-[100svh] text-app-fg" style={{ '--profile-avatar-color': playerAccentColor(gender) } as React.CSSProperties}>
       <AppBackground />
       <div className="flex min-h-[100svh]">
-        <aside id="profile-navigation" className={`fixed inset-y-0 left-0 z-30 flex w-[264px] max-w-full flex-col overflow-y-auto border-r border-app-line/[0.07] bg-app-surface px-5 py-6 lg:static lg:translate-x-0 ${menuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        <aside id="profile-navigation" className={`fixed inset-y-0 left-0 z-30 flex w-[264px] max-w-full flex-col overflow-y-auto border-r border-app-line/[0.07] bg-app-surface px-5 py-6 transition-[translate,visibility] duration-[860ms] ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none lg:visible lg:static lg:translate-x-0 ${menuOpen ? 'visible translate-x-0' : 'invisible -translate-x-full'}`}>
           <div className="flex items-center justify-between px-2">
             <Link href="/profile" className="flex items-center gap-3" onClick={() => { setMenuOpen(false); setActiveTab('overview') }}>
 <RivaLogo />
@@ -553,19 +556,26 @@ export default function ProfilePage() {
                 <span>{t('Správa arény', 'Arena management')}</span>
               </Link>
             ) : null}
+            {isSuperAdmin ? (
+              <Link href="/super-admin" onClick={() => setMenuOpen(false)} className="group flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium text-app-fg/55 hover:bg-app-overlay/[0.05] hover:text-app-fg">
+                <Shield size={18} strokeWidth={1.8} />
+                <span>Super Admin</span>
+              </Link>
+            ) : null}
           </nav>
 
           <button onClick={handleLogout} className="flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium text-app-fg/45 hover:bg-app-overlay/[0.05] hover:text-app-fg"><LogOut size={18} />{t('Odhlásiť sa', 'Log out')}</button>
         </aside>
 
-        {menuOpen ? <button className="fixed inset-0 z-20 bg-black/60 lg:hidden" onClick={() => setMenuOpen(false)} aria-label="Zavrieť navigáciu" /> : null}
+        <button type="button" className={`fixed inset-0 z-20 bg-black/60 transition-[opacity,visibility] duration-[860ms] ease-out motion-reduce:transition-none lg:hidden ${menuOpen ? 'visible opacity-100' : 'invisible pointer-events-none opacity-0'}`} onClick={() => setMenuOpen(false)} aria-label="Zavrieť navigáciu" />
 
         <section className="min-w-0 flex-1">
-          <header className="profile-toolbar theme-surface sticky top-0 z-10 flex h-14 items-center justify-between gap-2 border-b border-app-line/[0.07] bg-app-canvas/85 px-3 backdrop-blur md:static md:h-[76px] md:bg-transparent md:px-8 md:backdrop-blur-none lg:px-10">
+          <header className="profile-toolbar theme-surface sticky top-0 z-10 flex min-h-14 flex-wrap items-center justify-between gap-2 border-b border-app-line/[0.07] bg-app-canvas/85 px-3 py-1 backdrop-blur md:static md:min-h-[76px] md:bg-transparent md:px-8 md:backdrop-blur-none lg:px-10">
             <button className="flex h-11 w-11 items-center justify-center rounded-lg text-app-fg/70 lg:hidden" onClick={() => setMenuOpen(true)} aria-expanded={menuOpen} aria-controls="profile-navigation" aria-label="Otvoriť menu"><Menu size={22} /></button>
             <Link href="/profile" onClick={() => setActiveTab('overview')} className="md:hidden" aria-label="RIVA Padel — Prehľad"><RivaLogo size="sm" /></Link>
             <div className="hidden text-xs text-app-fg/35 sm:block">RIVA / <span className="text-app-fg/70">{activeTab === 'profile' ? 'MÔJ PROFIL' : activeTab === 'challenges' ? t(showPairsView ? 'DVOJICE' : 'VYZVAŤ DVOJICU') : activeTab === 'matches' ? t('VÝSLEDKY', 'RESULTS') : activeTab === 'arenas' ? 'ARÉNY' : activeTab === 'messages' ? t('SPRÁVY', 'MESSAGES') : activeTab === 'settings' ? 'NASTAVENIA' : activeTab === 'opponents' ? t('NÁJSŤ HRÁČOV') : activeTab === 'rankings' ? t('REBRÍČKY', 'RANKINGS') : activeTab === 'tournaments' ? t('TURNAJE', 'TOURNAMENTS') : 'PREHĽAD'}</span></div>
             <div className="ml-auto flex items-center gap-2 md:gap-4">
+              <PageReloadButton />
               <InstallAppButton compact />
               <button type="button" onClick={openNotifications} className={`relative flex h-11 w-11 items-center justify-center rounded-full border md:h-9 md:w-9 border-app-line/10 bg-app-overlay/[0.04] transition-colors hover:text-app-fg ${activeTab === 'messages' && messagesCategory === 'notifications' ? 'text-app-league' : 'text-app-fg/55'}`} aria-label={unreadAlertCount > 0 ? t(`Správy a notifikácie, ${unreadAlertCount} neprečítané`, `Messages and notifications, ${unreadAlertCount} unread`) : t('Správy a notifikácie', 'Messages and notifications')} title={t('Správy a notifikácie', 'Messages and notifications')}>
                 <Bell size={18} />
@@ -895,7 +905,7 @@ const MessagesView = memo(function MessagesView({ category, setCategory, notific
         {notifications.map((notification) => {
           const isChallengeNotification = ['challenge_request', 'pair_challenge', 'challenge'].includes(notification.type) || Boolean(notification.challenge_id)
           const isPairChallenge = isChallengeNotification && Boolean(notification.challenge_id)
-          const hasNotificationAction = isChallengeNotification || notification.type === 'match_result'
+          const hasNotificationAction = isChallengeNotification || ['match_result', 'match_finished'].includes(notification.type)
           const isResponding = respondingChallengeId === notification.challenge_id
           const actionTaken = notification.challengeResponse
           return <li
@@ -911,7 +921,7 @@ const MessagesView = memo(function MessagesView({ category, setCategory, notific
               <time dateTime={notification.createdAt} className="shrink-0 text-xs text-app-fg/40">{dateFormatter.format(new Date(notification.createdAt))}</time>
             </div>
             {notification.body ? <p className="mt-1 text-sm leading-relaxed text-app-fg/50">{notification.body}</p> : null}
-            {notification.type === 'match_result' && notification.matchId ? <button type="button" onClick={(event) => { event.stopPropagation(); onMarkRead(notification.id); onOpenResults() }} className="mt-3 inline-flex min-h-10 items-center rounded-lg bg-[#ccff00] px-3 py-2 text-xs font-black text-[#10150d]">{t('Otvoriť výsledky a potvrdiť', 'Open results and confirm')}</button> : null}
+            {['match_result', 'match_finished'].includes(notification.type) && notification.matchId ? <button type="button" onClick={(event) => { event.stopPropagation(); onMarkRead(notification.id); onOpenResults() }} className="mt-3 inline-flex min-h-10 items-center rounded-lg bg-[#ccff00] px-3 py-2 text-xs font-black text-[#10150d]">{notification.type === 'match_finished' ? t('Otvoriť výsledky', 'Open results') : t('Otvoriť výsledky a potvrdiť', 'Open results and confirm')}</button> : null}
             {isChallengeNotification && !notification.challenge_id ? <p role="alert" className="mt-3 text-xs text-app-amber-300">Notifikácii chýba ID výzvy, preto na ňu nemožno odpovedať.</p> : null}
             {isPairChallenge && (actionTaken === 'confirmed' || actionTaken === 'declined') ? <p role="status" className={`mt-4 inline-flex items-center gap-1.5 rounded-md px-3 py-2 text-xs font-bold ${actionTaken === 'confirmed' ? 'bg-emerald-400/10 text-app-emerald-300' : 'bg-red-400/10 text-app-red-300'}`}>
               {actionTaken === 'confirmed' ? <Check size={14} /> : <X size={14} />}

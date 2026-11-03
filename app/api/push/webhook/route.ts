@@ -29,6 +29,13 @@ export async function POST(request: Request) {
     // Never trust webhook-supplied recipients or content; read the stored event.
     const { data: row, error: rowError } = await supabase.from('notifications').select('*').eq('id', id).single()
     if (rowError) throw rowError
+    if (row.type === 'match_result' && row.match_id) {
+      const { data: finished, error: finishedError } = await supabase.from('notifications')
+        .select('id').eq('type', 'match_finished').eq('match_id', row.match_id).limit(1)
+      if (finishedError) throw finishedError
+      // The completed-match alert replaces the older result-confirmation push.
+      if (finished?.length) return NextResponse.json({ sent: 0, failed: 0, skipped: true })
+    }
     const tokens: string[] = []
     for (let start = 0; ; start += 1000) {
       const { data, error } = await supabase.rpc('push_notification_tokens', { p_notification_id: id }).range(start, start + 999)
@@ -47,6 +54,8 @@ export async function POST(request: Request) {
       message: 'Nová správa',
       new_message: 'Nová správa',
       direct_message: 'Nová správa',
+      match_finished: String(row.title || 'Zápas sa skončil'),
+      match_paused: String(row.title || 'Zápas prerušený'),
     }
     const result = await deliverPush(tokens, {
       title: String(row.title || titles[String(row.type)] || 'RIVA Padel').slice(0, 150),

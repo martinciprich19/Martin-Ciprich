@@ -87,12 +87,25 @@ export async function fetchNotifications(userId: string | number): Promise<Leagu
     }
   }
 
-  return (data ?? []).map((row) => ({
+  const rows = data ?? []
+  const finishedMatchIds = new Set(rows
+    .filter((row) => row.type === 'match_finished' && row.match_id != null)
+    .map((row) => String(row.match_id)))
+  return rows
+    .filter((row) => row.type !== 'match_result' || !finishedMatchIds.has(String(row.match_id ?? '')))
+    .map((row) => ({
     id: String(row.id),
     type: String(row.type ?? ''),
     senderId: row.sender_profile_id != null ? String(row.sender_profile_id) : row.sender_id == null ? null : String(row.sender_id),
-    title: row.type === 'match_result' ? 'Potvrď výsledok' : row.type === 'friend_request' ? 'Žiadosť o priateľstvo' : row.type === 'pair_invitation' ? 'Pozvanie do dvojice' : ['message', 'new_message', 'direct_message'].includes(String(row.type)) ? 'Nová správa' : ['pair_challenge', 'challenge_request'].includes(String(row.type)) ? 'Nová výzva na zápas' : String(row.type ?? 'Notifikácia'),
-    body: row.message ?? null,
+    title: row.title ?? (row.type === 'match_result' ? 'Potvrď výsledok'
+      : row.type === 'match_finished' ? 'Zápas sa skončil'
+      : row.type === 'match_paused' ? 'Zápas prerušený'
+      : row.type === 'friend_request' ? 'Žiadosť o priateľstvo'
+      : row.type === 'pair_invitation' ? 'Pozvanie do dvojice'
+      : ['message', 'new_message', 'direct_message'].includes(String(row.type)) ? 'Nová správa'
+      : ['pair_challenge', 'challenge_request'].includes(String(row.type)) ? 'Nová výzva na zápas'
+      : String(row.type ?? 'Notifikácia')),
+    body: row.body ?? row.message ?? null,
     read: Boolean(row.is_read) || globallyReadIds.has(String(row.id)),
     createdAt: String(row.created_at ?? ''),
     challenge_id: row.challenge_id == null ? null : String(row.challenge_id).trim(),
@@ -108,11 +121,81 @@ export async function markNotificationRead(id: string) {
 
 const PUSH_DEVICE_KEY = 'riva-push-device'
 let pushMutation: Promise<unknown> = Promise.resolve()
+let nativePushRequestSequence = 0
+const nativePushRequests = new Map<string, {
+  resolve: (token: string) => void
+  reject: (error: Error) => void
+}>()
+
+type NativePushBridge = {
+  hasNotificationPermission(): boolean
+  requestPushToken(requestId: string): void
+}
+
+type NativePushWindow = Window & {
+  RivaNativePush?: NativePushBridge
+  __rivaNativePushResult?: (requestId: string, token: string | null, error: string | null) => void
+}
+
+export function getNativePushBridge(): NativePushBridge | null {
+  return (window as NativePushWindow).RivaNativePush ?? null
+}
+
+function requestNativePushToken(bridge: NativePushBridge): Promise<string> {
+  const nativeWindow = window as NativePushWindow
+  const requestId = `${Date.now()}_${++nativePushRequestSequence}`
+  nativeWindow.__rivaNativePushResult = (id, token, error) => {
+    const request = nativePushRequests.get(id)
+    if (!request) return
+    nativePushRequests.delete(id)
+    if (error) request.reject(new Error(error))
+    else if (!token) request.reject(new Error('Android nevrátil Firebase token pre notifikácie.'))
+    else request.resolve(token)
+  }
+  return new Promise((resolve, reject) => {
+    const timeout = window.setTimeout(() => {
+      nativePushRequests.delete(requestId)
+      reject(new Error('Android neodpovedal na požiadavku o povolenie notifikácií.'))
+    }, 30_000)
+    nativePushRequests.set(requestId, {
+      resolve: (token) => { window.clearTimeout(timeout); resolve(token) },
+      reject: (error) => { window.clearTimeout(timeout); reject(error) },
+    })
+    try {
+      bridge.requestPushToken(requestId)
+    } catch (error) {
+      nativePushRequests.delete(requestId)
+      window.clearTimeout(timeout)
+      reject(error instanceof Error ? error : new Error('Android notifikácie sa nepodarilo spustiť.'))
+    }
+  })
+}
 
 function mutatePush<T>(action: () => Promise<T>): Promise<T> {
   const next = pushMutation.then(action, action)
   pushMutation = next
   return next
+}
+
+async function registerPushToken(userId: string, token: string, enableAlerts: boolean) {
+  if (!token.trim()) throw new Error('Firebase nevrátil token pre push notifikácie.')
+  const supabase = createClient()
+  const { data: { user }, error: authError } = await supabase.auth.getUser()
+  if (authError) throw authError
+  if (!user || user.id !== userId) throw new Error('Prihlásenie sa zmenilo. Skús zapnúť notifikácie znova.')
+  const previous = getPushDevice()
+  const { error } = await supabase.rpc('register_push_token', {
+    p_token: token,
+    p_enable_alerts: enableAlerts,
+  })
+  if (error) throw error
+  if (previous?.userId === userId && previous.token !== token) {
+    const { error: deleteError } = await supabase.from('user_push_tokens').delete()
+      .eq('token', previous.token).eq('user_id', userId)
+    if (deleteError) throw deleteError
+  }
+  localStorage.setItem(PUSH_DEVICE_KEY, JSON.stringify({ userId, token }))
+  window.dispatchEvent(new Event('riva-push-changed'))
 }
 
 export function getPushDevice(): { userId: string; token: string } | null {
@@ -133,25 +216,32 @@ export function refreshPushToken(userId: string, options: { restoreOnly?: boolea
     const { getToken } = await import('firebase/messaging')
     const { messaging, registration, vapidKey } = await getFirebasePushClient()
     const token = await getToken(messaging, { vapidKey, serviceWorkerRegistration: registration })
-    if (!token) throw new Error('Firebase nevrátil token pre push notifikácie.')
-    const supabase = createClient()
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError) throw authError
-    if (!user || user.id !== userId) throw new Error('Prihlásenie sa zmenilo. Skús zapnúť notifikácie znova.')
-    const previous = getPushDevice()
-    const { error } = await supabase.rpc('register_push_token', { p_token: token, p_enable_alerts: options.enableAlerts ?? false })
-    if (error) throw error
-    if (previous?.userId === userId && previous.token !== token) {
-      const { error: deleteError } = await supabase.from('user_push_tokens').delete().eq('token', previous.token).eq('user_id', userId)
-      if (deleteError) throw deleteError
-    }
-    localStorage.setItem(PUSH_DEVICE_KEY, JSON.stringify({ userId, token }))
-    window.dispatchEvent(new Event('riva-push-changed'))
+    await registerPushToken(userId, token, options.enableAlerts ?? false)
     return { messaging, registration }
   })
 }
 
+export function refreshNativePushToken(userId: string, options: { restoreOnly?: boolean } = {}) {
+  return mutatePush(async () => {
+    if (options.restoreOnly && getPushDevice()?.userId !== userId) return null
+    const bridge = getNativePushBridge()
+    if (!bridge || !bridge.hasNotificationPermission()) return null
+    const token = await requestNativePushToken(bridge)
+    await registerPushToken(userId, token, false)
+    return true
+  })
+}
+
 export async function enablePushNotifications(userId: string) {
+  const nativeBridge = getNativePushBridge()
+  if (nativeBridge) {
+    if (!window.isSecureContext) throw new Error('Natívne push notifikácie vyžadujú zabezpečené HTTPS pripojenie.')
+    return mutatePush(async () => {
+      const token = await requestNativePushToken(nativeBridge)
+      await registerPushToken(userId, token, true)
+      return { native: true as const }
+    })
+  }
   if (!window.isSecureContext || !('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) {
     throw new Error('Push notifikácie vyžadujú HTTPS a podporovaný prehliadač.')
   }
@@ -173,6 +263,7 @@ export function disablePushNotifications() {
     if (error) throw error
     localStorage.removeItem(PUSH_DEVICE_KEY)
     window.dispatchEvent(new Event('riva-push-changed'))
+    if (getNativePushBridge()) return
     const { getFirebasePushClient } = await import('@/lib/firebase-client')
     const { deleteToken } = await import('firebase/messaging')
     const { messaging } = await getFirebasePushClient()

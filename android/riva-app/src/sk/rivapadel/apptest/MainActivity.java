@@ -22,6 +22,7 @@ import android.view.WindowManager;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
 import android.webkit.CookieManager;
+import android.webkit.JavascriptInterface;
 import android.webkit.PermissionRequest;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
@@ -36,12 +37,15 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 import android.widget.ScrollView;
+import org.json.JSONObject;
+import com.google.firebase.messaging.FirebaseMessaging;
 
 public final class MainActivity extends Activity implements InputManager.InputDeviceListener {
     private static final String TAG = "RivaPadelTest";
     private static final int BACKGROUND_COLOR = Color.rgb(6, 16, 22);
     private static final int FILE_REQUEST = 11;
     private static final int CAMERA_REQUEST = 12;
+    private static final int PUSH_PERMISSION_REQUEST = 13;
     private final ClickerSession clickers = new ClickerSession();
     private WebView web;
     private TextView status;
@@ -59,6 +63,7 @@ public final class MainActivity extends Activity implements InputManager.InputDe
     private boolean cameraApproved;
     private int presses;
     private String rememberedMatch;
+    private String pendingPushRequestId;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -130,6 +135,7 @@ public final class MainActivity extends Activity implements InputManager.InputDe
         web.getSettings().setAllowFileAccess(false);
         web.getSettings().setAllowContentAccess(true);
         web.getSettings().setMediaPlaybackRequiresUserGesture(false);
+        web.addJavascriptInterface(new NativePushBridge(), "RivaNativePush");
         web.getSettings().setUserAgentString(web.getSettings().getUserAgentString()
             + " RivaAndroidKiosk/1 RivaPadelTest/1");
         CookieManager.getInstance().setAcceptCookie(true);
@@ -246,8 +252,60 @@ public final class MainActivity extends Activity implements InputManager.InputDe
         root.addView(web, new LinearLayout.LayoutParams(-1, 0, 1));
         updateSetup();
         rememberedMatch = getPreferences(MODE_PRIVATE).getString("active-match-url", null);
-        navigate(AppPolicy.resumable(rememberedMatch) ? rememberedMatch : AppPolicy.HOME);
+        String notificationUrl = getIntent() == null || getIntent().getData() == null
+            ? null : getIntent().getData().toString();
+        navigate(AppPolicy.trusted(notificationUrl) ? notificationUrl
+            : AppPolicy.resumable(rememberedMatch) ? rememberedMatch : AppPolicy.HOME);
         immersive();
+    }
+
+    private final class NativePushBridge {
+        @JavascriptInterface public boolean hasNotificationPermission() {
+            return Build.VERSION.SDK_INT < 33 || checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
+                == PackageManager.PERMISSION_GRANTED;
+        }
+
+        @JavascriptInterface public void requestPushToken(String requestId) {
+            if (requestId == null || !requestId.matches("[A-Za-z0-9_-]{1,80}")) return;
+            runOnUiThread(() -> {
+                if (web == null || !AppPolicy.trusted(web.getUrl())) {
+                    finishPushTokenRequest(requestId, null, "Otvori RIVA stránku a skús to znova.");
+                    return;
+                }
+                if (Build.VERSION.SDK_INT >= 33
+                    && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                    pendingPushRequestId = requestId;
+                    requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, PUSH_PERMISSION_REQUEST);
+                    return;
+                }
+                fetchPushToken(requestId);
+            });
+        }
+    }
+
+    private void fetchPushToken(String requestId) {
+        FirebaseMessaging.getInstance().getToken()
+            .addOnSuccessListener(token -> finishPushTokenRequest(requestId, token, null))
+            .addOnFailureListener(error -> {
+                Log.e(TAG, "Firebase token registration failed", error);
+                finishPushTokenRequest(requestId, null, "Firebase token sa nepodarilo získať. Skontroluj pripojenie a Firebase konfiguráciu.");
+            });
+    }
+
+    private void finishPushTokenRequest(String requestId, String token, String error) {
+        if (web == null || !AppPolicy.trusted(web.getUrl())) return;
+        String script = "if(typeof window.__rivaNativePushResult==='function')window.__rivaNativePushResult("
+            + JSONObject.quote(requestId) + ","
+            + (token == null ? "null" : JSONObject.quote(token)) + ","
+            + (error == null ? "null" : JSONObject.quote(error)) + ")";
+        web.evaluateJavascript(script, null);
+    }
+
+    @Override protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        Uri data = intent == null ? null : intent.getData();
+        if (data != null && AppPolicy.trusted(data.toString())) navigate(data.toString());
     }
 
     private Button button(String text, Runnable action) {
@@ -509,6 +567,15 @@ public final class MainActivity extends Activity implements InputManager.InputDe
 
     @Override public void onRequestPermissionsResult(int request, String[] permissions, int[] results) {
         super.onRequestPermissionsResult(request, permissions, results);
+        if (request == PUSH_PERMISSION_REQUEST) {
+            String requestId = pendingPushRequestId;
+            pendingPushRequestId = null;
+            if (requestId == null) return;
+            if (results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED) fetchPushToken(requestId);
+            else finishPushTokenRequest(requestId, null,
+                "Povolenie notifikácií nebolo udelené. Povoľ ho v nastaveniach aplikácie Android.");
+            return;
+        }
         if (request != CAMERA_REQUEST) return;
         if (results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED) grantCamera();
         else {

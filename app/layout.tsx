@@ -4,7 +4,7 @@ import './globals.css'
 import { LanguageProvider } from '@/components/language-provider'
 import { PushNotificationListener } from '@/components/push-notifications'
 import { LeagueProvider } from '@/components/league-provider'
-import { PageReloadButton } from '@/components/page-reload-button'
+import { PageReloadToolbar } from '@/components/page-reload-button'
 import { StartupSplash } from '@/components/startup-splash'
 
 const inter = Inter({
@@ -42,5 +42,5 @@ export const viewport: Viewport = {
 }
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="sk" className={`${inter.variable} dark`}><body><LanguageProvider><LeagueProvider><StartupSplash /><PushNotificationListener />{children}<PageReloadButton /></LeagueProvider></LanguageProvider></body></html>
+  return <html lang="sk" className={`${inter.variable} dark`}><body><LanguageProvider><LeagueProvider><StartupSplash /><PushNotificationListener /><PageReloadToolbar />{children}</LeagueProvider></LanguageProvider></body></html>
 }

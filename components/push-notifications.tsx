@@ -8,7 +8,7 @@ import { useLanguage } from '@/components/language-provider'
 import { InstallAppButton } from '@/components/install-app-button'
 import { installationPlatform } from '@/lib/pwa-installation'
 import { isLocalNotificationMode, localNotificationsEnabled, enableLocalNotifications, disableLocalNotifications } from '@/lib/local-notifications'
-import { disablePushNotifications, enablePushNotifications, getPushDevice, refreshPushToken } from '@/lib/notifications'
+import { disablePushNotifications, enablePushNotifications, getNativePushBridge, getPushDevice, refreshNativePushToken, refreshPushToken } from '@/lib/notifications'
 
 export function PushNotificationListener() {
   useEffect(() => {
@@ -20,6 +20,12 @@ export function PushNotificationListener() {
       unsubscribe?.()
       unsubscribe = undefined
       try {
+        if (getNativePushBridge()) {
+          if (userId && getPushDevice()?.userId === userId) {
+            await refreshNativePushToken(userId, { restoreOnly: true })
+          }
+          return
+        }
         if (!userId || !('Notification' in window) || Notification.permission !== 'granted'
           || getPushDevice()?.userId !== userId) return
         const client = await refreshPushToken(userId, { restoreOnly: true })
@@ -64,6 +70,7 @@ export function PushNotificationSettings({ visible = true, pushAllowed = true, o
   const [userId, setUserId] = useState<string>()
   const [enabled, setEnabled] = useState(false)
   const [localMode, setLocalMode] = useState(false)
+  const [nativeApp, setNativeApp] = useState(false)
   const [supported, setSupported] = useState(false)
   const [needsInstall, setNeedsInstall] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -73,16 +80,24 @@ export function PushNotificationSettings({ visible = true, pushAllowed = true, o
   useEffect(() => {
     let active = true
     const local = isLocalNotificationMode()
+    const native = Boolean(getNativePushBridge())
     setLocalMode(local)
+    setNativeApp(native)
     const platform = installationPlatform(navigator.userAgent, navigator.platform, navigator.maxTouchPoints)
     const installed = window.matchMedia('(display-mode: standalone)').matches || Boolean((navigator as Navigator & { standalone?: boolean }).standalone)
     setNeedsInstall(platform.isIOS && !installed)
-    setSupported(window.isSecureContext && 'Notification' in window && (local || ('PushManager' in window && 'serviceWorker' in navigator)))
+    setSupported(window.isSecureContext && Boolean(native
+      || 'Notification' in window && (local || ('PushManager' in window && 'serviceWorker' in navigator))))
     const update = () => {
       if (!active) return
-      try { setEnabled(Boolean(pushAllowed && userId && 'Notification' in window && (local
-        ? localNotificationsEnabled(userId)
-        : getPushDevice()?.userId === userId && Notification.permission === 'granted'))) }
+      try {
+        const native = getNativePushBridge()
+        setEnabled(Boolean(pushAllowed && userId && (local
+          ? localNotificationsEnabled(userId)
+          : getPushDevice()?.userId === userId && (native
+            ? native.hasNotificationPermission()
+            : 'Notification' in window && Notification.permission === 'granted'))))
+      }
       catch (error) { setError(getErrorMessage(error, 'Registráciu notifikácií sa nepodarilo načítať.')) }
     }
     void createClient().auth.getUser().then(({ data, error }) => {
@@ -149,7 +164,7 @@ export function PushNotificationSettings({ visible = true, pushAllowed = true, o
         <div className="mt-4 flex flex-wrap gap-3">
           <button type="button" disabled={busy || !userId} onClick={() => void run(enabled ? 'disable' : 'enable')} className="inline-flex items-center gap-2 rounded-lg bg-[#ccff00] px-4 py-3 text-xs font-black text-[#10150d] disabled:opacity-50">
             {enabled ? <BellOff size={16} /> : <Bell size={16} />}
-            {busy ? t('Spracúvam…', 'Processing…') : enabled ? t('Vypnúť na tomto zariadení', 'Disable on this device') : localMode ? t('Zapnúť lokálne notifikácie', 'Enable local notifications') : t('Zapnúť notifikácie na uzamknutej obrazovke', 'Enable lock-screen notifications')}
+            {busy ? t('Spracúvam…', 'Processing…') : enabled ? t('Vypnúť na tomto zariadení', 'Disable on this device') : localMode ? t('Zapnúť lokálne notifikácie', 'Enable local notifications') : nativeApp ? t('Zapnúť natívne notifikácie', 'Enable native notifications') : t('Zapnúť notifikácie na uzamknutej obrazovke', 'Enable lock-screen notifications')}
           </button>
         </div>
       )}

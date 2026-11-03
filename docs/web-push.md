@@ -29,12 +29,6 @@
    the test button. Only events inserted into `notifications` trigger this hook;
    other tables (e.g. chat rows without a notification) are not push sources.
 
-Completed registered live matches insert a `match_result` notification for each
-participant immediately with the final point (migration 063, after 062).
-The same webhook delivers these as "Potvrď výsledok"; no separate kiosk-exit
-request or additional webhook is needed. The in-app alert opens Results for
-approval. Quick games and early termination without a result do not send alerts.
-
 ## Messages, friend requests, pair invitations and challenges
 
 Run the entire [066_repair_activity_notifications.sql](../scripts/066_repair_activity_notifications.sql)
@@ -105,7 +99,8 @@ remove those redundant triggers before enabling the new ones.
 Run the focused regression suite with:
 
 ```sh
-node --experimental-vm-modules --test scripts/activity-notifications.test.mjs scripts/communication-notifications.test.mjs scripts/push-notifications.test.mjs
+npm run test:push
+node --experimental-vm-modules --test scripts/activity-notifications.test.mjs scripts/communication-notifications.test.mjs
 ```
 
 This covers source inserts/RPCs through private push-token resolution, both
@@ -113,6 +108,29 @@ UUID/numeric legacy sender columns, an installation without 064, required titles
 bigint/UUID challenge links with preserved foreign keys, repeat installation,
 recipient isolation and transactional notification failures.
 It does not contact production Supabase or FCM.
+
+## Completed and paused matches
+
+After migrations 066 and 077 are installed, run the entire
+[078_live_match_push_notifications.sql](../scripts/078_live_match_push_notifications.sql)
+in Supabase SQL Editor. It creates private notifications for every registered
+participant when a match result is recorded, with a personalized win/loss and
+score. This replaces the ordinary `match_result` push where both rows exist;
+the in-app alert opens match results. Existing result-approval alerts remain
+available when no completed-match alert exists.
+
+The same migration sends a notification to each registered match participant
+when a match is paused. It includes the resume PIN in the push and in-app alert,
+as requested. Android or browser lock screens may display the PIN to anyone who
+can see the device. Unregistered quick matches with no known player profiles do
+not have notification recipients. Each pause event is sent once; resuming and
+pausing again sends the new PIN.
+
+Messages, friend requests, pair invitations and pair challenges are handled by
+066 and delivered by the existing `public.notifications` INSERT webhook. 078
+does not recreate historical notifications. Deploy the updated app, retain the
+single webhook on `public.notifications`, and trigger new events to test. Each
+recipient must have push enabled on their own device.
 
 ## User flow and verification
 
@@ -143,7 +161,8 @@ Restart dev after adding real values; public values require a rebuild for deploy
 - Use the banner in **Overview** or **Settings > Notifications**. Enabling is
   explicit: permission is never requested automatically.
 - iPhone/iPad: iOS/iPadOS 16.4+, add to Home Screen and open from that icon
-  **before** enabling. Android: use a Web Push capable browser.
+  **before** enabling. Android browsers need Web Push support; the RIVA Android
+  app uses native Firebase Cloud Messaging instead.
 - Production requires HTTPS. Localhost is allowed for desktop development;
   an HTTP LAN address is not sufficient for a phone.
 - Send a test through the authenticated diagnostic endpoint, background the PWA/lock the phone, and verify a single system
@@ -152,6 +171,10 @@ Restart dev after adding real values; public values require a rebuild for deploy
   per account with registered tokens. It only targets the signed-in account.
 - Notifications also display in the foreground using the same service worker.
   Server messages are data-only so FCM does not display a duplicate notification.
+- In the RIVA Android app, enabling requests Android notification permission and
+  registers the native FCM token through the current Supabase login. Android
+  displays that data message through its notification manager; tapping opens the
+  profile. Android token refresh is synchronized on authenticated app startup.
 - Disable removes this device's token. Normal profile logout disables this
   device before signing out. Other devices remain subscribed.
 - A token refresh on authenticated app startup updates the saved registration;

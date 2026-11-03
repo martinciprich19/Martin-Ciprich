@@ -13,7 +13,7 @@ test('global reload button reloads the current URL and is accessible in all lang
     module: { type: 'commonjs' },
   })
   const layout = await readFile(new URL('../app/layout.tsx', import.meta.url), 'utf8')
-  assert.match(layout, /\{children\}<PageReloadButton \/>/)
+  assert.match(layout, /<PageReloadToolbar \/>\{children\}/)
   let reloads = 0
   const location = { href: 'https://www.rivapadel.app/match?id=test&mode=kiosk', reload: () => reloads++ }
   const initialUrl = location.href
@@ -25,6 +25,7 @@ test('global reload button reloads the current URL and is accessible in all lang
       require: (name) => {
         if (name === 'react/jsx-runtime') return { jsx: (type, props) => ({ type, props }) }
         if (name === 'lucide-react') return { RefreshCw: 'RefreshCw' }
+        if (name === 'next/navigation') return { usePathname: () => '/auth/login' }
         if (name === '@/components/language-provider') return { useLanguage: () => ({ t: () => label }) }
         throw new Error(`Unexpected import: ${name}`)
       },
@@ -36,11 +37,46 @@ test('global reload button reloads the current URL and is accessible in all lang
     assert.equal(button.props.title, label)
     assert.equal(button.props.children.props['aria-hidden'], 'true')
     assert.match(button.props.className, /h-11 w-11/)
-    assert.match(button.props.className, /z-40/)
-    assert.match(button.props.style.bottom, /safe-area-inset-bottom/)
-    assert.match(button.props.style.right, /safe-area-inset-right/)
+    assert.match(button.props.className, /shrink-0/)
+    assert.doesNotMatch(button.props.className, /fixed|absolute/)
+    assert.equal(button.props.style, undefined)
     button.props.onClick()
     assert.equal(location.href, initialUrl)
   }
   assert.equal(reloads, 3)
+})
+
+test('reload is inside existing top headers with a non-overlapping fallback on other pages', async () => {
+  const headers = ['../app/profile/page.tsx', '../app/page.tsx',
+    '../components/public-shell.tsx', '../components/how-it-works-view.tsx']
+  for (const file of headers) {
+    const source = await readFile(new URL(file, import.meta.url), 'utf8')
+    const header = source.slice(source.indexOf('<header'), source.indexOf('</header>'))
+    assert.match(header, /<PageReloadButton \/>/, file)
+    assert.match(header, /flex-wrap/, 'Small screens must allow header controls to wrap')
+  }
+  const source = await readFile(new URL('../components/page-reload-button.tsx', import.meta.url), 'utf8')
+  const { code } = await transform(source, {
+    filename: 'page-reload-button.tsx',
+    jsc: { parser: { syntax: 'typescript', tsx: true }, transform: { react: { runtime: 'automatic' } } },
+    module: { type: 'commonjs' },
+  })
+  let pathname
+  const exports = {}
+  vm.runInNewContext(code, { exports, require: name => {
+    if (name === 'react/jsx-runtime') return { jsx: (type, props) => ({ type, props }) }
+    if (name === 'next/navigation') return { usePathname: () => pathname }
+    if (name === 'lucide-react') return { RefreshCw: 'RefreshCw' }
+    if (name === '@/components/language-provider') return { useLanguage: () => ({ t: () => 'Reload page' }) }
+    throw new Error(`Unexpected import: ${name}`)
+  } })
+  for (pathname of ['/', '/profile', '/how-it-works', '/match', '/live-matches', '/rankings', '/tournaments']) {
+    assert.equal(exports.PageReloadToolbar(), null, `No duplicate toolbar on ${pathname}`)
+  }
+  for (pathname of ['/auth/login', '/auth/sign-up', '/kiosk', '/arena-admin', '/scoreboard/1', '/players/1', '/find-player']) {
+    const toolbar = exports.PageReloadToolbar()
+    assert.equal(toolbar.type, 'div')
+    assert.doesNotMatch(toolbar.props.className, /fixed|absolute/)
+    assert.equal(toolbar.props.children.type, exports.PageReloadButton)
+  }
 })

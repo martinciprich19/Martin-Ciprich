@@ -6,6 +6,7 @@ import { Menu, X } from 'lucide-react'
 import { RivaLogo } from '@/components/riva-logo'
 import { useLanguage } from '@/components/language-provider'
 import { LeagueSelector } from '@/components/league-selector'
+import { PageReloadButton } from '@/components/page-reload-button'
 
 const navItems = [
   { label: 'Ako to funguje', englishLabel: 'How it works', href: '/how-it-works' },
@@ -36,6 +37,7 @@ export function PublicShell({ children, showAuthLinks = true, showMenuButton = t
           {navItems.map((item) => <Link key={item.href} href={item.href} className="text-[11px] font-medium text-app-fg/70 transition hover:text-app-accent">{t(item.label, item.englishLabel)}</Link>)}
         </nav>
         <div className="flex max-w-full flex-wrap items-center gap-2 lg:gap-3">
+          <PageReloadButton />
           {!kioskMode ? <LeagueSelector /> : null}
           {showAuthLinks && !kioskMode && !signedIn ? <>
           <Link href="/auth/login" className="whitespace-nowrap rounded-lg border border-app-line/15 px-3 py-2 text-[10px] font-semibold text-app-fg transition hover:border-app-line/35 sm:px-4 sm:py-2.5 sm:text-[11px]">Prihlásiť sa</Link>

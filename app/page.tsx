@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useState } from 'react'
 import { RivaLogo } from '@/components/riva-logo'
 import { InstallAppButton } from '@/components/install-app-button'
+import { PageReloadButton } from '@/components/page-reload-button'
 import { useLanguage } from '@/components/language-provider'
 
 const navItems = [
@@ -39,6 +40,7 @@ export default function Home() {
           </nav>
 
           <div className="flex shrink-0 items-center gap-2 lg:gap-3">
+            <PageReloadButton />
             <Link href="/auth/login" className="whitespace-nowrap rounded-lg border border-app-line/15 px-3 py-2 text-[10px] font-semibold text-app-fg transition hover:border-app-line/35 sm:px-4 sm:py-2.5 sm:text-[11px]">{t('Prihlásiť sa')}</Link>
             <Link href="/auth/sign-up" className="whitespace-nowrap rounded-lg bg-[#a8e63c] px-3 py-2 text-[10px] font-bold text-[#061016] transition hover:bg-[#c1fa66] sm:px-4 sm:py-2.5 sm:text-[11px]">{t('Registrovať sa')}</Link>
             <button className="rounded-lg border border-app-line/15 p-1.5 text-app-fg sm:p-2.5 lg:hidden" aria-expanded={menuOpen} onClick={() => setMenuOpen(!menuOpen)} aria-label={t(menuOpen ? 'Zavrieť menu' : 'Otvoriť menu')}>{menuOpen ? <X size={20} /> : <Menu size={20} />}</button>
