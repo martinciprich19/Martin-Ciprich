@@ -2,11 +2,11 @@
 
 import { useEffect, useRef } from 'react'
 import useSWR from 'swr'
-import { AlertTriangle, Calendar, Check, Clock, Hourglass, MapPin, Swords, TrendingDown, TrendingUp, Trophy, X } from 'lucide-react'
+import { AlertTriangle, Calendar, Clock, MapPin, TrendingDown, TrendingUp, Trophy, X } from 'lucide-react'
 import { useLanguage } from '@/components/language-provider'
 import { PlayerAvatar as GenderAvatar } from '@/components/player-avatar'
 import { fetchArenas } from '@/lib/arenas'
-import { MatchStatistics } from '@/components/match-statistics'
+import { MatchStatistics, MatchWinChance } from '@/components/match-statistics'
 import { fetchMatchDetail, type MatchDetail, type MatchDetailPlayer, type MatchDetailStatus } from '@/lib/match-details'
 
 export const matchDetailKey = (matchId: string) => ['match-detail', matchId] as const
@@ -118,30 +118,14 @@ export function MatchDetailModal({ matchId, currentProfileId, onClose }: { match
             </div>
           </section>
 
-          {/* Match statistics */}
-          <section className="rounded-xl border border-app-line/[0.08] bg-app-panel p-4 sm:p-6">
-            <h3 className="flex items-center gap-2 text-sm font-black"><Swords size={15} className="text-app-league" aria-hidden="true" />{t('Štatistiky zápasu', 'Match statistics')}</h3>
-            <div className="mt-5 grid gap-5">
-              <StatBar label={t('Vyhraté sety', 'Sets won')} left={match.teams[0].setsWon} right={match.teams[1].setsWon} />
-              <StatBar label={t('Vyhraté gemy', 'Games won')} left={match.teams[0].gamesWon} right={match.teams[1].gamesWon} />
-              {match.totalGames ? <StatBar label={t('Podiel gemov', 'Games share')} left={match.teams[0].gamesWon / match.totalGames * 100} right={match.teams[1].gamesWon / match.totalGames * 100} format={(value) => `${Math.round(value)} %`} /> : null}
-              {match.team1WinProbability !== null ? <StatBar label={t('Predzápasová šanca (ELO)', 'Pre-match win chance (ELO)')} left={match.team1WinProbability * 100} right={(1 - match.team1WinProbability) * 100} format={(value) => `≈${Math.round(value)} %`} /> : null}
-            </div>
-            <dl className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-              {[
-                { label: t('Odohrané gemy', 'Total games'), value: match.totalGames },
-                { label: t('Rozdiel gemov', 'Game difference'), value: signed(match.teams[0].gamesWon - match.teams[1].gamesWon) },
-                { label: t('Tiebreaky', 'Tiebreaks'), value: match.sets.filter((set) => set.tiebreak).length },
-                { label: t('Najtesnejší set', 'Closest set'), value: match.sets.length ? (() => { const closest = match.sets.reduce((best, set) => Math.abs(set.team1Score - set.team2Score) < Math.abs(best.team1Score - best.team2Score) ? set : best); return `${closest.team1Score}:${closest.team2Score}` })() : '–' },
-              ].map((item) => <div key={item.label} className="rounded-lg border border-app-line/[0.06] bg-app-overlay/[0.02] px-3 py-3"><dt className="text-[10px] font-bold uppercase tracking-[0.12em] text-app-fg/40">{item.label}</dt><dd className="mt-1.5 text-xl font-black tabular-nums">{item.value}</dd></div>)}
-            </dl>
-          </section>
-
-          {/* ELO */}
+          {/* Detailed statistics */}
           {match.statistics ? <section className="rounded-xl border border-app-line/[0.08] bg-app-panel p-4 sm:p-6">
             {!match.statistics.statistics_complete ? <p role="status" className="mb-4 text-sm text-app-amber-200">{t('Podrobné štatistiky boli zaznamenané iba pre časť zápasu.', 'Detailed statistics were recorded for only part of this match.')}</p> : null}
-            <MatchStatistics match={match.statistics} />
-          </section> : <p role="status" className="text-sm text-app-fg/50">{t('Podrobné bodové štatistiky tohto zápasu neboli zaznamenané.', 'Detailed point statistics were not recorded for this match.')}</p>}
+            <MatchStatistics match={match.statistics} team1WinProbability={match.team1WinProbability} />
+          </section> : <div className="space-y-4">
+            <p role="status" className="text-sm text-app-fg/50">{t('Podrobné bodové štatistiky tohto zápasu neboli zaznamenané.', 'Detailed point statistics were not recorded for this match.')}</p>
+            {match.team1WinProbability !== null ? <MatchWinChance probability={match.team1WinProbability} /> : null}
+          </div>}
           <section className="rounded-xl border border-app-line/[0.08] bg-app-panel p-4 sm:p-6">
             <h3 className="flex items-center gap-2 text-sm font-black"><TrendingUp size={15} className="text-app-league" aria-hidden="true" />{t('Zmeny ELO', 'ELO changes')}</h3>
             {match.status !== 'confirmed' ? <p className="mt-2 text-xs text-app-fg/45">{match.status === 'pending' ? t('ELO a štatistiky sa započítajú až po potvrdení výsledku všetkými hráčmi.', 'ELO and statistics are applied once all players confirm the result.') : t('Tento zápas sa nezapočítava do ELO.', 'This match does not count towards ELO.')}</p> : null}
@@ -158,31 +142,17 @@ export function MatchDetailModal({ matchId, currentProfileId, onClose }: { match
             </div>
           </section>
 
-          <div className="grid gap-5 md:grid-cols-2">
-            {/* Confirmations */}
-            <section className="rounded-xl border border-app-line/[0.08] bg-app-panel p-4 sm:p-6">
-              <div className="flex items-center justify-between gap-3"><h3 className="flex items-center gap-2 text-sm font-black"><Check size={15} className="text-app-league" aria-hidden="true" />{t('Potvrdenia hráčov', 'Player confirmations')}</h3><span className="text-xs font-bold tabular-nums text-app-fg/50">{match.confirmedCount}/{match.requiredCount}</span></div>
-              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-app-overlay/10" aria-hidden="true"><div className="h-full rounded-full bg-emerald-400" style={{ width: `${match.requiredCount ? match.confirmedCount / match.requiredCount * 100 : 0}%` }} /></div>
-              <ul className="mt-4 space-y-2.5">{match.teams.flatMap((team) => team.players).map((player) => <li key={player.id} className="flex items-center justify-between gap-3 text-sm">
-                <span className="flex min-w-0 items-center gap-2"><PlayerAvatar player={player} size="sm" /><span className="truncate">{player.name}</span>{player.isSubmitter ? <span className="shrink-0 rounded bg-app-overlay/5 px-1.5 py-0.5 text-[9px] font-bold uppercase text-app-fg/45">{t('Zadal', 'Submitted')}</span> : null}</span>
-                {player.confirmation === 'confirmed' ? <span className="inline-flex shrink-0 items-center gap-1 text-xs font-bold text-app-emerald-300"><Check size={13} aria-hidden="true" />{t('Potvrdil', 'Confirmed')}</span>
-                  : player.confirmation === 'rejected' ? <span className="inline-flex shrink-0 items-center gap-1 text-xs font-bold text-app-red-300"><X size={13} aria-hidden="true" />{t('Odmietol', 'Rejected')}</span>
-                  : <span className="inline-flex shrink-0 items-center gap-1 text-xs font-bold text-app-fg/45"><Hourglass size={13} aria-hidden="true" />{match.status === 'pending' ? t('Čaká sa', 'Waiting') : t('Bez odpovede', 'No response')}</span>}
-              </li>)}</ul>
-            </section>
-
-            {/* Arena */}
-            <section className="rounded-xl border border-app-line/[0.08] bg-app-panel p-4 sm:p-6">
-              <h3 className="flex items-center gap-2 text-sm font-black"><MapPin size={15} className="text-app-league" aria-hidden="true" />{t('Aréna', 'Arena')}</h3>
-              {arena ? <dl className="mt-4 space-y-2.5 text-sm">
-                <div><dt className="sr-only">{t('Názov', 'Name')}</dt><dd className="font-bold">{arena.name}</dd></div>
-                {arena.address || arena.city ? <div><dt className="text-[10px] font-bold uppercase tracking-[0.12em] text-app-fg/40">{t('Adresa', 'Address')}</dt><dd className="mt-0.5 text-app-fg/70">{[arena.address, arena.city].filter(Boolean).join(', ')}</dd></div> : null}
-                {arena.courtsCount ? <div><dt className="text-[10px] font-bold uppercase tracking-[0.12em] text-app-fg/40">{t('Počet kurtov', 'Courts')}</dt><dd className="mt-0.5 text-app-fg/70">{arena.courtsCount}</dd></div> : null}
-                {arena.openingHoursWeekday || arena.openingHoursWeekend ? <div><dt className="text-[10px] font-bold uppercase tracking-[0.12em] text-app-fg/40">{t('Otváracie hodiny', 'Opening hours')}</dt><dd className="mt-0.5 text-app-fg/70">{arena.openingHoursWeekday ? <span className="block">{t('Po–Pi', 'Mon–Fri')}: {arena.openingHoursWeekday}</span> : null}{arena.openingHoursWeekend ? <span className="block">{t('So–Ne', 'Sat–Sun')}: {arena.openingHoursWeekend}</span> : null}</dd></div> : null}
-                <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([arena.name, arena.address, arena.city].filter(Boolean).join(', '))}`} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex items-center gap-1.5 text-xs font-bold text-app-league hover:underline"><MapPin size={12} aria-hidden="true" />{t('Zobraziť na mape', 'Show on map')}</a>
-              </dl> : <p className="mt-4 text-sm text-app-fg/55">{match.arenaName || t('Aréna nebola zadaná.', 'No arena was recorded.')}</p>}
-            </section>
-          </div>
+          {/* Arena */}
+          <section className="rounded-xl border border-app-line/[0.08] bg-app-panel p-4 sm:p-6">
+            <h3 className="flex items-center gap-2 text-sm font-black"><MapPin size={15} className="text-app-league" aria-hidden="true" />{t('Aréna', 'Arena')}</h3>
+            {arena ? <dl className="mt-4 space-y-2.5 text-sm">
+              <div><dt className="sr-only">{t('Názov', 'Name')}</dt><dd className="font-bold">{arena.name}</dd></div>
+              {arena.address || arena.city ? <div><dt className="text-[10px] font-bold uppercase tracking-[0.12em] text-app-fg/40">{t('Adresa', 'Address')}</dt><dd className="mt-0.5 text-app-fg/70">{[arena.address, arena.city].filter(Boolean).join(', ')}</dd></div> : null}
+              {arena.courtsCount ? <div><dt className="text-[10px] font-bold uppercase tracking-[0.12em] text-app-fg/40">{t('Počet kurtov', 'Courts')}</dt><dd className="mt-0.5 text-app-fg/70">{arena.courtsCount}</dd></div> : null}
+              {arena.openingHoursWeekday || arena.openingHoursWeekend ? <div><dt className="text-[10px] font-bold uppercase tracking-[0.12em] text-app-fg/40">{t('Otváracie hodiny', 'Opening hours')}</dt><dd className="mt-0.5 text-app-fg/70">{arena.openingHoursWeekday ? <span className="block">{t('Po–Pi', 'Mon–Fri')}: {arena.openingHoursWeekday}</span> : null}{arena.openingHoursWeekend ? <span className="block">{t('So–Ne', 'Sat–Sun')}: {arena.openingHoursWeekend}</span> : null}</dd></div> : null}
+              <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([arena.name, arena.address, arena.city].filter(Boolean).join(', '))}`} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex items-center gap-1.5 text-xs font-bold text-app-league hover:underline"><MapPin size={12} aria-hidden="true" />{t('Zobraziť na mape', 'Show on map')}</a>
+            </dl> : <p className="mt-4 text-sm text-app-fg/55">{match.arenaName || t('Aréna nebola zadaná.', 'No arena was recorded.')}</p>}
+          </section>
 
           {/* Disputes and discrepancies */}
           {match.discrepancies.length ? <section role="note" className="rounded-xl border border-amber-400/30 bg-amber-400/[0.06] p-4 sm:p-5">

@@ -1245,10 +1245,8 @@ export function MatchView({ matchId, kioskMode = false, viewerMode = false, cour
       ) : null}
 
       {language === 'nl' ? <p className="court-status mt-3 text-center text-xs text-app-fg/55">{t('Hlasové hlásenia sú zatiaľ dostupné v angličtine.', 'Voice announcements are currently available in English.')}</p> : null}
-      <p role="status" className={`court-status mt-3 text-center text-xs ${speechStatus === 'ready' ? 'text-app-fg/55' : 'text-app-amber-200'}`}>
-        {muted ? t('Hlasové hlásenia sú stíšené.', 'Voice announcements are muted.') : speechStatus === 'ready'
-          ? t('Hlas Jessa je zapnutý: slovenčina.', 'Jessa voice enabled: English.')
-          : speechStatus === 'fallback'
+      {muted || speechStatus !== 'ready' ? <p role="status" className="court-status mt-3 text-center text-xs text-app-amber-200">
+        {muted ? t('Hlasové hlásenia sú stíšené.', 'Voice announcements are muted.') : speechStatus === 'fallback'
             ? t('ElevenLabs nie je dostupný. Hlásenia prehráva slovenský hlas zariadenia.', 'ElevenLabs is unavailable. Announcements use the device’s English voice.')
           : speechStatus === 'unsupported'
             ? t('Posledné hlásenie zlyhalo a záložný hlas zariadenia nie je dostupný. Ďalšie hlásenie sa skúsi automaticky.', 'The last announcement failed and the device fallback voice is unavailable. The next announcement will be attempted automatically.')
@@ -1257,7 +1255,7 @@ export function MatchView({ matchId, kioskMode = false, viewerMode = false, cour
               : language === 'sk'
                   ? 'Slovenský hlas nie je dostupný. Nainštaluj alebo povoľ slovenský hlas v nastaveniach zariadenia. Anglický hlas sa nepoužije.'
                   : 'No English voice is available. Install or enable an English voice in the device settings.'}
-      </p>
+      </p> : null}
       {!muted && speechFailure && speechStatus !== 'ready' ? <p role="status" className="court-status mt-2 text-center text-xs text-app-amber-200">
         {speechFailure === 'service'
           ? t('Hlasová služba nevrátila platný zvuk. Skontroluj serverové logy ElevenLabs.', 'The voice service did not return valid audio. Check the ElevenLabs server logs.')
@@ -1269,10 +1267,18 @@ export function MatchView({ matchId, kioskMode = false, viewerMode = false, cour
       </p> : null}
 
       <p className="mt-4 text-center text-xs text-app-fg/35">Skratky: A = bod pre Tím 1 · L = bod pre Tím 2 · Z = späť · M = reset gemu</p>
-      {canEdit ? <label className="mt-4 flex items-center justify-center gap-2 text-sm text-app-fg/75">
-        <input type="checkbox" data-match-clicker-helper checked={helperMode} onChange={(event) => setHelperMode(event.target.checked)} />
+      {canEdit ? <label className={`flex items-center justify-center gap-2 text-sm text-app-fg/75 ${kioskMode || androidHelper ? '' : 'mt-4'}`}>
+        <input
+          type="checkbox"
+          data-match-clicker-helper
+          aria-label={kioskMode || androidHelper
+            ? t('Pomocník pre rozpoznávanie klikrov', 'Clicker recognition helper')
+            : t('Windows pomocník pre dva rovnaké klikre', 'Windows helper for two identical clickers')}
+          checked={helperMode}
+          onChange={(event) => setHelperMode(event.target.checked)}
+        />
         {kioskMode || androidHelper
-          ? t('Pomocník pre rozpoznávanie klikrov', 'Clicker recognition helper')
+          ? <span className="sr-only">{t('Pomocník pre rozpoznávanie klikrov', 'Clicker recognition helper')}</span>
           : t('Windows pomocník pre dva rovnaké klikre', 'Windows helper for two identical clickers')}
       </label> : null}
       {androidHelper ? <p className="mt-4 text-center text-sm text-app-fg/75">{t('V Android aplikácii je pomocník predvolene zapnutý. Klikre priraď k tímom v hornej lište aplikácie.', 'In the Android app, the helper is enabled by default. Assign clickers to teams in the app toolbar.')}</p> : null}

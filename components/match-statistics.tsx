@@ -37,7 +37,25 @@ function ComparisonRow({ label, a, b, aLabel = String(a), bLabel = String(b) }: 
   )
 }
 
-export function MatchStatistics({ match, showAvatars = false, avatars, showRules = true }: { match: StatisticsMatch; showAvatars?: boolean; avatars?: MatchAvatars | null; showRules?: boolean }) {
+export function MatchWinChance({ probability }: { probability: number }) {
+  const { t } = useLanguage()
+  return (
+    <section className="result-comparison" aria-label={t('Predzápasová šanca (ELO)', 'Pre-match win chance (ELO)')}>
+      <div className="result-section-title"><Activity size={17} aria-hidden="true" /><div><h2>{t('Predzápasová šanca (ELO)', 'Pre-match win chance (ELO)')}</h2></div></div>
+      <div role="table" aria-label={t('Predzápasová šanca (ELO)', 'Pre-match win chance (ELO)')}>
+        <ComparisonRow
+          label={t('Pravdepodobnosť víťazstva', 'Win probability')}
+          a={probability * 100}
+          b={(1 - probability) * 100}
+          aLabel={`≈${Math.round(probability * 100)} %`}
+          bLabel={`≈${Math.round((1 - probability) * 100)} %`}
+        />
+      </div>
+    </section>
+  )
+}
+
+export function MatchStatistics({ match, showAvatars = false, avatars, showRules = true, team1WinProbability }: { match: StatisticsMatch; showAvatars?: boolean; avatars?: MatchAvatars | null; showRules?: boolean; team1WinProbability?: number | null }) {
   const { t } = useLanguage()
   const [selectedSet, setSelectedSet] = useState<number | null>(null)
   const panelId = useId()
@@ -179,6 +197,15 @@ export function MatchStatistics({ match, showAvatars = false, avatars, showRules
             <ComparisonRow label={t('Udržané podanie (gemy)', 'Hold serve (games)')} a={a.hold?.percent ?? 0} b={b.hold?.percent ?? 0} aLabel={a.hold ? successLabel(a.hold) : '—'} bLabel={b.hold ? successLabel(b.hold) : '—'} />
             <ComparisonRow label={t('Vyhraté sety', 'Sets won')} a={a.sets} b={b.sets} />
           </div>
+          {selectedSet === null && team1WinProbability != null ? <div className="result-stat-group" role="rowgroup">
+            <ComparisonRow
+              label={t('Predzápasová šanca (ELO)', 'Pre-match win chance (ELO)')}
+              a={team1WinProbability * 100}
+              b={(1 - team1WinProbability) * 100}
+              aLabel={`≈${Math.round(team1WinProbability * 100)} %`}
+              bLabel={`≈${Math.round((1 - team1WinProbability) * 100)} %`}
+            />
+          </div> : null}
         </div>
       </section>
       <section className="result-player-section" aria-label={t('Štatistiky hráčov', 'Player statistics')}>
