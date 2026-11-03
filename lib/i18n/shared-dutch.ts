@@ -1,4 +1,8 @@
 export const sharedDutch: Record<string, string> = {
+  'Prerušený zápas': 'Onderbroken wedstrijd',
+  'Sleduj hrané aj prerušené zápasy v aplikácii RIVA Padel a filtruj ich podľa kraja alebo arény.': 'Volg live en onderbroken wedstrijden in RIVA Padel en filter op regio of club.',
+  'Momentálne nie sú žiadne hrané ani prerušené zápasy.': 'Er zijn momenteel geen live of onderbroken wedstrijden.',
+  'Zobrazujú sa spustené zápasy vrátane prerušených. Ukončené zápasy sa nezobrazujú.': 'Gestarte wedstrijden, inclusief onderbroken wedstrijden, worden getoond. Afgelopen wedstrijden worden niet getoond.',
   'Celonárodná komunitná sieť': 'Een landelijk spelersnetwerk',
   'Prepoj sa s hráčmi a padelovými arénami po celej krajine. Vyzývaj súperov v ľubovoľnom regióne bez ohľadu na úroveň.': 'Ontmoet spelers en padelclubs in het hele land. Daag tegenstanders uit in elke regio, ongeacht je niveau.',
   'Európsky rebríček': 'Europese ranglijst', 'Európa': 'Europa',

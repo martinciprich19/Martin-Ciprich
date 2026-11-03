@@ -13,7 +13,7 @@ import { MatchStatistics } from '@/components/match-statistics'
 import { PlayerAvatar } from '@/components/player-avatar'
 import { parseMatchAvatars, type MatchAvatars } from '@/lib/live-match-avatars'
 import { speakMatchAnnouncement } from '@/lib/match-speech'
-import { MatchAudio, type MatchSpeechStatus } from '@/lib/match-audio'
+import { MatchAudio, type MatchSpeechStatus, type MatchSpeechFailure } from '@/lib/match-audio'
 import { isTiebreak, isSuperTiebreak, getTiebreakScore, parsePointHistory, parseTiebreakScore } from '@/lib/live-match-scoring'
 import { awardLivePoint, removeLastTeamPoint, resetLiveGame, getPointAnnouncement, getMatchWinner, getWinnerAnnouncement, parseSetStatistics, parseServiceGameStatistics, type LiveScore, type Team, type GameScore } from '@/lib/live-match-scoring'
 import { PauseMatchDialog } from '@/components/pause-match-dialog'
@@ -250,11 +250,11 @@ function snapshot(match: MatchRow): MatchSnapshot {
   }
 }
 
-function useBleClicker(onTeamAPoint: () => void, onTeamBPoint: () => void, onTeamUndo: (team: Team) => void, onUndo: () => void, onReset: () => void, enabled: boolean, helperMode: boolean, isBusy: () => boolean) {
+function useBleClicker(onTeamAPoint: () => void, onTeamBPoint: () => void, onTeamUndo: (team: Team) => void, onUndo: () => void, onReset: () => void, enabled: boolean, helperMode: boolean, isBusy: () => boolean, onError: (error: unknown) => void) {
   const [diagnostic, setDiagnostic] = useState<{ key: string; code: string; status: ClickerInputStatus; count: number } | null>(null)
-  const actionsRef = useRef({ onTeamAPoint, onTeamBPoint, onTeamUndo, onUndo, onReset, enabled, helperMode, isBusy })
+  const actionsRef = useRef({ onTeamAPoint, onTeamBPoint, onTeamUndo, onUndo, onReset, enabled, helperMode, isBusy, onError })
   const handlerRef = useRef<ReturnType<typeof createMatchClickerHandler> | null>(null)
-  actionsRef.current = { onTeamAPoint, onTeamBPoint, onTeamUndo, onUndo, onReset, enabled, helperMode, isBusy }
+  actionsRef.current = { onTeamAPoint, onTeamBPoint, onTeamUndo, onUndo, onReset, enabled, helperMode, isBusy, onError }
   useEffect(() => {
     const handleKeyPress = createMatchClickerHandler({
       isEnabled: () => actionsRef.current.enabled,
@@ -268,6 +268,7 @@ function useBleClicker(onTeamAPoint: () => void, onTeamBPoint: () => void, onTea
       onTeamUndo: (team) => actionsRef.current.onTeamUndo(team),
       onUndo: () => actionsRef.current.onUndo(),
       onReset: () => actionsRef.current.onReset(),
+      onError: (error) => actionsRef.current.onError(error),
     })
     handlerRef.current = handleKeyPress
     window.addEventListener('keydown', handleKeyPress, { passive: false })
@@ -299,6 +300,7 @@ export function MatchView({ matchId, kioskMode = false, viewerMode = false, cour
   const languageRef = useRef(language)
   languageRef.current = language
   const [speechStatus, setSpeechStatus] = useState<MatchSpeechStatus>('ready')
+  const [speechFailure, setSpeechFailure] = useState<MatchSpeechFailure | null>(null)
   const audioRef = useRef<MatchAudio | null>(null)
   const [muted, setMuted] = useState(false)
   const [helperMode, setHelperMode] = useState(false)
@@ -406,7 +408,10 @@ export function MatchView({ matchId, kioskMode = false, viewerMode = false, cour
     const audio = new MatchAudio({
       matchId,
       isMuted: () => mutedRef.current,
-      onStatus: setSpeechStatus,
+      onStatus: (status, failure) => {
+        setSpeechStatus(status)
+        setSpeechFailure(failure ?? null)
+      },
       stopFallback: () => {
         if ('speechSynthesis' in window) window.speechSynthesis.cancel()
       },
@@ -859,7 +864,10 @@ export function MatchView({ matchId, kioskMode = false, viewerMode = false, cour
     announce(`Podáva Tím ${team === 'TEAM_A' ? 1 : 2}, hráč ${player}.`, `Team ${team === 'TEAM_A' ? 1 : 2}, player ${player} serves.`)
   }
 
-  const clickerDiagnostic = useBleClicker(addTeamAPoint, addTeamBPoint, undoTeamPoint, undo, resetGame, Boolean(canEdit && !confirmingPause && !confirmingEnd && !match?.finished_at && !match?.paused_at && match?.initial_server_chosen && !getMatchWinner(match) && (match.challenge_id === null || match.is_pin_activated)), activeHelperMode, () => writeInFlightRef.current)
+  const clickerDiagnostic = useBleClicker(addTeamAPoint, addTeamBPoint, undoTeamPoint, undo, resetGame, Boolean(canEdit && !error && !confirmingPause && !confirmingEnd && !match?.finished_at && !match?.paused_at && match?.initial_server_chosen && !getMatchWinner(match) && (match.challenge_id === null || match.is_pin_activated)), activeHelperMode, () => writeInFlightRef.current, (clickerError) => {
+    console.error('Spracovanie vstupu klikra zlyhalo:', clickerError)
+    setError(getErrorMessage(clickerError, 'Vstup klikra sa nepodarilo spracovať. Obnov zápas pred ďalším skórovaním.'))
+  })
 
   if (isLoading) {
     return <div className="mx-auto max-w-5xl py-24 text-center text-sm text-app-fg/60" role="status">Načítavam zápas…</div>
@@ -960,8 +968,8 @@ export function MatchView({ matchId, kioskMode = false, viewerMode = false, cour
           <p className="mt-6 text-sm text-app-fg/60">{t('PIN na pokračovanie', 'Resume PIN')}</p>
           <strong className="my-4 block font-mono text-6xl tracking-[0.25em] text-app-accent">{pauseReceipt.pin}</strong>
           <p className="text-sm text-app-fg/70">{leagueMatch
-            ? t('PIN si odfoť alebo zapíš. Na úvode zvoľ „Zadaj PIN kód“ → „Pokračovať v zápase“.', 'Save this PIN. On the home screen choose “Enter PIN code” → “Resume match”.')
-            : t('Zapamätajte si alebo zapíšte tento PIN – budete ho potrebovať na obnovenie rýchlej hry. Na úvode zvoľte „Zadaj PIN kód“ → „Pokračovať v zápase“.', 'Remember or write down this PIN – you will need it to resume this quick game. On the home screen choose “Enter PIN code” → “Resume match”.')}</p>
+            ? t('PIN si odfoť alebo zapíš. Na úvode zvoľ „Zadaj PIN kód“ a zadaj tento PIN.', 'Save this PIN. On the home screen choose “Enter PIN code” and enter this PIN.')
+            : t('Zapamätajte si alebo zapíšte tento PIN – budete ho potrebovať na obnovenie rýchlej hry. Na úvode zvoľte „Zadaj PIN kód“ a zadajte tento PIN.', 'Remember or write down this PIN – you will need it to resume this quick game. On the home screen choose “Enter PIN code” and enter this PIN.')}</p>
           <p className="mt-2 text-sm text-app-fg/70">{t('Rovnaký PIN platí aj po obnovení a ďalšom prerušení, až do ukončenia zápasu.', 'The same PIN remains valid after resuming and pausing again, until the match ends.')}</p>
         </> : canEdit ? <button type="button" disabled={isSaving} onClick={() => void pauseMatch()} className="mt-6 min-h-12 rounded-xl border border-app-line/20 px-5 py-3">{leagueMatch ? t('Zobraziť PIN a odoslať e-maily', 'Show PIN and send emails') : t('Zobraziť PIN', 'Show PIN')}</button> : null}
         {emailStatus ? <p role={emailFailed ? 'alert' : 'status'} className={`mt-5 text-sm ${emailFailed ? 'text-app-amber-200' : 'text-app-fg/70'}`}>{emailStatus}</p> : null}
@@ -1062,7 +1070,10 @@ export function MatchView({ matchId, kioskMode = false, viewerMode = false, cour
         {!canEdit ? <span className="text-xs text-app-amber-200">{t('Skóre ovláda zariadenie, ktoré zápas vytvorilo, alebo prihlásený organizátor.', 'The creating device or signed-in organizer controls the score.')}</span> : null}
       </div> : null}
 
-      {error ? <p className="court-error mx-auto mt-4 max-w-2xl rounded-xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-center text-sm text-app-red-200" role="alert">{error}</p> : null}
+      {error ? <div className="court-error mx-auto mt-4 max-w-2xl rounded-xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-center text-sm text-app-red-200" role="alert">
+        <p>{error}</p>
+        <button type="button" disabled={isSaving} onClick={() => window.location.reload()} className="mt-3 min-h-11 rounded-lg border border-red-400/30 px-4 py-2 font-bold disabled:opacity-40">{t('Obnoviť tento zápas', 'Reload this match')}</button>
+      </div> : null}
       {avatarNotice}
       {loginNotice}
 
@@ -1186,13 +1197,22 @@ export function MatchView({ matchId, kioskMode = false, viewerMode = false, cour
           : speechStatus === 'fallback'
             ? t('ElevenLabs nie je dostupný. Hlásenia prehráva slovenský hlas zariadenia.', 'ElevenLabs is unavailable. Announcements use the device’s English voice.')
           : speechStatus === 'unsupported'
-            ? t('Tento prehliadač nepodporuje hlasové hlásenia.', 'This browser does not support voice announcements.')
+            ? t('Posledné hlásenie zlyhalo a záložný hlas zariadenia nie je dostupný. Ďalšie hlásenie sa skúsi automaticky.', 'The last announcement failed and the device fallback voice is unavailable. The next announcement will be attempted automatically.')
             : speechStatus === 'failed'
               ? t('Hlasové hlásenie zlyhalo. Skontroluj zvuk a nastavenia hlasu zariadenia.', 'Voice announcement failed. Check the device sound and voice settings.')
               : language === 'sk'
                   ? 'Slovenský hlas nie je dostupný. Nainštaluj alebo povoľ slovenský hlas v nastaveniach zariadenia. Anglický hlas sa nepoužije.'
                   : 'No English voice is available. Install or enable an English voice in the device settings.'}
       </p>
+      {!muted && speechFailure && speechStatus !== 'ready' ? <p role="status" className="court-status mt-2 text-center text-xs text-app-amber-200">
+        {speechFailure === 'service'
+          ? t('Hlasová služba nevrátila platný zvuk. Skontroluj serverové logy ElevenLabs.', 'The voice service did not return valid audio. Check the ElevenLabs server logs.')
+          : speechFailure === 'network'
+            ? t('Požiadavka na hlas zlyhala alebo vypršala. Skontroluj pripojenie k internetu.', 'The voice request failed or timed out. Check the internet connection.')
+            : speechFailure === 'blocked'
+              ? t('Prehrávanie zablokoval prehliadač. Skontroluj povolenie automatického prehrávania.', 'The browser blocked playback. Check autoplay permissions.')
+              : t('Zvuk sa načítal, ale zariadenie ho nedokázalo prehrať.', 'Audio was loaded, but the device could not play it.')}
+      </p> : null}
 
       <p className="mt-4 text-center text-xs text-app-fg/35">Skratky: A = bod pre Tím 1 · L = bod pre Tím 2 · Z = späť · M = reset gemu</p>
       {canEdit ? <label className="mt-4 flex items-center justify-center gap-2 text-sm text-app-fg/75">

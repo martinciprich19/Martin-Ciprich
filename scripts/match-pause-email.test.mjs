@@ -24,7 +24,8 @@ test('pause email sends a private individual message with a stable retry key', a
     const message = JSON.parse(requests[0].body)
     assert.deepEqual(message.to, [job.recipient])
     assert.match(message.text, /0042/)
-    assert.match(message.text, /Pokračovať v zápase/)
+    assert.match(message.text, /Zadaj PIN kód/)
+    assert.doesNotMatch(message.text, /Pokračovať v zápase/)
     assert.match(message.text, /až do ukončenia zápasu/)
     assert.ok(!message.text.includes('jednorazový'))
     assert.match(message.html, /font-size:48px/)
@@ -53,11 +54,11 @@ test('pause emails use each recipient language and preserve PIN semantics', asyn
     await sendPauseEmail(job, 'test-key', 'sender', 'nl')
     await sendPauseEmail(job, 'test-key', 'sender', 'en')
     assert.match(messages[0].subject, /wedstrijd onderbroken/)
-    assert.match(messages[0].text, /Wedstrijd hervatten/)
+    assert.match(messages[0].text, /Voer pincode in/)
     assert.match(messages[0].text, /totdat de wedstrijd is afgelopen/)
     assert.match(messages[0].html, /0042/)
     assert.doesNotMatch(messages[0].text, /Váš zápas/)
-    assert.match(messages[1].text, /Resume match/)
+    assert.match(messages[1].text, /Enter PIN/)
     assert.match(messages[1].text, /until the match ends/)
   } finally {
     globalThis.fetch = originalFetch

@@ -9,6 +9,7 @@ type ClickerActions = {
   onTeamUndo: (team: 'TEAM_A' | 'TEAM_B') => void
   onUndo: () => void
   onReset: () => void
+  onError: (error: unknown) => void
 }
 
 export function createMatchClickerHandler(actions: ClickerActions) {
@@ -37,7 +38,13 @@ export function createMatchClickerHandler(actions: ClickerActions) {
       retry = setTimeout(flush, 50)
       return
     }
-    queue.shift()?.()
+    try {
+      queue.shift()?.()
+    } catch (error) {
+      cancelPending()
+      actions.onError(error)
+      return
+    }
     if (queue.length) retry = setTimeout(flush, 50)
   }
 

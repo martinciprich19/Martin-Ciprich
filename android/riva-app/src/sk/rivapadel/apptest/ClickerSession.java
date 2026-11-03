@@ -49,6 +49,8 @@ final class ClickerSession {
 
     boolean invalidates(int id) { return ids[0] == id || ids[1] == id; }
 
+    void pause() { pressed.clear(); }
+
     boolean press(int id, int key, int repeat) {
         if (repeat != 0 || pressed.containsKey(id)) return false;
         pressed.put(id, key);

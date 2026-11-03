@@ -23,6 +23,13 @@ test('live match never installs the selection inactivity redirect', () => {
   }
 })
 
+test('match rendering failures offer recovery without navigating away from the match', () => {
+  const source = readFileSync(new URL('../app/match/error.tsx', import.meta.url), 'utf8')
+  assert.match(source, /onClick=\{retry\}/)
+  assert.match(source, /window.location.reload\(\)/)
+  assert.doesNotMatch(source, /router\.(push|replace)|location\.(assign|replace)/)
+})
+
 test('quick matches defer the initial serve draw and saved choice hides the draw action', () => {
   const start = readFileSync(new URL('../components/match-start-view.tsx', import.meta.url), 'utf8')
   assert.match(start, /serving_team: null,\s+initial_server_chosen: false/)

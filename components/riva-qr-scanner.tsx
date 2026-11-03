@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { ArrowLeft, Camera, Check, ChevronDown, MapPin, ScanQrCode } from 'lucide-react'
 import type QrScanner from 'qr-scanner'
 import { useLanguage } from '@/components/language-provider'
+import { useLeague } from '@/components/league-provider'
 import { createClient } from '@/lib/supabase/client'
 import { getErrorMessage } from '@/lib/errors'
 import { getRivaProfilePath } from '@/lib/riva-qr'
@@ -30,6 +31,7 @@ const slots = [
 export function RivaQrScanner({ onClose, kioskMode = false }: { onClose: () => void; kioskMode?: boolean }) {
   const router = useRouter()
   const { t } = useLanguage()
+  const { country, isLoading: leagueLoading } = useLeague()
   const tRef = useRef(t)
   tRef.current = t
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -44,7 +46,7 @@ export function RivaQrScanner({ onClose, kioskMode = false }: { onClose: () => v
   const [players, setPlayers] = useState<QrRoster>([null, null, null, null])
   const [lastScannedPlayer, setLastScannedPlayer] = useState<ScannedPlayer | null>(null)
   const [arena, setArena] = useState('')
-  const { data: arenas = [], error: arenasError, isLoading: arenasLoading, mutate: reloadArenas } = useSWR('arenas', fetchArenas)
+  const { data: arenas = [], error: arenasError, isLoading: arenasLoading, mutate: reloadArenas } = useSWR(leagueLoading ? null : ['arenas', country], ([, selectedCountry]) => fetchArenas(selectedCountry))
   const [arenaListOpen, setArenaListOpen] = useState(false)
   const [activeArena, setActiveArena] = useState(-1)
   const arenaInputRef = useRef<HTMLInputElement>(null)

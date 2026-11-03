@@ -15,7 +15,8 @@ export async function POST(request: Request) {
   }
   if (!input || typeof input !== 'object' || !('pin' in input) || !('deviceToken' in input)
     || typeof input.pin !== 'string' || !/^\d{4}$/.test(input.pin)
-    || typeof input.deviceToken !== 'string' || !/^[a-f0-9]{64}$/.test(input.deviceToken)) {
+    || typeof input.deviceToken !== 'string' || !/^[a-f0-9]{64}$/.test(input.deviceToken)
+    || ('resolve' in input && typeof input.resolve !== 'boolean')) {
     return Response.json({ error: 'Zadaj platný 4-miestny PIN.' }, { status: 400 })
   }
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -29,15 +30,20 @@ export async function POST(request: Request) {
     })
     const ip = request.headers.get('x-forwarded-for')?.split(',')[0].trim() ?? 'local'
     const clientKey = createHmac('sha256', key).update(ip).digest('hex')
-    const { data, error } = await admin.rpc('resume_paused_live_match', {
+    const resolve = 'resolve' in input && input.resolve === true
+    const { data, error } = await admin.rpc(resolve ? 'resolve_kiosk_pin' : 'resume_paused_live_match', {
       p_pin: input.pin, p_device_token: input.deviceToken, p_client_key: clientKey,
     })
     if (error) throw error
     if (data?.error) return Response.json({ error: data.error }, { status: 400 })
-    if (typeof data?.matchId !== 'string') throw new Error('Databáza nevrátila zápas.')
-    return Response.json({ matchId: data.matchId }, { headers: { 'Cache-Control': 'no-store' } })
+    if (resolve && data?.kind === 'new') {
+      return Response.json({ kind: 'new' }, { headers: { 'Cache-Control': 'no-store' } })
+    }
+    if (typeof data?.matchId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(data.matchId)
+      || (resolve && data.kind !== 'resume')) throw new Error('Databáza nevrátila platný zápas.')
+    return Response.json({ matchId: data.matchId, ...(resolve ? { kind: 'resume' } : {}) }, { headers: { 'Cache-Control': 'no-store' } })
   } catch (error) {
     console.error('Pokračovanie prerušeného zápasu zlyhalo:', error)
-    return Response.json({ error: 'Zápas sa nepodarilo obnoviť. Over SQL migráciu 060 a skús znova.' }, { status: 500 })
+    return Response.json({ error: 'PIN sa nepodarilo overiť. Over SQL migrácie 060, 062 a 075 a skús znova.' }, { status: 500 })
   }
 }

@@ -23,6 +23,7 @@ type LiveMatch = {
   team_a_sets: number
   team_b_sets: number
   started_at: string
+  paused_at: string | null
   arena_id: string | number | null
   arena_name: string | null
   city: string | null
@@ -93,7 +94,7 @@ function CountryLiveMatchesView() {
       <header>
         <p className="text-xs font-bold uppercase tracking-[0.22em] text-app-league">RIVA / LIVE</p>
         <h1 className="mt-2 text-3xl font-black">{t('Prebiehajúce zápasy', 'Live matches')}</h1>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-app-fg/50">{t('Sleduj zápasy práve hrané v aplikácii RIVA Padel a filtruj ich podľa kraja alebo arény.', 'Follow matches currently being played in RIVA Padel and filter by region or arena.')}</p>
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-app-fg/50">{t('Sleduj hrané aj prerušené zápasy v aplikácii RIVA Padel a filtruj ich podľa kraja alebo arény.', 'Follow live and paused matches in RIVA Padel and filter by region or arena.')}</p>
       </header>
 
       <div className="mt-7 grid gap-3 sm:grid-cols-2">
@@ -127,8 +128,8 @@ function CountryLiveMatchesView() {
       ) : visibleMatches.length === 0 ? (
         <div className="mt-6 flex min-h-64 flex-col items-center justify-center rounded-2xl border border-app-line/10 bg-app-panel p-6 text-center">
           <Radio size={34} className="text-app-highlight" aria-hidden="true" />
-          <h2 className="mt-4 text-xl font-black">{matches.length === 0 ? t('Momentálne sa nehrá žiadny zápas.', 'No matches are being played right now.') : t('Pre tento filter sa nenašli zápasy.', 'No matches found for these filters.')}</h2>
-          <p className="mt-2 max-w-lg text-sm leading-6 text-app-fg/45">{t('Zobrazujú sa iba zápasy spustené v aplikácii, ktoré ešte nie sú ukončené ani prerušené.', 'Only matches started in the app that are not finished or paused are shown.')}</p>
+          <h2 className="mt-4 text-xl font-black">{matches.length === 0 ? t('Momentálne nie sú žiadne hrané ani prerušené zápasy.', 'There are no live or paused matches right now.') : t('Pre tento filter sa nenašli zápasy.', 'No matches found for these filters.')}</h2>
+          <p className="mt-2 max-w-lg text-sm leading-6 text-app-fg/45">{t('Zobrazujú sa spustené zápasy vrátane prerušených. Ukončené zápasy sa nezobrazujú.', 'Started matches, including paused matches, are shown. Finished matches are not shown.')}</p>
         </div>
       ) : (
         <ul className="mt-6 grid gap-4 lg:grid-cols-2">
@@ -140,7 +141,11 @@ function CountryLiveMatchesView() {
                     <p className="flex items-center gap-1.5 text-xs text-app-fg/50"><MapPin size={13} aria-hidden="true" />{match.arena_name || t('Aréna neuvedená', 'Arena not specified')}{match.city ? ` · ${match.city}` : ''}</p>
                     {match.region ? <p className="mt-1 text-[11px] text-app-fg/35">{t(match.region, uiTranslations[match.region] ?? match.region)}</p> : null}
                   </div>
-                  <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-emerald-400/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-emerald-300"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-300" />{t('Naživo', 'Live')}</span>
+                  {match.paused_at ? (
+                    <span className="inline-flex shrink-0 items-center rounded-full bg-amber-400/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-amber-300">{t('Prerušený zápas', 'Paused match')}</span>
+                  ) : (
+                    <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-emerald-400/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-emerald-300"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-300" />{t('Naživo', 'Live')}</span>
+                  )}
                 </div>
 
                 <div className="mt-5 flex items-start justify-between gap-4">

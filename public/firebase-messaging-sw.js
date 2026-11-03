@@ -23,8 +23,8 @@ function showPushNotification(payload, background = true) {
   const data = { ...payload.notification, ...payload.data }
   return self.registration.showNotification(data.title || 'RIVA Padel', {
     body: data.body || '',
-    icon: '/images/riva-padel-play-together-compact-icon-192.png',
-    badge: '/images/riva-padel-play-together-compact-icon-192.png',
+    icon: '/images/riva-padel-play-together-compact-icon-192.png?v=2',
+    badge: '/images/riva-padel-play-together-compact-icon-192.png?v=2',
     tag: data.id || 'riva-padel',
     data: { url: '/profile#messages' },
   })

@@ -7,6 +7,9 @@ import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.hardware.input.InputManager;
+import android.graphics.Color;
+import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Build;
@@ -14,6 +17,7 @@ import android.util.Log;
 import android.view.InputDevice;
 import android.view.KeyEvent;
 import android.view.View;
+import android.view.Gravity;
 import android.view.WindowManager;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
@@ -26,13 +30,16 @@ import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.webkit.RenderProcessGoneDetail;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.widget.ScrollView;
 
 public final class MainActivity extends Activity implements InputManager.InputDeviceListener {
     private static final String TAG = "RivaPadelTest";
+    private static final int BACKGROUND_COLOR = Color.rgb(6, 16, 22);
     private static final int FILE_REQUEST = 11;
     private static final int CAMERA_REQUEST = 12;
     private final ClickerSession clickers = new ClickerSession();
@@ -41,6 +48,8 @@ public final class MainActivity extends Activity implements InputManager.InputDe
     private TextView setupPrompt;
     private TextView receipt;
     private LinearLayout setup;
+    private ScrollView setupScroll;
+    private final TextView[] teamCards = new TextView[2];
     private Button continueMatch;
     private InputManager inputs;
     private ValueCallback<Uri[]> files;
@@ -49,12 +58,14 @@ public final class MainActivity extends Activity implements InputManager.InputDe
     private boolean loadFailed;
     private boolean cameraApproved;
     private int presses;
+    private String rememberedMatch;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         inputs = (InputManager) getSystemService(INPUT_SERVICE);
         LinearLayout root = new LinearLayout(this);
+        root.setBackgroundColor(BACKGROUND_COLOR);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setOnApplyWindowInsetsListener((view, insets) -> {
             view.setPadding(insets.getSystemWindowInsetLeft(), insets.getSystemWindowInsetTop(),
@@ -67,9 +78,24 @@ public final class MainActivity extends Activity implements InputManager.InputDe
         receipt.setText("Klikre: zatial ziadne zachytene stlacenie.");
         setup = new LinearLayout(this);
         setup.setOrientation(LinearLayout.VERTICAL);
-        setupPrompt = new TextView(this);
-        setupPrompt.setTextSize(22);
-        setup.addView(setupPrompt);
+        setup.setGravity(Gravity.CENTER_HORIZONTAL);
+        setup.setPadding(dp(24), dp(32), dp(24), dp(32));
+        setupScroll = new ScrollView(this);
+        setupScroll.setFillViewport(true);
+        setupScroll.addView(setup);
+        TextView brand = setupText("RIVA / PRIPRAVA ZAPASU", 12, Color.rgb(168, 230, 60), true);
+        addSetupView(brand, 0);
+        addSetupView(setupText("Priradte klikre", 30, Color.WHITE, true), 12);
+        addSetupView(setupText("Kazdy tim ma vlastny kliker. Priradenie nepridava body do zapasu.", 15,
+            Color.rgb(156, 174, 183), false), 12);
+        setupPrompt = setupText("", 17, Color.WHITE, true);
+        setupPrompt.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+        addSetupView(setupPrompt, 28);
+        for (int team = 0; team < 2; team++) {
+            teamCards[team] = setupText("", 18, Color.WHITE, true);
+            teamCards[team].setPadding(dp(20), dp(22), dp(20), dp(22));
+            addSetupView(teamCards[team], 14);
+        }
         continueMatch = button("Potvrdit klikre a otvorit zapas", () -> {
             if (!foreground || !clickers.confirm()) {
                 message("Najprv stlac a uvolni oba rozne klikre.");
@@ -79,19 +105,31 @@ public final class MainActivity extends Activity implements InputManager.InputDe
             status.setText("Klikre potvrdene. Vyber podanie. Skore over aj na druhom displeji.");
             web.requestFocus();
         });
-        setup.addView(continueMatch);
-        setup.addView(button("Priradit klikre odznova", () -> {
+        continueMatch.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        continueMatch.setTextSize(16);
+        continueMatch.setMinHeight(dp(56));
+        continueMatch.setBackgroundTintList(null);
+        addSetupView(continueMatch, 24);
+        Button resetClickers = button("Priradit klikre odznova", () -> {
             cancelPending();
             clickers.reset();
             updateSetup();
-        }));
-        root.addView(setup);
+        });
+        resetClickers.setTextColor(Color.rgb(178, 195, 204));
+        resetClickers.setBackgroundTintList(null);
+        resetClickers.setBackground(panel(Color.rgb(13, 28, 36), Color.rgb(43, 62, 72)));
+        resetClickers.setMinHeight(dp(52));
+        addSetupView(resetClickers, 12);
+        addSetupView(setupText("Po priradeni oba klikre potvrdte. Potom mozete vybrat podanie a zacat hrat.",
+            13, Color.rgb(156, 174, 183), false), 18);
+        root.addView(setupScroll, new LinearLayout.LayoutParams(-1, -1));
         web = new WebView(this);
+        web.setBackgroundColor(BACKGROUND_COLOR);
         web.getSettings().setJavaScriptEnabled(true);
         web.getSettings().setDomStorageEnabled(true);
         web.getSettings().setAllowFileAccess(false);
         web.getSettings().setAllowContentAccess(true);
-        web.getSettings().setMediaPlaybackRequiresUserGesture(true);
+        web.getSettings().setMediaPlaybackRequiresUserGesture(false);
         web.getSettings().setUserAgentString(web.getSettings().getUserAgentString()
             + " RivaAndroidKiosk/1 RivaPadelTest/1");
         CookieManager.getInstance().setAcceptCookie(true);
@@ -137,6 +175,18 @@ public final class MainActivity extends Activity implements InputManager.InputDe
                     loadFailed = true;
                     pageError("Server RIVA vratil HTTP " + response.getStatusCode() + ".");
                 }
+            }
+            @Override public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
+                Log.e(TAG, "WebView renderer terminated; crashed=" + detail.didCrash());
+                foreground = false;
+                ((LinearLayout) view.getParent()).removeView(view);
+                view.destroy();
+                web = null;
+                new AlertDialog.Builder(MainActivity.this).setTitle("RIVA potrebuje obnovit obrazovku")
+                    .setMessage("Obnovime posledny zapas s ulozenym skore. Posledna neulozena zmena nemusi byt zachovana.")
+                    .setCancelable(false)
+                    .setPositiveButton("Obnovit zapas", (dialog, which) -> recreate()).show();
+                return true;
             }
         });
         web.setWebChromeClient(new WebChromeClient() {
@@ -195,7 +245,8 @@ public final class MainActivity extends Activity implements InputManager.InputDe
         web.setDownloadListener((url, userAgent, disposition, mime, length) -> offerExternal(url));
         root.addView(web, new LinearLayout.LayoutParams(-1, 0, 1));
         updateSetup();
-        navigate(AppPolicy.HOME);
+        rememberedMatch = getPreferences(MODE_PRIVATE).getString("active-match-url", null);
+        navigate(AppPolicy.resumable(rememberedMatch) ? rememberedMatch : AppPolicy.HOME);
         immersive();
     }
 
@@ -205,6 +256,34 @@ public final class MainActivity extends Activity implements InputManager.InputDe
         button.setAllCaps(false);
         button.setOnClickListener(view -> action.run());
         return button;
+    }
+
+    private int dp(int value) {
+        return Math.round(value * getResources().getDisplayMetrics().density);
+    }
+
+    private GradientDrawable panel(int fill, int border) {
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(fill);
+        background.setCornerRadius(dp(18));
+        background.setStroke(dp(1), border);
+        return background;
+    }
+
+    private TextView setupText(String text, int size, int color, boolean bold) {
+        TextView view = new TextView(this);
+        view.setText(text);
+        view.setTextSize(size);
+        view.setTextColor(color);
+        view.setGravity(Gravity.CENTER);
+        view.setTypeface(Typeface.DEFAULT, bold ? Typeface.BOLD : Typeface.NORMAL);
+        return view;
+    }
+
+    private void addSetupView(View view, int marginTop) {
+        LinearLayout.LayoutParams layout = new LinearLayout.LayoutParams(-1, -2);
+        layout.topMargin = dp(marginTop);
+        setup.addView(view, layout);
     }
 
     private void navigate(String url) {
@@ -224,13 +303,34 @@ public final class MainActivity extends Activity implements InputManager.InputDe
             }
         }
         if (clickers.track(id)) cancelPending();
+        if (AppPolicy.trusted(url)) {
+            String next = AppPolicy.resumable(url) ? url : null;
+            if (next == null ? rememberedMatch != null : !next.equals(rememberedMatch)) {
+                rememberedMatch = next;
+                getPreferences(MODE_PRIVATE).edit().putString("active-match-url", next).apply();
+            }
+        }
         updateSetup();
     }
 
     private void updateSetup() {
         boolean blocked = clickers.blocked();
-        setup.setVisibility(blocked ? View.VISIBLE : View.GONE);
-        continueMatch.setEnabled(clickers.nextTeam() == -1);
+        setupScroll.setVisibility(blocked ? View.VISIBLE : View.GONE);
+        boolean ready = clickers.nextTeam() == -1;
+        continueMatch.setEnabled(ready);
+        continueMatch.setTextColor(ready ? BACKGROUND_COLOR : Color.rgb(156, 174, 183));
+        continueMatch.setBackground(panel(ready ? Color.rgb(168, 230, 60) : Color.rgb(25, 43, 52),
+            ready ? Color.rgb(168, 230, 60) : Color.rgb(43, 62, 72)));
+        for (int team = 0; team < 2; team++) {
+            boolean assigned = clickers.id(team) >= 0;
+            int accent = team == 0 ? Color.rgb(168, 230, 60) : Color.rgb(141, 207, 235);
+            teamCards[team].setText("TIM " + (team + 1) + "\n\n"
+                + (assigned ? "Kliker priradeny" : clickers.nextTeam() == team ? "Stlac a uvolni svoj kliker" : "Caka na priradenie")
+                + (assigned ? "\nZariadenie ID " + clickers.id(team) : ""));
+            teamCards[team].setTextColor(assigned || clickers.nextTeam() == team ? accent : Color.rgb(156, 174, 183));
+            teamCards[team].setBackground(panel(Color.rgb(13, 28, 36),
+                assigned || clickers.nextTeam() == team ? accent : Color.rgb(43, 62, 72)));
+        }
         setupPrompt.setText(clickers.nextTeam() == 0
             ? "1/2: Stlac a uvolni kliker Timu 1. Toto neprida bod."
             : clickers.nextTeam() == 1
@@ -250,6 +350,7 @@ public final class MainActivity extends Activity implements InputManager.InputDe
 
     @Override public boolean dispatchKeyEvent(KeyEvent event) {
         if (!clickerKey(event.getKeyCode())) return super.dispatchKeyEvent(event);
+        if (web == null) return true;
         if (foreground) trackMatch(web.getUrl());
         InputDevice device = event.getDevice();
         int id = event.getDeviceId();
@@ -269,6 +370,11 @@ public final class MainActivity extends Activity implements InputManager.InputDe
             + KeyEvent.keyCodeToString(key) + (device == null ? "" : " | " + device.getName()));
         if (!foreground) {
             status.setText("Kliker zachyteny mimo popredia. Bod nebol pridany.");
+            return true;
+        }
+        if (clickers.invalidates(id) && team < 0) {
+            invalidate(id);
+            message("Identita klikra sa zmenila. Potvrd oba klikre znova; toto stlacenie neprida bod.");
             return true;
         }
         if (device == null || device.isVirtual()) {
@@ -411,16 +517,18 @@ public final class MainActivity extends Activity implements InputManager.InputDe
 
     @Override public void onBackPressed() {
         cancelPending();
-        if (web.canGoBack()) web.goBack();
+        if (web != null && web.canGoBack()) web.goBack();
         else super.onBackPressed();
     }
 
     @Override protected void onResume() {
         super.onResume();
-        foreground = true;
+        foreground = web != null;
         immersive();
+        if (web == null) return;
         web.onResume();
         inputs.registerInputDeviceListener(this, null);
+        validateAssignments();
         trackMatch(web.getUrl());
         if (cameraApproved) grantCamera();
     }
@@ -428,10 +536,9 @@ public final class MainActivity extends Activity implements InputManager.InputDe
     @Override protected void onPause() {
         foreground = false;
         cancelPending();
-        clickers.reset();
-        updateSetup();
+        clickers.pause();
         // Keep a pending file/camera request alive while Android's own picker or permission dialog is open.
-        web.onPause();
+        if (web != null) web.onPause();
         inputs.unregisterInputDeviceListener(this);
         CookieManager.getInstance().flush();
         super.onPause();
@@ -440,13 +547,23 @@ public final class MainActivity extends Activity implements InputManager.InputDe
     @Override protected void onDestroy() {
         denyCamera();
         cancelFiles();
-        web.destroy();
+        if (web != null) web.destroy();
         super.onDestroy();
     }
 
     @Override public void onInputDeviceAdded(int id) {}
     @Override public void onInputDeviceRemoved(int id) { invalidate(id); }
-    @Override public void onInputDeviceChanged(int id) { invalidate(id); }
+    @Override public void onInputDeviceChanged(int id) {
+        InputDevice device = InputDevice.getDevice(id);
+        if (clickers.invalidates(id) && (device == null || device.isVirtual()
+            || clickers.team(id, device.getDescriptor()) < 0)) invalidate(id);
+    }
+    private void validateAssignments() {
+        for (int team = 0; team < 2; team++) {
+            int id = clickers.id(team);
+            if (id >= 0) onInputDeviceChanged(id);
+        }
+    }
     private void invalidate(int id) {
         if (clickers.invalidates(id)) {
             cancelPending();

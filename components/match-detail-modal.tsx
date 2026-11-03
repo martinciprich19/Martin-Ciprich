@@ -45,7 +45,7 @@ function StatBar({ label, left, right, format = (value: number) => String(value)
 export function MatchDetailModal({ matchId, currentProfileId, onClose }: { matchId: string; currentProfileId?: string | number | null; onClose: () => void }) {
   const { language, t } = useLanguage()
   const { data: match, error, isLoading } = useSWR(matchDetailKey(matchId), ([, id]) => fetchMatchDetail(id), { revalidateOnFocus: true })
-  const { data: arenas = [] } = useSWR('arenas', fetchArenas)
+  const { data: arenas = [] } = useSWR('arenas', () => fetchArenas())
   const closeButtonRef = useRef<HTMLButtonElement>(null)
   const me = currentProfileId == null ? null : String(currentProfileId)
   const onCloseRef = useRef(onClose)

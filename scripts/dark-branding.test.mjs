@@ -36,13 +36,15 @@ test('manifest references the new artwork in correctly sized standalone app icon
   assert.equal(result.theme_color, '#0b0f17')
   assert.equal(result.background_color, '#0b0f17')
   assert.deepEqual(result.icons.map((icon) => [icon.src, icon.sizes]), [
-    ['/images/riva-padel-play-together-compact-icon-192.png', '192x192'],
-    ['/images/riva-padel-play-together-compact-icon-512.png', '512x512'],
+    ['/images/riva-padel-play-together-compact-icon-192.png?v=2', '192x192'],
+    ['/images/riva-padel-play-together-compact-icon-512.png?v=2', '512x512'],
   ])
 })
 
 test('browser, Apple and PWA assets use the same new logo without cropping', async () => {
   const logo = await readFile(new URL('../public/images/riva-padel-play-together-compact-logo.png', import.meta.url))
+  const approved = await readFile(new URL('../public/images/riva-approved-logo.png', import.meta.url))
+  assert.deepEqual(await sharp(logo).raw().toBuffer(), await sharp(approved).resize(768, 768).raw().toBuffer())
   const { data, info } = await sharp(logo).removeAlpha().raw().toBuffer({ resolveWithObject: true })
   let left = info.width
   let right = -1
@@ -58,7 +60,7 @@ test('browser, Apple and PWA assets use the same new logo without cropping', asy
       bottom = Math.max(bottom, y)
     }
   }
-  assert.ok((right - left + 1) / info.width >= 0.8, 'Artwork should occupy at least 80% of the logo width')
+  assert.ok((right - left + 1) / info.width >= 0.45, 'Approved artwork must remain visible without cropping its original padding')
   assert.ok(left > 0 && top > 0 && right < info.width - 1 && bottom < info.height - 1, 'Entire artwork must retain padding')
   for (const [size, name] of [
     [192, 'riva-padel-play-together-compact-icon-192.png'],
@@ -81,4 +83,7 @@ test('browser, Apple and PWA assets use the same new logo without cropping', asy
   assert.match(layout, /riva-padel-play-together-compact-icon-192\.png/)
   assert.match(layout, /riva-padel-play-together-compact-apple-touch-icon\.png/)
   assert.match(component, /riva-padel-play-together-compact-logo\.png/)
+  const androidIcon = await readFile(new URL('../android/riva-app/res/drawable/app_icon.png', import.meta.url))
+  const pwaIcon = await readFile(new URL('../public/images/riva-padel-play-together-compact-icon-512.png', import.meta.url))
+  assert.deepEqual(androidIcon, pwaIcon)
 })

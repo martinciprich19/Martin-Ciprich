@@ -10,8 +10,8 @@ export async function sendPauseEmail(job: PauseEmail, apiKey: string, from: stri
     heading: 'De wedstrijd is onderbroken',
     saved: 'De score, regels, service en het volledige geregistreerde wedstrijdverloop zijn opgeslagen.',
     pin: 'Je pincode om verder te spelen:',
-    action: 'Voer pincode in → Wedstrijd hervatten',
-    instruction: 'Selecteer deze opties op de tablet en voer de pincode in.',
+    action: 'Voer pincode in',
+    instruction: 'Voer deze pincode op de tablet in. De opgeslagen wedstrijd wordt automatisch hervat.',
     safety: 'Dezelfde pincode blijft geldig na hervatten en opnieuw onderbreken, totdat de wedstrijd is afgelopen. Alle deelnemers gebruiken dezelfde code. Deel deze niet met anderen.',
     ranking: 'Een onderbroken wedstrijd is nog niet afgelopen en telt nog niet mee voor de competitie of ELO.',
   } : language === 'en' ? {
@@ -19,8 +19,8 @@ export async function sendPauseEmail(job: PauseEmail, apiKey: string, from: stri
     heading: 'The match has been paused',
     saved: 'The score, rules, service and complete recorded match history have been saved.',
     pin: 'Your PIN to resume:',
-    action: 'Enter PIN → Resume match',
-    instruction: 'Select these options on the tablet and enter the PIN.',
+    action: 'Enter PIN',
+    instruction: 'Enter this PIN on the tablet. The saved match resumes automatically.',
     safety: 'The same PIN remains valid after resuming and pausing again, until the match ends. All participants share it. Do not share it with anyone else.',
     ranking: 'A paused match has not finished and does not count towards the league or ELO yet.',
   } : null
@@ -33,13 +33,13 @@ export async function sendPauseEmail(job: PauseEmail, apiKey: string, from: stri
       from,
       to: [job.recipient],
       subject: localized?.subject ?? 'RIVA Padel – prerušený zápas',
-      text: localizedText ?? `Váš zápas bol prerušený. Celé skóre, pravidlá a priebeh bod po bode sú uložené.\n\nPIN na pokračovanie: ${job.pin}\n\nNa tablete vyberte „Zadaj PIN kód“, potom „Pokračovať v zápase“ a zadajte tento PIN. Rovnaký PIN platí aj po obnovení a ďalšom prerušení, až do ukončenia zápasu. Je spoločný pre všetkých účastníkov. Nezdieľajte ho s inými osobami.\n\nPo prerušení sa výsledok ešte nezapočítava do ligy ani ELO.`,
+      text: localizedText ?? `Váš zápas bol prerušený. Celé skóre, pravidlá a priebeh bod po bode sú uložené.\n\nPIN na pokračovanie: ${job.pin}\n\nNa tablete vyberte „Zadaj PIN kód“ a zadajte tento PIN. Uložený zápas sa automaticky obnoví. Rovnaký PIN platí aj po obnovení a ďalšom prerušení, až do ukončenia zápasu. Je spoločný pre všetkých účastníkov. Nezdieľajte ho s inými osobami.\n\nPo prerušení sa výsledok ešte nezapočítava do ligy ani ELO.`,
       html: localizedHtml ?? `<div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;padding:32px;background:#f5f7f6;color:#061016">
         <h1>RIVA Padel</h1><h2>Zápas bol prerušený</h2>
         <p>Skóre, pravidlá, podanie a celý zaznamenaný priebeh zápasu sú uložené.</p>
         <p>Váš PIN na pokračovanie:</p>
         <div style="padding:24px;text-align:center;background:#a8e63c;border-radius:12px;font-size:48px;font-weight:bold;letter-spacing:10px">${job.pin}</div>
-        <p>Na tablete vyberte <strong>Zadaj PIN kód → Pokračovať v zápase</strong> a zadajte tento kód.</p>
+        <p>Na tablete vyberte <strong>Zadaj PIN kód</strong> a zadajte tento kód. Uložený zápas sa automaticky obnoví.</p>
         <p>Rovnaký PIN platí aj po obnovení a ďalšom prerušení, až do ukončenia zápasu. Je spoločný pre všetkých účastníkov. Nezdieľajte ho s inými osobami.</p>
         <p>Prerušený zápas ešte nie je ukončený a nezapočítava sa do ELO.</p>
       </div>`,

@@ -86,7 +86,7 @@ export function MatchStartView({ kioskMode = false }: { kioskMode?: boolean }) {
   }
 
   if (matchId !== null) return <MatchView key={matchId} matchId={matchId} kioskMode={kioskMode} viewerMode={viewerMode} courtId={courtId} />
-  if (isScanning) return <RivaQrScanner kioskMode={kioskMode} onClose={() => setIsScanning(false)} />
+  if (isScanning) return <RivaQrScanner key={country} kioskMode={kioskMode} onClose={() => setIsScanning(false)} />
 
   const cardClass = 'group flex min-h-80 flex-col items-start rounded-3xl border bg-app-court/95 p-7 text-left shadow-xl transition duration-200 motion-safe:hover:-translate-y-1 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#a8e63c] sm:p-8'
 

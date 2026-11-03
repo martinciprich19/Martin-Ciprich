@@ -17,5 +17,18 @@ final class AppPolicy {
         } catch (URISyntaxException error) {
             return false;
         }
+
+    }
+
+    static boolean resumable(String url) {
+        if (!trusted(url)) return false;
+        try {
+            URI uri = new URI(url);
+            return "/match".equals(uri.getPath()) && uri.getRawQuery() != null
+                && java.util.regex.Pattern.compile("(?:^|&)id=[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}(?:&|$)")
+                    .matcher(uri.getRawQuery()).find();
+        } catch (URISyntaxException error) {
+            return false;
+        }
     }
 }

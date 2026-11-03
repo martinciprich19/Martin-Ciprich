@@ -29,6 +29,21 @@ The configured voice IDs and delivery settings are unchanged; a native Slovak
 source voice may still be necessary to eliminate an accent. Language selection
 alone cannot guarantee native pronunciation.
 
+The match client reuses one audio element for consecutive announcements and
+caches valid audio clips by language and text within that match screen
+(at most 64 clips and 8 MB; each response at most 2 MB). Repeated cached phrases
+do not require another server round trip. New phrases still require connectivity;
+this is not offline match speech. Muting, changing language or a newer
+announcement stops the current playback; obsolete requests cannot start audio
+or report errors for a later announcement.
+
+If speech fails, the UI distinguishes server/invalid-audio responses, network
+failure/timeout, autoplay denial and playback errors. Android WebView may not
+offer browser speech synthesis as a fallback; this does not mean server-generated
+audio is unsupported. Later announcements are still attempted after a failure,
+without toggling sound. Check the displayed cause and the matching server logs
+when diagnosing a real-device failure.
+
 `A`/`L` still add points immediately with their shared 400 ms guard. `Z`/`M`
 retain undo/reset behavior and cancel pending clicks. Accepted clicker actions
 wait in order for an in-flight save; changing mode, losing focus/visibility,
@@ -391,7 +406,19 @@ after 060 or the consolidated 061 repair. Do not replay 060/061 after 062, since
 they restore the earlier single-use behavior. A previously consumed PIN cannot
 be recovered; pause that match once more to allocate its persistent PIN.
 
-On `/kiosk`, choose "Pokračovať v zápase" instead of "Nová výzva". Resuming
+Apply [075_unified_kiosk_pin.sql](../scripts/075_unified_kiosk_pin.sql) after 074
+before deploying the unified PIN UI. On `/kiosk`, enter either PIN in the same
+keypad; no new/resume toggle is needed. The server calls `resolve_kiosk_pin`
+using its service role, retaining the existing five-attempt per-IP ten-minute
+budget. A new challenge PIN opens the existing rules dialog and is activated
+only after confirmation, including the court-specific activation when applicable.
+A saved-match PIN resumes directly without changing its rules.
+Invalid PINs and server/configuration failures never fall back to new activation.
+Legacy new/resume PIN namespaces can overlap: ambiguous PINs are explicitly
+rejected without opening either match, rather than guessing. The existing
+resume-only API request shape is still supported for older deployed clients.
+
+Resuming
 issues a random device capability and retains the rules without showing match
 setup again. The same PIN remains reserved for the match after resuming, including
 when reopening an already active match or pausing again. There is no expiry timer.

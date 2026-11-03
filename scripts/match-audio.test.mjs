@@ -112,7 +112,7 @@ test('audio respects mute, cleans up URLs and falls back only for current announ
     await speech.speak('Point for Team 1.', 'en')
     muted = true
     speech.stop()
-    assert.equal(audios[1].paused, true)
+    assert.equal(audios[0].paused, true)
     assert.equal(revoked.length, 2)
     muted = false
     globalThis.fetch = async () => new Response('failed', { status: 502 })
@@ -126,12 +126,12 @@ test('audio respects mute, cleans up URLs and falls back only for current announ
     const current = speech.speak('new', 'en')
     deferred[0](new Response('mp3', { headers: { 'Content-Type': 'audio/mpeg' } }))
     await stale
-    assert.equal(audios.length, 2)
+    assert.equal(audios.length, 1)
     muted = true
     speech.stop()
     deferred[1](new Response('mp3', { headers: { 'Content-Type': 'audio/mpeg' } }))
     await current
-    assert.equal(audios.length, 2)
+    assert.equal(audios.length, 1)
     assert.equal(fallbacks.length, 2)
     muted = false
     globalThis.fetch = async () => new Response('mp3', { headers: { 'Content-Type': 'audio/mpeg' } })
@@ -145,6 +145,93 @@ test('audio respects mute, cleans up URLs and falls back only for current announ
     assert.ok(stopFallback > 0)
   } finally {
     speech.stop()
+    globalThis.fetch = original.fetch
+    globalThis.Audio = original.Audio
+    URL.createObjectURL = original.create
+    URL.revokeObjectURL = original.revoke
+  }
+})
+
+test('repeated match announcements reuse one player and bounded clips, recover after failures', async () => {
+  const original = { fetch: globalThis.fetch, Audio: globalThis.Audio, create: URL.createObjectURL, revoke: URL.revokeObjectURL }
+  const requests = []
+  const statuses = []
+  const fallbacks = []
+  let players = 0
+  let failure = null
+  let playbackFailure = false
+  let player
+  class AudioMock {
+    constructor() { players++; player = this }
+    async play() {
+      if (playbackFailure) throw new DOMException('Autoplay blocked', 'NotAllowedError')
+    }
+    pause() {}
+    removeAttribute() {}
+    load() {}
+  }
+  globalThis.Audio = AudioMock
+  URL.createObjectURL = () => 'blob:cached'
+  URL.revokeObjectURL = () => {}
+  globalThis.fetch = async (_url, init) => {
+    requests.push(JSON.parse(init.body))
+    if (failure === 'network') throw new TypeError('Offline')
+    if (failure === 'service') return new Response('unavailable', { status: 502 })
+    return new Response('mp3', { headers: { 'Content-Type': 'audio/mpeg' } })
+  }
+  const audio = new MatchAudio({
+    matchId: id, isMuted: () => false,
+    onStatus: (status, failure) => statuses.push({ status, failure }),
+    fallback: text => fallbacks.push(text), stopFallback() {},
+  })
+  try {
+    for (let i = 0; i < 100; i++) {
+      await audio.speak('Bod pre tím jedna.', 'sk')
+      player.onended()
+    }
+    assert.equal(players, 1)
+    assert.equal(requests.length, 1)
+    assert.equal(fallbacks.length, 0)
+    failure = 'network'
+    await audio.speak('Bod pre tím jedna.', 'sk')
+    assert.equal(requests.length, 1)
+    await audio.speak('Point for Team 1.', 'en')
+    assert.deepEqual(statuses.at(-1), { status: 'failed', failure: 'network' })
+    failure = 'service'
+    await audio.speak('Point for Team 1.', 'en')
+    assert.deepEqual(statuses.at(-1), { status: 'failed', failure: 'service' })
+    failure = null
+    await audio.speak('Point for Team 1.', 'en')
+    assert.deepEqual(statuses.at(-1), { status: 'ready', failure: undefined })
+    playbackFailure = true
+    await audio.speak('Point for Team 1.', 'en')
+    assert.deepEqual(statuses.at(-1), { status: 'failed', failure: 'blocked' })
+    playbackFailure = false
+    await audio.speak('Point for Team 1.', 'en')
+    assert.equal(statuses.at(-1).status, 'ready')
+    for (let i = 0; i < 65; i++) await audio.speak(`clip ${i}`, 'en')
+    const before = requests.length
+    await audio.speak('Bod pre tím jedna.', 'sk')
+    assert.equal(requests.length, before + 1)
+    assert.equal(players, 1)
+    let largeRequests = 0
+    let bytes = 1_000_000
+    globalThis.fetch = async () => {
+      largeRequests++
+      return new Response(new Uint8Array(bytes), { headers: { 'Content-Type': 'audio/mpeg' } })
+    }
+    for (let i = 0; i < 9; i++) await audio.speak(`large ${i}`, 'sk')
+    await audio.speak('large 0', 'sk')
+    assert.equal(largeRequests, 10, 'byte budget must evict the oldest 1 MB clip')
+    bytes = 2_000_001
+    await audio.speak('oversized', 'sk')
+    assert.deepEqual(statuses.at(-1), { status: 'failed', failure: 'service' })
+    bytes = 10
+    await audio.speak('oversized', 'sk')
+    assert.equal(largeRequests, 12, 'invalid audio must not be cached')
+    assert.equal(statuses.at(-1).status, 'ready')
+  } finally {
+    audio.stop()
     globalThis.fetch = original.fetch
     globalThis.Audio = original.Audio
     URL.createObjectURL = original.create

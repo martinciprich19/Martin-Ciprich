@@ -21,7 +21,7 @@ class Element {
   }
 }
 
-function setup() {
+function setup(options = {}) {
   let now = 0
   let enabled = true
   let helperMode = false
@@ -31,6 +31,7 @@ function setup() {
   const calls = []
   const logs = []
   const diagnostics = []
+  const errors = []
   const document = { visibilityState: 'visible' }
   const factory = vm.runInNewContext(`${source}\ncreateMatchClickerHandler`, {
     HTMLElement: Element, document, performance: { now: () => now },
@@ -47,14 +48,15 @@ function setup() {
     isHelperMode: () => helperMode,
     isBusy: () => busy,
     onDiagnostic: (key, code, status) => diagnostics.push({ key, code, status }),
-    onTeamAPoint: () => calls.push('A'),
-    onTeamBPoint: () => calls.push('B'),
-    onTeamUndo: team => calls.push(`undo-${team}`),
+    onTeamAPoint: () => { options.onAction?.('A'); calls.push('A') },
+    onTeamBPoint: () => { options.onAction?.('B'); calls.push('B') },
+    onTeamUndo: team => { options.onAction?.(`undo-${team}`); calls.push(`undo-${team}`) },
     onUndo: () => calls.push('undo'),
     onReset: () => calls.push('reset'),
+    onError: error => errors.push(error),
   })
   return {
-    calls, logs, diagnostics, document,
+    calls, logs, diagnostics, errors, document,
     advance: ms => {
       const end = now + ms
       while (true) {
@@ -103,6 +105,42 @@ test('all shutter/media mappings and existing shortcuts select the correct actio
   env.press('m')
   assert.deepEqual(env.calls.slice(-2), ['undo', 'reset'])
   assert.deepEqual(env.logs[0], ['Stlačený kláves:', 'VolumeUp', ''])
+})
+
+test('four and longer rapid-click bursts preserve double-click undo semantics without escaping errors', () => {
+  for (const key of ['F13', 'F14']) {
+    for (const count of [4, 5, 20, 101]) {
+      const env = setup()
+      env.helper(true)
+      env.busy(true)
+      for (let i = 0; i < count; i++) {
+        env.press(key)
+        env.advance(100)
+      }
+      env.advance(400)
+      assert.equal(env.calls.length, 0)
+      env.busy(false)
+      env.advance(10_000)
+      assert.equal(env.errors.length, 0)
+      assert.equal(env.calls.filter(action => action.startsWith('undo-')).length, Math.floor(count / 2))
+      assert.equal(env.calls.filter(action => action === 'A' || action === 'B').length, count % 2)
+    }
+  }
+})
+
+test('failed scoring callback reports the exact error and cancels remaining burst actions', () => {
+  const failure = new Error('Invalid score')
+  const env = setup({ onAction: () => { throw failure } })
+  env.helper(true)
+  env.busy(true)
+  for (let i = 0; i < 10; i++) {
+    env.press(i % 2 ? 'F13' : 'F14')
+    env.advance(100)
+  }
+  env.busy(false)
+  assert.doesNotThrow(() => env.advance(10_000))
+  assert.deepEqual(env.errors, [failure])
+  assert.deepEqual(env.calls, [])
 })
 
 test('A/L retain the 400 ms immediate guard across teams and disabled intervals', () => {

@@ -1,6 +1,14 @@
 # Prebiehajúce zápasy
 
-The `/live-matches` page lists matches that are actively scored in the RIVA Padel app. It refreshes every 15 seconds and can filter the list by region and arena. Selecting a match opens a read-only spectator view with the players, live score, and match statistics. Score controls remain available only through the regular scoring view.
+The `/live-matches` page lists active and paused matches in the RIVA Padel app. It refreshes every 15 seconds and can filter the list by region and arena. Paused matches display an amber "Prerušený zápas" badge instead of the green live badge. Selecting a match opens a read-only spectator view with the players, live score, and match statistics. Score controls remain available only through the regular scoring view.
+
+Apply the entire `scripts/074_public_paused_matches.sql` after migrations through
+073, then deploy the updated UI. It replaces the existing country-aware RPC,
+adds only `paused_at` to its public return shape and includes paused matches.
+Finished and ended-early matches remain excluded, as do unstarted or
+unactivated official matches. Country and arena filtering remain unchanged.
+No resume PIN, ownership token or pause-email data is exposed or modified.
+After resuming, the next refresh displays the green live badge again.
 
 ## Database setup
 
@@ -47,3 +55,20 @@ Backend regression checks:
 ```powershell
 node --test scripts\national-league-data.test.mjs scripts\national-league-routing.test.mjs
 ```
+
+## Deployment troubleshooting
+
+`PGRST202` for `get_public_live_matches(p_country_code)` means the country-aware
+signature is not available in the exposed API schema. Check the applied database
+definitions and migrations 067, 068 and 069 in order; a website deployment does
+not execute SQL migrations. If the function already exists, reload PostgREST's
+schema with `notify pgrst, 'reload schema';` before considering reapplication.
+Do not rerun older migrations over later definitions without checking them.
+
+QR arena selection uses the selected browsing league and the SWR key
+`['arenas', country]`, with a fetcher passing only the country to `fetchArenas`.
+Changing league resets the in-progress QR setup so an arena selected in the
+previous country is not retained. The match detail dialog requests the
+all-country directory using `() => fetchArenas()`. Do not pass `fetchArenas` directly as the
+fetcher for the string SWR key `arenas`: SWR passes that key as the first argument,
+which would incorrectly filter `country_code` by the literal value `arenas`.

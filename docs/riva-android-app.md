@@ -7,7 +7,7 @@ web pages and backend; nothing is copied into a separate database.
 
 ## Isolation and installation
 
-- App name: **RIVA Padel Test**, version 1.1.
+- App name: **RIVA Padel Test**, version 1.6.
 - Package: `sk.rivapadel.apptest`, distinct from the Chrome-installed PWA,
   standalone kiosk and Fully helper. It installs alongside them.
 - Cookies, login state and storage are private to this app. Log in separately.
@@ -23,6 +23,12 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\android\riva-app\build
 ```
 
 Transfer only `android/riva-app/dist/riva-padel-test.apk` to the tablet and install.
+Version 1.4 replaces Android's light window theme with a dark RIVA theme.
+The window, status/navigation bars, inset padding and WebView loading background
+use `#061016`, avoiding a white strip when Xiaomi or another device reserves
+system-bar space. Immersive hiding remains enabled; device-specific rendering
+still requires physical verification. Install as an update without uninstalling
+or clearing app data to retain the existing session and saved device tokens.
 The APK is locally debug-signed for private testing, not a Play Store release.
 The build and APK are ignored by Git. No credentials are embedded.
 Return to the previous app at any time; uninstall only **RIVA Padel Test** if desired.
@@ -39,7 +45,11 @@ photos and sponsor images without broad storage permission. File access
 uses Android's content-provider grants for the selected files. QR camera capture
 requires explicit Android camera permission and is granted only to the RIVA origin.
 Denied permissions and main-page network/HTTP failures are reported onscreen.
-Audio retains the standard user-gesture requirement. No microphone, Accessibility,
+Version 1.2 allows audio without a touch gesture so Bluetooth-triggered score
+announcements and asynchronous server audio are not blocked by WebView autoplay.
+Server speech still requires network access; Android WebView may lack the
+browser speech-synthesis fallback. This change does not repair server failures.
+No microphone, Accessibility,
 device administrator or native JavaScript interface is enabled.
 
 External HTTPS, email and telephone links require confirmation and open another
@@ -56,6 +66,18 @@ handling. Each feature below needs a real-device test before release.
 
 ## Native clickers
 
+Version 1.6 uses the approved RIVA PLAY TOGETHER artwork as the Android launcher
+icon. Web logos, browser/PWA icons and notification icons use the same image;
+web changes require a separate deployment. Generated variants preserve the
+complete image and its padding. Regenerate using
+`node scripts\generate-riva-brand-assets.mjs <approved-image-path>`.
+
+Version 1.5 styles native assignment with the dark RIVA background, rounded
+team cards (lime for Team 1, blue for Team 2), a highlighted current step and
+a lime confirmation button enabled after both devices are assigned.
+The setup scrolls on smaller screens and in landscape. Assignment, release
+validation and scoring semantics are unchanged.
+
 When an editable-route `/match?id=...` opens, an in-app setup panel requires:
 
 1. Press and release the physical clicker for Team 1.
@@ -71,8 +93,9 @@ so the deployed web enables native helper handling without a web modification.
 The current match is hidden until confirmation. Viewer links (`view=viewer`) and
 scoreboards do not require clickers. Other `/match?id=...` links require setup
 even if the server later determines the user cannot edit; route gating does not
-grant authorization. A new match, device change/disconnect or leaving the app
-requires fresh confirmation. Same-match navigation preserves confirmation.
+grant authorization. A new match or actual device identity change/disconnect
+requires fresh confirmation. Same-match navigation and temporary app pauses
+preserve confirmation if both input device IDs/descriptors remain valid.
 Native receipt counts are not proof of saved points.
 
 ## Required tablet acceptance checks
@@ -86,7 +109,8 @@ Native receipt counts are not proof of saved points.
   and network error/recovery.
 - Both physical clickers: three alternating points per team, saved score on
   another screen, double-click undo, no scoring during setup/paused/finished match.
-- Switch apps and reconnect a clicker: setup returns without unintended points.
+- Switch apps with both clickers connected: setup does not return and no queued
+  point is scored on resume. Reconnect a clicker: setup returns without points.
 - Leave a live match idle: the app uses the deployed site's behavior. The separate
   local inactivity fix must be deployed to remove the existing web timeout.
 
@@ -108,3 +132,25 @@ visible before matches. Android status/navigation bars use immersive mode,
 restored on window focus and resume. Edge swipes can temporarily reveal system
 controls; this is not device-owner lockdown. Network failures show a retry/home
 dialog and other errors remain explicit toast notifications.
+
+Version 1.3 preserves assignments across activity pauses and harmless input-device
+metadata changes. Resume validates both physical IDs/descriptors; real removal
+or identity changes still require confirmation rather than guessing the teams.
+Held-key state and queued web actions are cleared on pause.
+
+The current same-origin `/match?id=...` URL is remembered in private Android
+preferences. Relaunch reopens that match with its last **server-saved** score
+instead of the home page. Leaving the match for another RIVA page clears the
+remembered URL. After process death assignments must be confirmed again; web
+localStorage retains the existing QR device token. Unsent points are not recovered
+or replayed. A terminated WebView renderer offers explicit match recovery.
+
+The shared web clicker queue now catches synchronous scoring exceptions, clears
+pending burst actions and surfaces the error in the match instead of allowing an
+uncaught timer error. Errors disable clicker scoring until resolved/reloaded;
+the error panel can reload the same URL. Four or more presses still follow the
+existing rules: two presses 60–349 ms apart are a team undo, not two points.
+The match route also has an error boundary for rendering failures with retry
+and same-URL reload actions, not a redirect to game selection.
+This web update requires deployment independently from the APK. The reported
+real-device crash is not conclusively diagnosed without its original error.

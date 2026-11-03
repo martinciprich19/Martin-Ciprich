@@ -19,7 +19,6 @@ export function KioskView() {
   const courtId = requestedCourtId && /^[1-9]\d*$/.test(requestedCourtId) && Number.isSafeInteger(Number(requestedCourtId))
     ? Number(requestedCourtId)
     : null
-  const [resuming, setResuming] = useState(false)
   const [pin, setPin] = useState('')
   const [isVerifying, setIsVerifying] = useState(false)
   const [error, setError] = useState('')
@@ -38,8 +37,7 @@ export function KioskView() {
   useKioskInactivity(true, resetKiosk)
 
   const verifyPin = useCallback(async (value: string) => {
-    if (!/^\d{4}$/.test(value) || isVerifyingRef.current) return
-    if (!resuming) { setChoosingRules(true); return }
+    if (!/^\d{4}$/.test(value) || isVerifyingRef.current || choosingRules) return
     isVerifyingRef.current = true
     inactivityResetRef.current = false
     setIsVerifying(true)
@@ -51,26 +49,32 @@ export function KioskView() {
       window.sessionStorage.setItem(pendingKey, token)
       const response = await fetch('/api/match-resume', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pin: value, deviceToken: token }),
+        body: JSON.stringify({ pin: value, deviceToken: token, resolve: true }),
         signal: AbortSignal.timeout(20_000),
       })
       const result = await response.json()
       if (!response.ok) throw new Error(result.error ?? 'Zápas sa nepodarilo obnoviť.')
-      if (typeof result.matchId !== 'string') throw new Error('Chýba ID obnoveného zápasu.')
+      if (result.kind === 'new') {
+        window.sessionStorage.removeItem(pendingKey)
+        if (!inactivityResetRef.current) setChoosingRules(true)
+        return
+      }
+      if (result.kind !== 'resume' || typeof result.matchId !== 'string'
+        || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(result.matchId)) throw new Error('Chýba platné ID obnoveného zápasu.')
       saveQrDeviceToken(result.matchId, token)
       window.sessionStorage.removeItem(pendingKey)
       if (inactivityResetRef.current) return
       const courtQuery = courtId === null ? '' : `&courtId=${encodeURIComponent(String(courtId))}`
       window.location.assign(`/match?id=${encodeURIComponent(result.matchId)}&mode=kiosk${courtQuery}`)
     } catch (error) {
-      console.error('Obnovenie zápasu pomocou PIN-u zlyhalo:', error)
+      console.error('Overenie PIN-u zápasu zlyhalo:', error)
       setPin('')
       setError(getErrorMessage(error, 'Zápas sa nepodarilo obnoviť.'))
     } finally {
       isVerifyingRef.current = false
       setIsVerifying(false)
     }
-  }, [courtId, resuming])
+  }, [courtId, choosingRules])
 
   const activatePin = useCallback(async (value: string, settings: MatchSettings) => {
     if (!/^\d{4}$/.test(value) || isVerifyingRef.current) return
@@ -128,7 +132,7 @@ export function KioskView() {
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      if (choosingRules) return
+      if (choosingRules || isVerifyingRef.current) return
       if (/^\d$/.test(event.key)) {
         event.preventDefault()
         appendDigit(event.key)
@@ -155,12 +159,8 @@ export function KioskView() {
           <LockKeyhole size={26} aria-hidden="true" />
         </div>
         <p className="mt-6 text-center text-[10px] font-bold uppercase tracking-[0.24em] text-app-accent">RIVA PADEL / KIOSK</p>
-        <h1 id="kiosk-heading" className="mt-2 text-center text-3xl font-black tracking-tight">{resuming ? 'Pokračovať v zápase' : 'Začni svoj zápas'}</h1>
-        <div className="mt-5 grid grid-cols-2 gap-2">
-          <button type="button" disabled={isVerifying || choosingRules} aria-pressed={!resuming} onClick={() => { setResuming(false); setPin(''); setError('') }} className={`min-h-12 rounded-xl border p-2 text-sm ${!resuming ? 'border-[#a8e63c] text-app-accent' : 'border-app-line/15'}`}>Nová výzva</button>
-          <button type="button" disabled={isVerifying || choosingRules} aria-pressed={resuming} onClick={() => { setResuming(true); setPin(''); setError('') }} className={`min-h-12 rounded-xl border p-2 text-sm ${resuming ? 'border-[#a8e63c] text-app-accent' : 'border-app-line/15'}`}>Pokračovať v zápase</button>
-        </div>
-        <p className="mt-2 text-center text-sm text-app-fg/50">{resuming ? 'Zadaj 4-miestny PIN uloženého zápasu. Pravidlá aj skóre zostanú zachované.' : 'Zadaj 4-miestny PIN z hráčskej výzvy.'}</p>
+        <h1 id="kiosk-heading" className="mt-2 text-center text-3xl font-black tracking-tight">Zadaj PIN kód</h1>
+        <p className="mt-2 text-center text-sm text-app-fg/50">Zadaj 4-miestny PIN nového alebo uloženého zápasu. Prerušený zápas sa obnoví so zachovanými pravidlami aj skóre.</p>
 
         <div className="mt-8 flex justify-center gap-4" aria-label={`${pin.length} zo 4 číslic zadaných`}>
           {Array.from({ length: PIN_LENGTH }, (_, index) => (

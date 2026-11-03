@@ -1,11 +1,12 @@
 import type { Language } from '@/components/language-provider'
 
 export type MatchSpeechStatus = 'ready' | 'fallback' | 'unsupported' | 'missing' | 'failed'
+export type MatchSpeechFailure = 'service' | 'network' | 'playback' | 'blocked'
 
 type MatchAudioOptions = {
   matchId: string
   isMuted: () => boolean
-  onStatus: (status: MatchSpeechStatus) => void
+  onStatus: (status: MatchSpeechStatus, failure?: MatchSpeechFailure) => void
   fallback: (text: string, language: Language) => void
   stopFallback: () => void
 }
@@ -16,6 +17,8 @@ export class MatchAudio {
   private audio: HTMLAudioElement | null = null
   private objectUrl: string | null = null
   private celebrated = false
+  private readonly clips = new Map<string, Blob>()
+  private clipBytes = 0
 
   private readonly options: MatchAudioOptions
 
@@ -44,7 +47,6 @@ export class MatchAudio {
       this.audio.pause()
       this.audio.removeAttribute('src')
       this.audio.load()
-      this.audio = null
     }
     if (this.objectUrl) URL.revokeObjectURL(this.objectUrl)
     this.objectUrl = null
@@ -59,30 +61,53 @@ export class MatchAudio {
     const timeout = setTimeout(() => request.abort(), 15000)
     const isCurrent = () => revision === this.revision && !this.options.isMuted()
     let usedFallback = false
+    let failure: MatchSpeechFailure = 'network'
     const fallback = (error: unknown) => {
       if (!isCurrent() || usedFallback) return
       usedFallback = true
-      console.warn('ElevenLabs prehrávanie zlyhalo; používam hlas zariadenia:', error)
+      console.warn('Hlasové hlásenie zlyhalo; skúšam záložný hlas zariadenia:', failure, error)
       this.releaseAudio()
+      this.options.onStatus('failed', failure)
       this.options.fallback(text, language)
     }
     try {
-      const response = await fetch('/api/match-speech', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, matchId: this.options.matchId, language }),
-        signal: request.signal,
-      })
-      if (!response.ok) throw new Error(`Hlasová služba HTTP ${response.status}`)
-      const blob = await response.blob()
-      if (!blob.size || !blob.type.startsWith('audio/')) throw new Error('Hlasová služba nevrátila zvuk.')
+      const key = `${language}:${text}`
+      let blob = this.clips.get(key)
+      if (!blob) {
+        const response = await fetch('/api/match-speech', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text, matchId: this.options.matchId, language }),
+          signal: request.signal,
+        })
+        failure = 'service'
+        if (!response.ok) throw new Error(`Hlasová služba HTTP ${response.status}`)
+        blob = await response.blob()
+        if (!blob.size || blob.size > 2_000_000 || !blob.type.startsWith('audio/')) throw new Error('Hlasová služba nevrátila platný zvuk.')
+        if (!isCurrent()) return
+        while (this.clips.size >= 64 || this.clipBytes + blob.size > 8_000_000) {
+          const oldest = this.clips.keys().next().value
+          if (oldest === undefined) break
+          this.clipBytes -= this.clips.get(oldest)?.size ?? 0
+          this.clips.delete(oldest)
+        }
+        this.clips.set(key, blob)
+        this.clipBytes += blob.size
+      }
       if (!isCurrent()) return
+      failure = 'playback'
       this.objectUrl = URL.createObjectURL(blob)
-      const audio = new Audio(this.objectUrl)
+      const audio = this.audio ?? new Audio()
       this.audio = audio
+      audio.src = this.objectUrl
       audio.onended = () => { if (isCurrent()) this.releaseAudio() }
       audio.onerror = () => fallback(new Error('Zvuk sa nepodarilo prehrať.'))
-      await audio.play()
+      try {
+        await audio.play()
+      } catch (error) {
+        if (error instanceof Error && error.name === 'NotAllowedError') failure = 'blocked'
+        throw error
+      }
       if (isCurrent() && this.audio === audio) this.options.onStatus('ready')
     } catch (error) {
       fallback(error)
