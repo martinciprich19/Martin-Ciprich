@@ -26,6 +26,53 @@ button, a { -webkit-tap-highlight-color: transparent; touch-action: manipulation
 ::selection { background: var(--lime); color: #061016; }
 .hero-noise { background-image: radial-gradient(circle at 20% 10%, rgba(255,255,255,.04) 0 1px, transparent 1px); background-size: 5px 5px; }
 
+@keyframes riva-startup-exit {
+  0%, 74% { opacity: 1; visibility: visible; }
+  100% { opacity: 0; visibility: hidden; }
+}
+@keyframes riva-startup-reveal {
+  0% { opacity: 0; transform: scale(.92); }
+  28%, 76% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.025); }
+}
+@keyframes riva-startup-glow {
+  0%, 100% { opacity: .48; transform: scale(.88); }
+  50% { opacity: 1; transform: scale(1.12); }
+}
+.startup-splash {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: radial-gradient(ellipse at center, #101b20 0%, #0b0f17 62%);
+  pointer-events: none;
+  animation: riva-startup-exit 2400ms ease-in-out forwards;
+}
+.startup-splash-aura {
+  position: absolute;
+  width: min(68vw, 360px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(168,230,60,.27) 0%, rgba(168,230,60,.1) 34%, transparent 70%);
+  filter: blur(18px);
+  animation: riva-startup-glow 1500ms ease-in-out infinite;
+}
+.startup-splash-logo {
+  position: relative;
+  width: clamp(144px, 38vw, 208px);
+  aspect-ratio: 1;
+  object-fit: contain;
+  filter: drop-shadow(0 0 22px rgba(168,230,60,.52));
+  animation: riva-startup-reveal 2400ms ease-in-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .startup-splash { animation-duration: 300ms; }
+  .startup-splash-aura { animation: none; opacity: .72; }
+  .startup-splash-logo { animation-duration: 300ms; }
+}
+
 @keyframes spl-screen-in {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
