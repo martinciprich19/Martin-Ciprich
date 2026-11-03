@@ -7,7 +7,7 @@ web pages and backend; nothing is copied into a separate database.
 
 ## Isolation and installation
 
-- App name: **RIVA Padel Test**, version 1.6.
+- App name: **RIVA Padel Test**, version 1.8.
 - Package: `sk.rivapadel.apptest`, distinct from the Chrome-installed PWA,
   standalone kiosk and Fully helper. It installs alongside them.
 - Cookies, login state and storage are private to this app. Log in separately.
@@ -39,6 +39,13 @@ All same-origin HTTPS pages remain inside the WebView. **Domov** opens the full
 home page and Android Back uses web history.
 JavaScript, DOM storage and first-party cookies are enabled. Web permissions and
 authorization remain the responsibility of the existing website.
+
+The shared web layout includes a circular **Obnoviť stránku** (Reload page)
+button at the bottom right on every page, including match/kiosk and login pages.
+It fully reloads the current URL, preserving its query parameters and existing
+login/device storage. Unsaved form edits or unsent points are not recovered.
+The button respects device safe-area insets and stays below modal overlays.
+This requires web deployment, not a new APK.
 
 Android's document picker supports single and multiple file inputs for profile
 photos and sponsor images without broad storage permission. File access
@@ -72,6 +79,16 @@ web changes require a separate deployment. Generated variants preserve the
 complete image and its padding. Regenerate using
 `node scripts\generate-riva-brand-assets.mjs <approved-image-path>`.
 
+Version 1.8 removes only the approved image's empty margins for the native launcher
+icon, making the artwork about 83% of the visible icon width. Android 8+ uses an
+adaptive icon with a dark background and a 72dp artwork layer within the 108dp
+canvas, avoiding legacy-icon shrinking by the launcher. Older Android retains
+a bitmap fallback. All bright artwork fits the guaranteed 66dp safe circle,
+including the PLAY TOGETHER text. Web/PWA assets and in-app logos are unchanged.
+Run `node scripts\generate-riva-brand-assets.mjs` without an argument to regenerate
+from the saved approved source. Install the new APK as an update; actual launcher
+size and icon cache refresh still need verification on the device.
+
 Version 1.5 styles native assignment with the dark RIVA background, rounded
 team cards (lime for Team 1, blue for Team 2), a highlighted current step and
 a lime confirmation button enabled after both devices are assigned.
@@ -93,9 +110,18 @@ so the deployed web enables native helper handling without a web modification.
 The current match is hidden until confirmation. Viewer links (`view=viewer`) and
 scoreboards do not require clickers. Other `/match?id=...` links require setup
 even if the server later determines the user cannot edit; route gating does not
-grant authorization. A new match or actual device identity change/disconnect
-requires fresh confirmation. Same-match navigation and temporary app pauses
-preserve confirmation if both input device IDs/descriptors remain valid.
+grant authorization. Version 1.7 keeps team descriptors and confirmation for the
+entire same-match session, with no idle timeout. Bluetooth sleep/disconnect only
+clears the connected input ID and held-key state, not the team assignment. When
+the same descriptor returns (including a new Android device ID), it reconnects
+automatically to its original team. Unknown devices, virtual devices, reused IDs
+with a different descriptor and simultaneous duplicate descriptors never score
+as an assigned team. Both original clickers need distinct stable descriptors.
+A new match, explicit reset, or app process restart still requires assignment;
+there is no claim of persistence across process death. Same-match navigation and
+temporary app pauses preserve confirmation. A physically sleeping clicker may
+consume the first press to wake its Bluetooth connection; the app cannot prevent
+hardware sleep or replay a key Android never delivered.
 Native receipt counts are not proof of saved points.
 
 ## Required tablet acceptance checks
@@ -110,9 +136,13 @@ Native receipt counts are not proof of saved points.
 - Both physical clickers: three alternating points per team, saved score on
   another screen, double-click undo, no scoring during setup/paused/finished match.
 - Switch apps with both clickers connected: setup does not return and no queued
-  point is scored on resume. Reconnect a clicker: setup returns without points.
-- Leave a live match idle: the app uses the deployed site's behavior. The separate
-  local inactivity fix must be deployed to remove the existing web timeout.
+  point is scored on resume. Reconnect either original clicker: no assignment
+  panel returns, and delivered presses continue controlling the original team.
+- Leave the clickers idle for 10 minutes, one hour and two hours during the same
+  live match. Wake each and verify exact team identity without re-confirmation,
+  including when Android allocates new device IDs. An unknown clicker must not
+  score. These physical checks remain required; native tests simulate disconnects
+  and reconnections but cannot measure the hardware's sleep behavior.
 
 Quick matches now require an explicit initial serve draw in the shared web view
 instead of assigning a random team at creation. The native confirmation panel
@@ -134,8 +164,10 @@ controls; this is not device-owner lockdown. Network failures show a retry/home
 dialog and other errors remain explicit toast notifications.
 
 Version 1.3 preserves assignments across activity pauses and harmless input-device
-metadata changes. Resume validates both physical IDs/descriptors; real removal
-or identity changes still require confirmation rather than guessing the teams.
+metadata changes. Resume validates both physical IDs/descriptors. Before 1.7,
+real removal or identity changes required confirmation. Version 1.7 retains
+the original descriptors on removal and restores only those same physical
+identities automatically; it never guesses a team for a different device.
 Held-key state and queued web actions are cleared on pause.
 
 The current same-origin `/match?id=...` URL is remembered in private Android

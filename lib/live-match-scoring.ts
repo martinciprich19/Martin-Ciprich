@@ -539,6 +539,13 @@ export function resetLiveGame(score: LiveScore): LiveScore {
   }
 }
 
+export function undoSavedPoint(score: LiveScore): LiveScore {
+  const last = score.point_history?.at(-1)
+  if (!last) throw new Error('Zápas nemá uložený bod, ktorý možno vrátiť.')
+  if (last.type !== 'point') throw new Error('Posledná uložená zmena je reset gemu. Bez pôvodného stavu ho nemožno bezpečne vrátiť.')
+  return removeLastTeamPoint(score, last.team)
+}
+
 export function removeLastTeamPoint(score: LiveScore, team: Team, snapshots: LiveScore[] = []): LiveScore {
   const history = score.point_history ?? []
   const index = history.findLastIndex((entry) => entry.type === 'point' && entry.team === team)
@@ -554,7 +561,7 @@ export function removeLastTeamPoint(score: LiveScore, team: Team, snapshots: Liv
     team_a_games: 0, team_b_games: 0, team_a_sets: 0, team_b_sets: 0,
     completed_sets: [], set_statistics: [], tiebreak_score: null, advantage_team: null,
     initial_server_chosen: true, serving_team: first.server!.team, serving_player: first.server!.player,
-    point_history: [],
+    point_history: [], finished_at: null,
   }
   let corrected = original
   const start = baseline ? index : 0

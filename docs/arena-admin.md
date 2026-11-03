@@ -68,3 +68,28 @@ where arena_id = 123
 ```
 
 Monitor sa priradí ku kurtu cez svoju adresu, bez samostatného prihlasovacieho PIN-u. Stav online hardvéru, párovanie cez QR/PIN a auditovaná správa výsledkov zatiaľ nie sú súčasťou týchto migrácií.
+# Authorized kiosk installations
+
+Apply `scripts/076_authorized_kiosk_devices.sql` after 075 before deploying this
+change. Visiting `/kiosk` or `?mode=kiosk` no longer permanently turns a phone
+into a kiosk. Old `riva-kiosk-mode` cookies without a valid device authorization
+are cleared on the next request.
+
+On the intended tablet, open the full app, sign in as an assigned arena manager,
+open the arena dashboard and use **Kioskové zariadenia → Autorizovať toto
+zariadenie ako kiosk**. Provide a descriptive device name. This authorizes that
+app installation/browser only, not every device signed into the account.
+Manage and revoke devices from another phone/computer in the same dashboard.
+Revocation takes effect on the device's next page/API request; it does not delete
+match state. Removing the authorizing manager's arena assignment also invalidates
+their devices.
+
+The device capability is random, stored in a Secure/HttpOnly same-site cookie
+(Secure only on HTTPS), expires after one year and is hashed in the private
+database table. Manager listings do not expose its hash. Clearing app/browser
+data or reinstalling requires reauthorization; an APK update preserves it.
+Each request with a device token validates authorization against the database.
+An authorization outage reports 503 rather than silently granting normal access.
+Kiosk designation is an application navigation restriction, not Android OS
+device-owner lockdown. The APK's native clicker support remains available in
+ordinary mode; no new APK is needed for this web change.

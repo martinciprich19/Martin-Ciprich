@@ -39,7 +39,7 @@ test('native window, system bars and WebView use the RIVA dark background', () =
   const theme = readFileSync(path.resolve('android', 'riva-app', 'res', 'values', 'styles.xml'), 'utf8')
   const source = readFileSync(path.join(native, 'MainActivity.java'), 'utf8')
   assert.match(manifest, /android:theme="@style\/RivaTheme"/)
-  assert.match(manifest, /android:versionCode="7" android:versionName="1.6"/)
+  assert.match(manifest, /android:versionCode="9" android:versionName="1.8"/)
   assert.match(theme, /parent="android:style\/Theme.Material.NoActionBar"/)
   assert.match(theme, /name="riva_background">#061016</)
   for (const item of ['windowBackground', 'colorBackground', 'statusBarColor', 'navigationBarColor']) {
@@ -62,6 +62,10 @@ test('native assignment uses RIVA team cards, scrollable layout and stateful con
   assert.match(source, /Color.rgb\(168, 230, 60\)/)
   assert.match(source, /Color.rgb\(141, 207, 235\)/)
   assert.match(source, /continueMatch.setEnabled\(ready\)/)
+  const deviceCallbacks = source.slice(source.indexOf('@Override public void onInputDeviceAdded'))
+  assert.doesNotMatch(deviceCallbacks, /clickers.reset\(\)/)
+  assert.match(deviceCallbacks, /clickers.disconnect\(id\)/)
+  assert.match(deviceCallbacks, /clickers.reconnect\(id, device.getDescriptor\(\), device.isVirtual\(\)\)/)
   assert.match(source, /!foreground \|\| !clickers.confirm\(\)/)
 })
 
@@ -118,7 +122,25 @@ test('real native clicker session and navigation policy preserve team identity a
           }
           check(!s.track("match1")&&!s.blocked(),"same match preserves");
           check(s.invalidates(16)&&s.invalidates(17)&&!s.invalidates(99),"invalidation");
+          s.press(16,24,0);
+          s.disconnect(16);s.disconnect(17);
+          check(!s.blocked()&&s.nextTeam()==-1,"sleep preserves both team assignments and confirmation");
+          check(s.team(16,"first")==-1,"disconnected ID cannot score");
+          check(!s.reconnect(26,"unknown",false)&&!s.reconnect(26,"first",true),"unknown and virtual devices rejected");
+          check(s.reconnect(26,"first",false)&&s.reconnect(27,"second",false),"wake reconnects by stable descriptor with new IDs");
+          check(s.team(26,"first")==0&&s.team(27,"second")==1&&!s.blocked(),"wake preserves exact teams");
+          check(!s.reconnect(28,"first",false),"simultaneous duplicate descriptor rejected");
+          check(s.press(26,24,0),"disconnect clears held state");s.release(26,24);
+          for(int hour=0;hour<2;hour++){
+            s.pause();s.disconnect(26);s.disconnect(27);
+            check(!s.track("match1")&&!s.blocked(),"long inactivity never resets setup");
+            check(s.reconnect(26,"first",false)&&s.reconnect(27,"second",false),"same clickers wake repeatedly");
+          }
+          s.disconnect(26);
+          check(!s.reconnect(27,"first",false),"one physical ID cannot belong to both teams");
+          check(s.reconnect(26,"first",false),"original clicker returns");
           s.reset();check(s.blocked()&&s.nextTeam()==0,"pause and disconnect lock");
+          check(s.assign(1,"same",false)&&!s.assign(2,"same",false),"ambiguous descriptors cannot be assigned");
           check(s.track("match2")&&s.blocked(),"rematch locks");
           check(s.track(null)&&!s.blocked()&&s.team(16,"first")==-1,"leave match clears");
           System.out.println("RIVA native assertions passed");

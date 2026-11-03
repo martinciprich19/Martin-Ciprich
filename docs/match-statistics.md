@@ -2,6 +2,38 @@
 
 ## Bluetooth HID clickers during play
 
+After reloading an active match, **Späť** can remove the last persisted point
+when no in-memory undo snapshot remains. The team-specific **Odobrať bod tímu 1/2**
+buttons also work from the persisted point history, like a clicker double-click.
+Corrections rebuild score, games, sets, serving rotations and statistics using
+the existing scoring rules. They require complete, consistent history with
+serving information and point timestamps; legacy/inconsistent records produce
+an explicit error, not an estimated score. A last saved game-reset event cannot
+be undone after reload without its original snapshot. Finalized, paused and
+spectator matches remain non-editable; official finalized results are not reopened.
+
+## Live-score completion without player confirmations
+
+Apply **077_live_match_finalization.sql** after 076 and before deploying this
+client. New live-scored QR/challenge matches (whether controlled by clickers or
+on-screen scoring buttons) no longer send four player approval requests.
+The winning point saves the final score and plays the celebration, but does not
+yet create an official result or change ELO. **Vrátiť víťazný bod** removes that
+point from complete persisted history and reopens the match, even after reload,
+restoring scores, server, statistics and an unset finish time.
+
+**Ukončiť zápas** calls `finalize_live_match`; **Hrať ďalší zápas** finalizes within
+the rematch transaction. The existing validated result-submission trigger and
+confirmed-result rating replay create a confirmed result, seasonal/career ELO
+and statistics atomically, without pretending players approved it. Approval
+notifications created internally by the legacy submission trigger are removed
+in that transaction. Repeated finalization is idempotent, failed rematch creation
+rolls back finalization, and finalized/legacy official results cannot be reopened.
+Quick games finalize without a league result/ELO. Closing the tab alone does not
+finalize a match. Match access and scoring-rule guards remain enforced.
+Manually submitted results outside live scoring and older already-submitted
+results keep their existing player approval workflow.
+
 On the live match screen, Bluetooth camera shutters that send keyboard/media
 keydown events use the same scoring actions and voice announcements as the UI:
 
@@ -36,6 +68,17 @@ do not require another server round trip. New phrases still require connectivity
 this is not offline match speech. Muting, changing language or a newer
 announcement stops the current playback; obsolete requests cannot start audio
 or report errors for a later announcement.
+
+After the winning point is successfully saved, the match plays a short original
+2.4-second victory fanfare, followed by the winning team and both players' names
+in the selected announcement language (Slovak or English). The fanfare is generated
+locally as PCM WAV and uses the same audio element, including in Android WebView;
+it needs neither a music service nor Web Audio support. Celebration runs once per
+completion, not again on a Realtime echo or when opening an already finished
+match. Undoing the winning point resets celebration so a later genuine finish
+can celebrate again. Mute applies to both music and speech. Stopping audio cancels the pending
+winner speech too. Fanfare playback errors are logged and reported through the
+audio status, but do not prevent attempting the named winner announcement.
 
 If speech fails, the UI distinguishes server/invalid-audio responses, network
 failure/timeout, autoplay denial and playback errors. Android WebView may not
@@ -273,7 +316,7 @@ for the team serving the game-ending point (manual changes use the current serve
 both match-wide and per set, and restored by undo. Hold serve is service games won
 divided by all service games, not points won on serve. Older games remain unknown.
 Official QR results receive an immutable `matches.live_statistics` snapshot
-in the same transaction as the final point. Existing linked finished results
+in the same transaction as finalization (the final point before migration 077). Existing linked finished results
 are backfilled only from recorded counters; no capability hashes are copied.
 The official match modal reuses the full match/set comparison and serving-player
 cards, including points, return points, streaks, break chances/conversions/misses
@@ -321,7 +364,11 @@ possible pairings of the four players. Both actions are disabled while the final
 result is saving or the next game is being created. Inactivity resets during
 unfinished matches and match setup are unchanged.
 
-## Immediate result notifications and next match
+## Legacy result notifications and next match (063–076)
+
+The approval behavior below describes older already-submitted results and
+deployments before 077. For new live-scored matches after 077, use the
+finalization workflow above: no player approval requests and ELO at exit/rematch.
 
 Apply [063_match_completion_and_rematch.sql](../scripts/063_match_completion_and_rematch.sql)
 after 062. It expects the current league notifications schema (numeric
@@ -516,8 +563,9 @@ but cannot score them without that capability (or the existing organizer account
 Reloading in the same browser preserves scoring access; clearing site storage
 loses the device key. The first scanned participant is the legacy `qr_created_by`
 reference, not a claim that they logged in or approved the match.
-Finishing submits a pending result with **zero approvals**; ELO still requires
-all four players to approve in their own authenticated profiles.
+With migration 077, finishing the score keeps it correctable; exiting or
+starting a rematch submits a confirmed result without player approval requests.
+Older submitted results still require their original player approvals.
 Existing login-created QR matches retain their participant/organizer access.
 
 QR setup loads the existing arena directory. Focusing the arena input or opening

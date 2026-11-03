@@ -1,4 +1,5 @@
 export const sharedDutch: Record<string, string> = {
+  'Obnoviť stránku': 'Pagina vernieuwen',
   'Prerušený zápas': 'Onderbroken wedstrijd',
   'Sleduj hrané aj prerušené zápasy v aplikácii RIVA Padel a filtruj ich podľa kraja alebo arény.': 'Volg live en onderbroken wedstrijden in RIVA Padel en filter op regio of club.',
   'Momentálne nie sú žiadne hrané ani prerušené zápasy.': 'Er zijn momenteel geen live of onderbroken wedstrijden.',

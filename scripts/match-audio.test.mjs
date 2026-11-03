@@ -9,22 +9,29 @@ import { getWinnerAnnouncement, isPointAnnouncement } from '../lib/live-match-sc
 
 const id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
 
-test('winner speech runs once and respects mute without a fanfare', async () => {
+test('winner fanfare precedes named speech once, uses the same player and respects mute', async () => {
   const original = { fetch: globalThis.fetch, Audio: globalThis.Audio, context: globalThis.AudioContext, create: URL.createObjectURL, revoke: URL.revokeObjectURL }
   const requests = []
   const fallbacks = []
+  const clips = []
+  const events = []
+  let players = 0
   let muted = false
   class AudioMock {
-    async play() {}
+    constructor() { players++ }
+    async play() {
+      events.push(clips.at(-1).type)
+      if (clips.at(-1).type === 'audio/wav') queueMicrotask(() => this.onended?.())
+    }
     pause() {}
     removeAttribute() {}
     load() {}
   }
   globalThis.AudioContext = class {
-    constructor() { assert.fail('Winner speech must not create a fanfare AudioContext') }
+    constructor() { assert.fail('Fanfare must work without Web Audio support') }
   }
   globalThis.Audio = AudioMock
-  URL.createObjectURL = () => 'blob:victory'
+  URL.createObjectURL = (blob) => { clips.push(blob); return `blob:victory-${clips.length}` }
   URL.revokeObjectURL = () => {}
   globalThis.fetch = async (url, options) => {
     requests.push(JSON.parse(options.body))
@@ -43,10 +50,18 @@ test('winner speech runs once and respects mute without a fanfare', async () => 
     assert.equal(requests.length, 1)
     assert.equal(requests[0].text, text)
     assert.equal(requests[0].language, 'sk')
+    assert.deepEqual(events, ['audio/wav', 'audio/mpeg'])
+    assert.equal(players, 1)
+    const wav = new DataView(await clips[0].arrayBuffer())
+    assert.equal(wav.getUint32(24, true), 22050)
+    assert.equal(wav.getUint32(40, true) / 2 / 22050, 2.4)
+    assert.equal(Buffer.from(await clips[0].arrayBuffer()).subarray(0, 4).toString(), 'RIFF')
+    assert.ok(Array.from({ length: (wav.byteLength - 44) / 2 }, (_, index) => wav.getInt16(44 + index * 2, true)).some(value => value !== 0))
     speech.stop()
     muted = true
     await silent.celebrate(text, 'sk')
     assert.equal(requests.length, 1)
+    assert.equal(clips.length, 2)
     muted = false
     await silent.celebrate(text, 'sk')
     assert.equal(requests.length, 1)
@@ -54,11 +69,79 @@ test('winner speech runs once and respects mute without a fanfare', async () => 
     globalThis.fetch = async () => new Response('failed', { status: 502 })
     await unavailable.celebrate('Team 2 won the match. Winning pair.', 'en')
     assert.deepEqual(fallbacks, [{ text: 'Team 2 won the match. Winning pair.', language: 'en' }])
+    globalThis.fetch = async (url, options) => {
+      requests.push(JSON.parse(options.body))
+      return new Response('mp3', { headers: { 'Content-Type': 'audio/mpeg' } })
+    }
+    speech.resetCelebration()
+    await speech.celebrate(text, 'sk')
+    assert.equal(requests.length, 1, 'Re-celebration reuses the cached named announcement')
+    assert.deepEqual(events.slice(-2), ['audio/wav', 'audio/mpeg'])
   } finally {
     speech.stop(); silent.stop(); unavailable.stop()
     globalThis.fetch = original.fetch
     globalThis.Audio = original.Audio
     globalThis.AudioContext = original.context
+    URL.createObjectURL = original.create
+    URL.revokeObjectURL = original.revoke
+  }
+})
+
+test('stopping a fanfare cancels winner speech and playback failure still attempts the named announcement', async () => {
+  const original = { fetch: globalThis.fetch, Audio: globalThis.Audio, create: URL.createObjectURL, revoke: URL.revokeObjectURL }
+  const blobs = new Map()
+  const requests = []
+  const statuses = []
+  let player
+  let denyFanfare = false
+  let urls = 0
+  class AudioMock {
+    constructor() { player = this }
+    async play() {
+      if (denyFanfare && blobs.get(this.src).type === 'audio/wav') {
+        const error = new Error('Autoplay denied')
+        error.name = 'NotAllowedError'
+        throw error
+      }
+    }
+    pause() {}
+    removeAttribute() {}
+    load() {}
+  }
+  globalThis.Audio = AudioMock
+  URL.createObjectURL = blob => { const url = `blob:${++urls}`; blobs.set(url, blob); return url }
+  URL.revokeObjectURL = () => {}
+  globalThis.fetch = async (url, options) => {
+    requests.push(JSON.parse(options.body).text)
+    return new Response('mp3', { headers: { 'Content-Type': 'audio/mpeg' } })
+  }
+  const makeAudio = () => new MatchAudio({
+    matchId: id, isMuted: () => false, onStatus: (status, failure) => statuses.push({ status, failure }),
+    stopFallback() {}, fallback() { assert.fail('Primary winner speech should still play') },
+  })
+  const speech = makeAudio()
+  const failedFanfare = makeAudio()
+  try {
+    const pending = speech.celebrate('Winning pair: Martin and Peter.', 'en')
+    assert.equal(requests.length, 0, 'Speech must wait for the fanfare to end')
+    assert.equal(blobs.get(player.src).type, 'audio/wav')
+    const staleEnded = player.onended
+    speech.stop()
+    await speech.speak('New announcement.', 'en')
+    const activeUrl = player.src
+    staleEnded()
+    await pending
+    assert.deepEqual(requests, ['New announcement.'])
+    assert.equal(player.src, activeUrl, 'Cancelled fanfare must not release newer audio')
+    denyFanfare = true
+    await failedFanfare.celebrate('Winning pair: Jana and Eva.', 'en')
+    assert.deepEqual(requests, ['New announcement.', 'Winning pair: Jana and Eva.'])
+    assert.ok(statuses.some(entry => entry.status === 'failed' && entry.failure === 'blocked'))
+    assert.equal(statuses.at(-1).status, 'ready')
+  } finally {
+    speech.stop(); failedFanfare.stop()
+    globalThis.fetch = original.fetch
+    globalThis.Audio = original.Audio
     URL.createObjectURL = original.create
     URL.revokeObjectURL = original.revoke
   }

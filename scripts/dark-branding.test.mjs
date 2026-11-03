@@ -83,7 +83,47 @@ test('browser, Apple and PWA assets use the same new logo without cropping', asy
   assert.match(layout, /riva-padel-play-together-compact-icon-192\.png/)
   assert.match(layout, /riva-padel-play-together-compact-apple-touch-icon\.png/)
   assert.match(component, /riva-padel-play-together-compact-logo\.png/)
-  const androidIcon = await readFile(new URL('../android/riva-app/res/drawable/app_icon.png', import.meta.url))
-  const pwaIcon = await readFile(new URL('../public/images/riva-padel-play-together-compact-icon-512.png', import.meta.url))
-  assert.deepEqual(androidIcon, pwaIcon)
+})
+
+test('Android adaptive icon enlarges the approved artwork without cropping and retains legacy support', async () => {
+  const approved = await readFile(new URL('../public/images/riva-approved-logo.png', import.meta.url))
+  const { data, info } = await sharp(approved).removeAlpha().raw().toBuffer({ resolveWithObject: true })
+  let left = info.width, right = -1, top = info.height, bottom = -1
+  for (let y = 0; y < info.height; y++) {
+    for (let x = 0; x < info.width; x++) {
+      const offset = (y * info.width + x) * info.channels
+      if (Math.max(data[offset], data[offset + 1], data[offset + 2]) <= 150) continue
+      left = Math.min(left, x); right = Math.max(right, x)
+      top = Math.min(top, y); bottom = Math.max(bottom, y)
+    }
+  }
+  const size = Math.ceil(Math.max(right - left + 1, bottom - top + 1) / 0.83)
+  const crop = { left: Math.floor((left + right + 1 - size) / 2),
+    top: Math.floor((top + bottom + 1 - size) / 2), width: size, height: size }
+  assert.ok(crop.left < left && crop.top < top && crop.left + size > right && crop.top + size > bottom)
+  const icon = await readFile(new URL('../android/riva-app/res/drawable/app_icon.png', import.meta.url))
+  assert.deepEqual(await sharp(icon).raw().toBuffer(), await sharp(approved).extract(crop).resize(512, 512).raw().toBuffer())
+  const rendered = await sharp(icon).removeAlpha().raw().toBuffer({ resolveWithObject: true })
+  let minX = 512, maxX = -1
+  for (let y = 0; y < 512; y++) for (let x = 0; x < 512; x++) {
+    const offset = (y * 512 + x) * rendered.info.channels
+    if (Math.max(...rendered.data.subarray(offset, offset + 3)) <= 150) continue
+    minX = Math.min(minX, x); maxX = Math.max(maxX, x)
+    // Android's guaranteed 66dp safe circle within the visible 72dp icon.
+    assert.ok(Math.hypot((x + 0.5 - 256) * 72 / 512, (y + 0.5 - 256) * 72 / 512) < 33,
+      'Visible logo must remain inside the adaptive icon safe circle')
+  }
+  assert.ok((maxX - minX + 1) / 512 >= 0.82, 'Launcher logo must use at least 82% of the visible icon width')
+  const [manifest, adaptive, legacy, colors] = await Promise.all([
+    readSource('../android/riva-app/AndroidManifest.xml'),
+    readSource('../android/riva-app/res/mipmap-anydpi-v26/app_icon.xml'),
+    readSource('../android/riva-app/res/mipmap/app_icon.xml'),
+    readSource('../android/riva-app/res/values/icon_colors.xml'),
+  ])
+  assert.match(manifest, /android:icon="@mipmap\/app_icon"/)
+  assert.match(adaptive, /<adaptive-icon/)
+  for (const side of ['Left', 'Top', 'Right', 'Bottom']) assert.ok(adaptive.includes(`android:inset${side}="16.6667%"`))
+  assert.match(adaptive, /android:src="@drawable\/app_icon" android:gravity="fill"/)
+  assert.match(legacy, /android:src="@drawable\/app_icon"/)
+  assert.match(colors, /name="riva_icon_background">#091223</)
 })

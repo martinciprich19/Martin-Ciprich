@@ -15,7 +15,7 @@ import { parseMatchAvatars, type MatchAvatars } from '@/lib/live-match-avatars'
 import { speakMatchAnnouncement } from '@/lib/match-speech'
 import { MatchAudio, type MatchSpeechStatus, type MatchSpeechFailure } from '@/lib/match-audio'
 import { isTiebreak, isSuperTiebreak, getTiebreakScore, parsePointHistory, parseTiebreakScore } from '@/lib/live-match-scoring'
-import { awardLivePoint, removeLastTeamPoint, resetLiveGame, getPointAnnouncement, getMatchWinner, getWinnerAnnouncement, parseSetStatistics, parseServiceGameStatistics, type LiveScore, type Team, type GameScore } from '@/lib/live-match-scoring'
+import { awardLivePoint, removeLastTeamPoint, undoSavedPoint, resetLiveGame, getPointAnnouncement, getMatchWinner, getWinnerAnnouncement, parseSetStatistics, parseServiceGameStatistics, type LiveScore, type Team, type GameScore } from '@/lib/live-match-scoring'
 import { PauseMatchDialog } from '@/components/pause-match-dialog'
 import { createMatchClickerHandler, type ClickerInputStatus } from '@/lib/match-clicker'
 import { isCountryCode, type CountryCode } from '@/lib/countries'
@@ -41,6 +41,7 @@ type MatchRow = LiveScore & {
   statistics_complete: boolean
   qr_created_by: string | null
   official_result_id: string | null
+  result_finalized_at: string | null
   paused_at: string | null
   paused_seconds: number
   ended_early_at: string | null
@@ -53,7 +54,7 @@ const REMATCH_PAIRINGS = [
   [0, 3, 1, 2],
 ] as const
 
-const MATCH_COLUMNS = 'id, ended_early_at, challenge_id, team_a_player1_name, team_a_player2_name, team_b_player1_name, team_b_player2_name, team_a_game_score, team_b_game_score, team_a_games, team_b_games, team_a_sets, team_b_sets, serving_team, serving_player, initial_server_chosen, is_pin_activated, team_a_player1_serve_points_won, team_a_player1_serve_points_lost, team_a_player2_serve_points_won, team_a_player2_serve_points_lost, team_b_player1_serve_points_won, team_b_player1_serve_points_lost, team_b_player2_serve_points_won, team_b_player2_serve_points_lost, team_a_total_points_won, team_b_total_points_won, streak_team, current_point_streak, team_a_longest_point_streak, team_b_longest_point_streak, team_a_break_points, team_a_break_points_converted, team_a_break_points_missed, team_b_break_points, team_b_break_points_converted, team_b_break_points_missed, started_at, finished_at, completed_sets, statistics_complete, qr_created_by, official_result_id, set_statistics, set_format, third_set_format, point_history, point_history_complete, paused_at, paused_seconds'
+const MATCH_COLUMNS = 'id, result_finalized_at, ended_early_at, challenge_id, team_a_player1_name, team_a_player2_name, team_b_player1_name, team_b_player2_name, team_a_game_score, team_b_game_score, team_a_games, team_b_games, team_a_sets, team_b_sets, serving_team, serving_player, initial_server_chosen, is_pin_activated, team_a_player1_serve_points_won, team_a_player1_serve_points_lost, team_a_player2_serve_points_won, team_a_player2_serve_points_lost, team_b_player1_serve_points_won, team_b_player1_serve_points_lost, team_b_player2_serve_points_won, team_b_player2_serve_points_lost, team_a_total_points_won, team_b_total_points_won, streak_team, current_point_streak, team_a_longest_point_streak, team_b_longest_point_streak, team_a_break_points, team_a_break_points_converted, team_a_break_points_missed, team_b_break_points, team_b_break_points_converted, team_b_break_points_missed, started_at, finished_at, completed_sets, statistics_complete, qr_created_by, official_result_id, set_statistics, set_format, third_set_format, point_history, point_history_complete, paused_at, paused_seconds'
 
 function toCounter(value: unknown): number {
   if (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0) return value
@@ -158,6 +159,7 @@ function normalizeMatch(row: Record<string, unknown>): MatchRow {
     id: row.id,
     qr_created_by: row.qr_created_by === null ? null : String(row.qr_created_by),
     official_result_id: row.official_result_id,
+    result_finalized_at: toTimestamp(row.result_finalized_at, 'definitívne ukončenie'),
     challenge_id: row.challenge_id,
     team_a_player1_name: typeof row.team_a_player1_name === 'string' && !['Tím A', 'Tím 1'].includes(row.team_a_player1_name) ? row.team_a_player1_name : 'Hráč 1',
     team_b_player1_name: typeof row.team_b_player1_name === 'string' && !['Tím B', 'Tím 2'].includes(row.team_b_player1_name) ? row.team_b_player1_name : 'Hráč 1',
@@ -512,6 +514,7 @@ export function MatchView({ matchId, kioskMode = false, viewerMode = false, cour
               const updated = normalizeMatch(payload.new as unknown as Record<string, unknown>)
               const previous = matchRef.current
               if (!viewerMode) {
+                if (previous && getMatchWinner(previous) && !getMatchWinner(updated)) audioRef.current?.resetCelebration()
                 const winnerAnnouncement = previous && !getMatchWinner(previous) ? getWinnerAnnouncement(updated) : null
                 const pointAnnouncement = previous ? getPointAnnouncement(previous, updated) : null
                 if (winnerAnnouncement) {
@@ -568,10 +571,12 @@ export function MatchView({ matchId, kioskMode = false, viewerMode = false, cour
     }
   }, [matchId, announce, celebrateWinner, viewerMode])
 
-  const persist = useCallback((patch: MatchPatch, completionAnnouncement?: { sk: string; en: string }) => {
+  const persist = useCallback((patch: MatchPatch, completionAnnouncement?: { sk: string; en: string }, undoWinningPoint = false) => {
     const current = matchRef.current
     const supabase = supabaseRef.current
-    if (viewerMode || !canEditRef.current || !current || !supabase || current.finished_at || current.paused_at || getMatchWinner(current) || writeInFlightRef.current) return
+    if (viewerMode || !canEditRef.current || !current || !supabase || current.paused_at
+      || current.result_finalized_at || current.official_result_id || current.ended_early_at
+      || ((current.finished_at || getMatchWinner(current)) && !undoWinningPoint) || writeInFlightRef.current) return
     writeInFlightRef.current = true
 
     const optimistic = { ...current, ...patch }
@@ -586,7 +591,9 @@ export function MatchView({ matchId, kioskMode = false, viewerMode = false, cour
         .from('live_matches')
         .update(snapshot(optimistic))
         .eq('id', current.id)
-        .is('finished_at', null)
+        .filter('finished_at', current.finished_at === null ? 'is' : 'eq', current.finished_at ?? 'null')
+        .is('result_finalized_at', null)
+        .is('official_result_id', null)
         .is('paused_at', null)
         .eq('paused_seconds', current.paused_seconds)
         .eq('team_a_player1_serve_points_won', current.team_a_player1_serve_points_won)
@@ -742,6 +749,32 @@ export function MatchView({ matchId, kioskMode = false, viewerMode = false, cour
     }
   }
 
+  async function finishAndExit() {
+    const current = matchRef.current
+    const supabase = supabaseRef.current
+    if (!current || !supabase || writeInFlightRef.current || startingNextRef.current) return
+    if (viewerMode || !canEditRef.current) {
+      resetKiosk()
+      return
+    }
+    writeInFlightRef.current = true
+    setIsSaving(true)
+    setError(null)
+    try {
+      const { data, error: finalizationError } = await supabase.rpc('finalize_live_match', { p_match_id: matchId })
+      if (finalizationError) throw finalizationError
+      if (data !== matchId) throw new Error('Databáza nepotvrdila definitívne uloženie výsledku.')
+      audioRef.current?.stop()
+      resetKiosk()
+    } catch (finalizationError) {
+      console.error('Definitívne uloženie výsledku zlyhalo:', finalizationError)
+      setError(getErrorMessage(finalizationError, 'Výsledok sa nepodarilo definitívne uložiť. Over SQL migráciu 077.'))
+    } finally {
+      writeInFlightRef.current = false
+      setIsSaving(false)
+    }
+  }
+
   async function startNextMatch() {
     const current = matchRef.current
     const supabase = supabaseRef.current
@@ -824,10 +857,21 @@ export function MatchView({ matchId, kioskMode = false, viewerMode = false, cour
   }, [persist, announce, viewerMode])
 
   const undo = useCallback(() => {
-    if (viewerMode || !canEditRef.current || writeInFlightRef.current || (matchRef.current && getMatchWinner(matchRef.current))) return
-    const previous = historyRef.current.pop()
-    if (!previous) return
-    persist(previous)
+    const current = matchRef.current
+    if (viewerMode || !canEditRef.current || !current || current.paused_at || current.ended_early_at
+      || current.result_finalized_at || current.official_result_id || writeInFlightRef.current || startingNextRef.current) return
+    const undoWinningPoint = Boolean(getMatchWinner(current))
+    let previous: MatchSnapshot
+    try {
+      previous = undoWinningPoint ? undoSavedPoint(snapshot(current)) : historyRef.current.at(-1) ?? undoSavedPoint(snapshot(current))
+    } catch (correctionError) {
+      console.error('Vrátenie uloženého bodu zlyhalo:', correctionError)
+      setError(getErrorMessage(correctionError, 'Bod sa nepodarilo vrátiť.'))
+      return
+    }
+    historyRef.current.pop()
+    if (undoWinningPoint) audioRef.current?.resetCelebration()
+    persist(previous, undefined, undoWinningPoint)
     if (isTiebreak(previous)) {
       announce('Posledná zmena bola vrátená. Tajbrejk.', 'Last change undone. Tiebreak.')
     } else if (previous.advantage_team) {
@@ -885,7 +929,7 @@ export function MatchView({ matchId, kioskMode = false, viewerMode = false, cour
 
   const scoreReady = canEdit && !isSaving && !match.finished_at && match.initial_server_chosen && (match.challenge_id === null || match.is_pin_activated)
   const winner = getMatchWinner(match)
-  const resultActionsDisabled = isSaving || isStartingNext || (leagueMatch && !match.official_result_id)
+  const resultActionsDisabled = isSaving || isStartingNext
   const tie = isTiebreak(match) ? getTiebreakScore(match) : null
   const superTie = isSuperTiebreak(match)
   const durationEnd = match.finished_at ? Date.parse(match.finished_at) : match.paused_at ? Date.parse(match.paused_at) : clockNow
@@ -998,7 +1042,11 @@ export function MatchView({ matchId, kioskMode = false, viewerMode = false, cour
           {loginNotice}
         </div>
         <p role="status" className="text-center text-xs">{isSaving ? t('Ukladám konečný výsledok…', 'Saving final result…') : error ? error : t('Výsledok uložený', 'Result saved')}</p>
-        {leagueMatch ? <p className="court-stat-warning text-center text-xs text-app-accent">{isSaving ? t('Ukladám výsledok a notifikácie hráčom…', 'Saving the result and player notifications…') : match.official_result_id ? t('Každý hráč má v profile notifikáciu „Potvrď výsledok“. ELO sa započíta až po potvrdení všetkými hráčmi. Môžete hrať ďalší zápas alebo skončiť.', 'Every player has a “Confirm result” notification in their profile. ELO is applied only after everyone confirms. You can play another match or finish.') : t('Ligový výsledok ešte nebol odoslaný. Obnov stránku a over uloženie výsledku.', 'League result has not been submitted yet. Reload and check that the result was saved.')}</p> : null}
+        {leagueMatch ? <p className="court-stat-warning text-center text-xs text-app-accent">{match.result_finalized_at
+          ? t('Výsledok je definitívne uložený a započítaný do ELO. Potvrdenia hráčov nie sú potrebné.', 'The result is finalized and counted towards ELO. Player confirmations are not required.')
+          : match.official_result_id
+            ? t('Starší výsledok používa pôvodné potvrdenia v profiloch hráčov.', 'This older result uses the original player profile confirmations.')
+            : t('Potvrdenia hráčov nie sú potrebné. ELO sa započíta pri „Ukončiť zápas“ alebo „Hrať ďalší zápas“. Dovtedy môžete vrátiť víťazný bod.', 'Player confirmations are not required. ELO is applied when you choose “End match” or “Play another match”. Until then, you can undo the winning point.')}</p> : null}
         {!match.statistics_complete ? <p className="court-stat-warning text-center text-xs text-app-amber-200">{t('Staršie body a sety neboli zaznamenávané. Štatistiky sú iba od zapnutia sledovania.', 'Earlier points and sets were not recorded. Statistics cover only the tracked period.')}</p> : null}
         <MatchStatistics match={match} showAvatars={leagueMatch} avatars={avatars} showRules={leagueMatch} />
         {canEdit ? <fieldset className="mx-auto mt-3 w-full max-w-2xl rounded-xl border border-app-line/10 bg-app-court/70 p-2.5">
@@ -1020,11 +1068,16 @@ export function MatchView({ matchId, kioskMode = false, viewerMode = false, cour
           </div>
         </fieldset> : null}
         <div className="mx-auto mt-5 flex max-w-2xl flex-wrap items-center justify-center gap-4 rounded-2xl border border-[#a8e63c]/25 bg-app-court p-4 text-center">
+          {canEdit && !match.result_finalized_at && !match.official_result_id ? <button type="button"
+            onClick={undo} disabled={resultActionsDisabled || !match.point_history?.length}
+            className="inline-flex min-h-12 items-center gap-2 rounded-xl border border-amber-300/40 bg-amber-300/10 px-5 py-3 text-sm font-black text-app-amber-200 disabled:opacity-40">
+            <Undo2 size={18} aria-hidden="true" />{t('Vrátiť víťazný bod', 'Undo winning point')}
+          </button> : null}
           {canEdit ? <button type="button" onClick={() => void startNextMatch()} disabled={resultActionsDisabled} className="inline-flex min-h-12 items-center gap-2 rounded-xl bg-[#a8e63c] px-5 py-3 text-sm font-black text-[#061016] transition hover:bg-[#c1fa66] disabled:cursor-wait disabled:opacity-50">
             <RotateCcw size={18} aria-hidden="true" />
             {isStartingNext ? t('Pripravujem ďalší zápas…', 'Preparing next match…') : t('Hrať ďalší zápas', 'Play another match')}
           </button> : null}
-          <button type="button" onClick={resetKiosk} disabled={resultActionsDisabled} className="inline-flex min-h-12 items-center gap-2 rounded-xl border border-app-line/20 px-5 py-3 text-sm font-black transition hover:bg-app-overlay/5 disabled:cursor-wait disabled:opacity-50">
+          <button type="button" onClick={() => void finishAndExit()} disabled={resultActionsDisabled} className="inline-flex min-h-12 items-center gap-2 rounded-xl border border-app-line/20 px-5 py-3 text-sm font-black transition hover:bg-app-overlay/5 disabled:cursor-wait disabled:opacity-50">
             <Check size={18} aria-hidden="true" />
             {isSaving ? t('Dokončujem zápas…', 'Finishing match…') : t('Ukončiť zápas', 'End match')}
           </button>
@@ -1166,7 +1219,8 @@ export function MatchView({ matchId, kioskMode = false, viewerMode = false, cour
           </div>
         </div>
         <div className="flex flex-wrap justify-center gap-2">
-          <button type="button" onClick={undo} disabled={!canEdit || isSaving || !historyRef.current.length} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-app-line/10 px-4 text-sm font-semibold text-app-fg/75 transition hover:bg-app-overlay/5 disabled:cursor-not-allowed disabled:opacity-40"><Undo2 size={16} aria-hidden="true" /> Späť <kbd className="ml-1 rounded border border-app-line/15 px-1.5 py-0.5 text-[10px]">Z</kbd></button>
+          <button type="button" onClick={undo} disabled={!canEdit || isSaving || !!match.paused_at || !!match.finished_at || !!getMatchWinner(match) || (!historyRef.current.length && !match.point_history?.length)} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-app-line/10 px-4 text-sm font-semibold text-app-fg/75 transition hover:bg-app-overlay/5 disabled:cursor-not-allowed disabled:opacity-40"><Undo2 size={16} aria-hidden="true" /> Späť <kbd className="ml-1 rounded border border-app-line/15 px-1.5 py-0.5 text-[10px]">Z</kbd></button>
+          {canEdit ? (['TEAM_A', 'TEAM_B'] as const).map((team, index) => <button key={team} type="button" onClick={() => undoTeamPoint(team)} disabled={isSaving || !!match.paused_at || !!match.finished_at || !!getMatchWinner(match) || !match.point_history?.some(entry => entry.type === 'point' && entry.team === team)} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-app-line/10 px-4 text-sm font-semibold text-app-fg/75 transition hover:bg-app-overlay/5 disabled:cursor-not-allowed disabled:opacity-40"><Undo2 size={16} aria-hidden="true" />{index === 0 ? t('Odobrať bod tímu 1', 'Remove Team 1 point') : t('Odobrať bod tímu 2', 'Remove Team 2 point')}</button>) : null}
           <button type="button" onClick={resetGame} disabled={!canEdit || isSaving || (tie ? tie.a + tie.b === 0 : match.team_a_game_score + match.team_b_game_score === 0)} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-app-line/10 px-4 text-sm font-semibold text-app-fg/75 transition hover:bg-app-overlay/5 disabled:cursor-not-allowed disabled:opacity-40"><RotateCcw size={16} aria-hidden="true" /> {tie ? t('Reset tajbrejku', 'Reset tiebreak') : t('Reset gemu', 'Reset game')} <kbd className="ml-1 rounded border border-app-line/15 px-1.5 py-0.5 text-[10px]">M</kbd></button>
         </div>
       </div>
@@ -1224,7 +1278,7 @@ export function MatchView({ matchId, kioskMode = false, viewerMode = false, cour
       {androidHelper ? <p className="mt-4 text-center text-sm text-app-fg/75">{t('V Android aplikácii je pomocník predvolene zapnutý. Klikre priraď k tímom v hornej lište aplikácie.', 'In the Android app, the helper is enabled by default. Assign clickers to teams in the app toolbar.')}</p> : null}
       {canEdit && kioskMode && !androidHelper ? <FullyClickerBridge enabled={activeHelperMode} /> : null}
       <p role="status" className="mt-2 text-center text-xs text-app-fg/45">{androidHelper && activeHelperMode
-        ? t('Android: priradený kliker ovláda svoj tím. Po návrate do aplikácie alebo odpojení priraď klikre znova.', 'Android: each assigned clicker controls its team. Reassign after returning to the app or disconnecting.')
+        ? t('Android: priradený kliker ovláda svoj tím. V aplikácii 1.7 zostáva priradenie aj po neaktivite; rovnaké klikre sa po pripojení obnovia automaticky.', 'Android: each assigned clicker controls its team. In app 1.7, assignments survive inactivity; the same clickers reconnect automatically.')
         : activeHelperMode
         ? t('Pomocník: F13 = Tím 1 · F14 = Tím 2. Pôvodné mediálne klávesy sú ignorované. Po obnovení stránky zapni tento režim znova.', 'Helper: F13 = Team 1 · F14 = Team 2. Original media keys are ignored. Re-enable this mode after reloading.')
         : t('Bluetooth kliker: VolumeUp / medzerník = Tím 1 · VolumeDown / PlayPause / Enter = Tím 2.', 'Bluetooth clicker: VolumeUp / Space = Team 1 · VolumeDown / PlayPause / Enter = Team 2.')}</p>

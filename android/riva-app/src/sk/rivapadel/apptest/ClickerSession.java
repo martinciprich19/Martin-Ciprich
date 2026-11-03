@@ -24,19 +24,20 @@ final class ClickerSession {
     boolean blocked() { return match != null && !confirmed; }
     boolean hasMatch() { return match != null; }
     int id(int team) { return ids[team]; }
-    int nextTeam() { return ids[0] < 0 ? 0 : ids[1] < 0 ? 1 : -1; }
+    boolean assigned(int team) { return descriptors[team] != null; }
+    int nextTeam() { return descriptors[0] == null ? 0 : descriptors[1] == null ? 1 : -1; }
 
     boolean assign(int id, String descriptor, boolean virtual) {
         int team = nextTeam();
         if (team < 0 || id < 0 || virtual || descriptor == null || descriptor.isEmpty()
-            || ids[1 - team] == id) return false;
+            || ids[1 - team] == id || descriptor.equals(descriptors[1 - team])) return false;
         ids[team] = id;
         descriptors[team] = descriptor;
         return true;
     }
 
     boolean confirm() {
-        if (match == null || nextTeam() != -1 || !pressed.isEmpty()) return false;
+        if (match == null || nextTeam() != -1 || ids[0] < 0 || ids[1] < 0 || !pressed.isEmpty()) return false;
         confirmed = true;
         return true;
     }
@@ -48,6 +49,24 @@ final class ClickerSession {
     }
 
     boolean invalidates(int id) { return ids[0] == id || ids[1] == id; }
+
+    boolean reconnect(int id, String descriptor, boolean virtual) {
+        if (id < 0 || virtual || descriptor == null || descriptor.isEmpty()) return false;
+        for (int team = 0; team < 2; team++) {
+            if (!descriptor.equals(descriptors[team])) continue;
+            if (ids[team] >= 0 && ids[team] != id) return false;
+            if (ids[1 - team] == id) return false;
+            ids[team] = id;
+            return true;
+        }
+        return false;
+    }
+
+    void disconnect(int id) {
+        for (int team = 0; team < 2; team++)
+            if (ids[team] == id) ids[team] = -1;
+        pressed.remove(id);
+    }
 
     void pause() { pressed.clear(); }
 

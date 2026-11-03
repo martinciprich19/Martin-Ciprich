@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { undoSavedPoint } from '../lib/live-match-scoring.ts'
 import { awardLivePoint, removeLastTeamPoint, resetLiveGame, getPointAnnouncement, getMatchWinner, getWinnerAnnouncement, isPointAnnouncement, rotateServer, rotateServingPlayer, isTiebreak, tiebreakServer, parsePointHistory, parseTiebreakScore } from '../lib/live-match-scoring.ts'
 
 const initial = {
@@ -19,6 +20,56 @@ const initial = {
   started_at: null, finished_at: null,
   completed_sets: [],
 }
+
+test('saved-point undo survives reload and repeated corrections across a game boundary', () => {
+  const before = { ...initial, advantage_team: null, tiebreak_score: null,
+    service_game_statistics: { team_a_won: 0, team_a_lost: 0, team_b_won: 0, team_b_lost: 0 },
+    point_history_complete: true, point_history: [], set_statistics: [] }
+  const states = [before]
+  for (const team of ['TEAM_A', 'TEAM_A', 'TEAM_A', 'TEAM_A', 'TEAM_B']) {
+    states.push(awardLivePoint(states.at(-1), team, '2026-11-03T00:00:00.000Z'))
+  }
+  let reloaded = JSON.parse(JSON.stringify(states.at(-1)))
+  for (let i = states.length - 2; i >= 0; i--) {
+    reloaded = undoSavedPoint(reloaded)
+    assert.deepEqual(reloaded, states[i])
+    reloaded = JSON.parse(JSON.stringify(reloaded))
+  }
+  assert.throws(() => undoSavedPoint(reloaded), /nemá uložený bod/)
+  assert.throws(() => undoSavedPoint({ ...states[2], point_history_complete: false }), /úplná história/)
+  assert.throws(() => undoSavedPoint(resetLiveGame(states[2])), /reset gemu/)
+})
+
+test('winning-point undo after reload reopens every supported format with exact prior statistics', () => {
+  for (const format of ['standard', 'seven_games_no_tiebreak', 'pro_set']) {
+    for (const team of ['TEAM_A', 'TEAM_B']) {
+      let score = { ...initial, set_format: format, third_set_format: 'full_set',
+        point_history: [], point_history_complete: true, set_statistics: [],
+        advantage_team: null, tiebreak_score: null,
+        service_game_statistics: { team_a_won: 0, team_a_lost: 0, team_b_won: 0, team_b_lost: 0 } }
+      let previous
+      while (!getMatchWinner(score)) {
+        previous = score
+        score = awardLivePoint(score, team, '2026-11-03T02:00:00.000Z')
+      }
+      assert.ok(score.finished_at)
+      const corrected = undoSavedPoint(JSON.parse(JSON.stringify(score)))
+      assert.deepEqual(corrected, previous, `${format}/${team}`)
+      assert.equal(corrected.finished_at, null)
+      assert.equal(getMatchWinner(corrected), null)
+      assert.equal(getMatchWinner(awardLivePoint(corrected, team)), team)
+    }
+  }
+  let score = { ...initial, set_format: 'standard', third_set_format: 'super_tiebreak',
+    point_history: [], point_history_complete: true, set_statistics: [], advantage_team: null,
+    tiebreak_score: null, service_game_statistics: { team_a_won: 0, team_a_lost: 0, team_b_won: 0, team_b_lost: 0 } }
+  for (const team of ['TEAM_A', 'TEAM_B']) {
+    for (let point = 0; point < 24; point++) score = awardLivePoint(score, team)
+  }
+  for (let point = 0; point < 9; point++) score = awardLivePoint(score, 'TEAM_A')
+  const finished = awardLivePoint(score, 'TEAM_A')
+  assert.deepEqual(undoSavedPoint(JSON.parse(JSON.stringify(finished))), score)
+})
 
 test('team correction removes its last point, keeps opponent points and rebuilds persisted history/statistics', () => {
   const at = '2026-10-24T12:00:00.000Z'

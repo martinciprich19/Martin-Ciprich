@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 import { PGlite } from '@electric-sql/pglite'
+import { awardLivePoint, undoSavedPoint, POINT_STAT_KEYS } from '../lib/live-match-scoring.ts'
 
 const sql = async (file) => readFile(new URL(file, import.meta.url), 'utf8')
 
@@ -152,5 +153,99 @@ test('national routing integrates with existing QR, results, rematch and score g
     await db.exec(routing)
     assert.equal((await db.query('select country_code from live_matches where id=$1', [replay])).rows[0].country_code, 'NL')
     assert.equal((await db.query('select country_code from live_matches where id=$1', [oldQuick])).rows[0].country_code, 'SK')
+
+    for (const file of ['031_player_stats_from_confirmed_matches.sql', '034_seasonal_and_career_elo.sql',
+      '035_fix_recalculate_safeupdate.sql', '077_live_match_finalization.sql']) await db.exec(await sql(file))
+    await db.exec(await sql('077_live_match_finalization.sql'))
+    const correctable = '00000000-0000-0000-0000-000000000277'
+    await db.exec('set role anon')
+    await db.query("select create_qr_device_match_with_settings($1,5,6,7,8,'NL Arena',$2,'golden_point','standard','full_set')",
+      [correctable, token])
+    await db.query("select set_config('request.headers',$1,false)", [JSON.stringify({ 'x-riva-qr-device': token })])
+    const fields = [...POINT_STAT_KEYS, 'team_a_game_score', 'team_b_game_score', 'team_a_games', 'team_b_games',
+      'team_a_sets', 'team_b_sets', 'serving_team', 'serving_player', 'initial_server_chosen',
+      'streak_team', 'current_point_streak', 'started_at', 'finished_at', 'completed_sets', 'set_statistics',
+      'service_game_statistics', 'point_history', 'point_history_complete', 'advantage_team', 'tiebreak_score']
+    const saveScore = async (score) => {
+      await db.query(`update live_matches set ${fields.map((field, index) => `${field}=$${index + 1}`).join(',')}
+        where id=$${fields.length + 1}`, [...fields.map(field => typeof score[field] === 'object'
+          && score[field] !== null ? JSON.stringify(score[field]) : score[field]), correctable])
+    }
+    const readScore = async () => {
+      await db.exec('reset role')
+      const row = (await db.query('select * from live_matches where id=$1', [correctable])).rows[0]
+      await db.exec('set role anon')
+      return JSON.parse(JSON.stringify(row))
+    }
+    let tracked = await readScore()
+    tracked = { ...tracked, serving_team: 'TEAM_A', initial_server_chosen: true }
+    const preWinStates = []
+    for (let point = 0; point < 48; point++) {
+      preWinStates.push(tracked)
+      tracked = awardLivePoint(tracked, 'TEAM_A')
+      await saveScore(tracked)
+    }
+    let persisted = await readScore()
+    assert.ok(persisted.finished_at)
+    assert.equal(persisted.official_result_id, null, 'Winning point must not submit a pending result')
+    assert.equal(persisted.result_finalized_at, null)
+    await db.exec('reset role')
+    assert.equal((await db.query("select count(*)::int as total from notifications where type='match_result'")).rows[0].total, 8,
+      'Only the two historical results have approval notifications')
+    const ratingsBefore = (await db.query('select id,elo_rating,career_elo,matches_played from proffiles order by id')).rows
+    await db.exec('set role anon')
+    tracked = undoSavedPoint(JSON.parse(JSON.stringify(persisted)))
+    await saveScore(tracked)
+    persisted = await readScore()
+    assert.equal(persisted.finished_at, null)
+    for (const field of fields) assert.deepEqual(persisted[field], preWinStates.at(-1)[field], field)
+    await assert.rejects(db.query('select finalize_live_match($1)', [correctable]), /dohraj/)
+    await saveScore(awardLivePoint(tracked, 'TEAM_A'))
+    await assert.rejects(db.query('update live_matches set result_finalized_at=now() where id=$1', [correctable]))
+    await db.query("select set_config('request.headers','{}',false)")
+    await assert.rejects(db.query('select finalize_live_match($1)', [correctable]), /opravnenie/)
+    await db.query("select set_config('request.headers',$1,false)", [JSON.stringify({ 'x-riva-qr-device': token })])
+    const next = '00000000-0000-0000-0000-000000000278'
+    await assert.rejects(db.query('select create_live_match_rematch($1,$2,$3,array[0,0,1,2]::smallint[])',
+      [correctable, next, token]), /roznych/)
+    assert.equal((await db.query('select result_finalized_at from live_matches where id=$1', [correctable])).rows[0].result_finalized_at, null,
+      'Failed rematch must roll back finalization')
+    await db.exec('reset role')
+    assert.deepEqual((await db.query('select id,elo_rating,career_elo,matches_played from proffiles order by id')).rows, ratingsBefore)
+    await db.exec('set role anon')
+    await db.query('select create_live_match_rematch($1,$2,$3,array[0,2,1,3]::smallint[])', [correctable, next, token])
+    await db.query('select finalize_live_match($1)', [correctable])
+    await db.query('select create_live_match_rematch($1,$2,$3,array[0,2,1,3]::smallint[])', [correctable, next, token])
+    persisted = await readScore()
+    assert.ok(persisted.result_finalized_at)
+    await assert.rejects(saveScore(tracked), /definitivne/)
+    await db.exec('reset role')
+    const finalizedResult = (await db.query('select * from matches where id::text=$1', [persisted.official_result_id])).rows[0]
+    assert.equal(finalizedResult.status, 'confirmed')
+    assert.equal(finalizedResult.elo_applied, true)
+    assert.deepEqual(finalizedResult.approved_profile_ids, [], 'Do not claim players manually approved')
+    assert.equal(finalizedResult.country_code, 'NL')
+    assert.equal(finalizedResult.live_statistics.point_history.length, 48)
+    assert.equal((await db.query('select count(*)::int as total from notifications where match_id=$1',
+      [persisted.official_result_id])).rows[0].total, 0)
+    assert.deepEqual((await db.query('select matches_played from proffiles where id between 5 and 8 order by id')).rows.map(row => row.matches_played),
+      [1, 1, 1, 1])
+    assert.deepEqual((await db.query('select career_elo from proffiles where id between 5 and 8 order by id')).rows.map(row => row.career_elo),
+      [1016, 1016, 984, 984])
+    assert.equal((await db.query('select country_code from live_matches where id=$1', [next])).rows[0].country_code, 'NL')
+    assert.equal((await db.query('select status from matches where id=$1', [result])).rows[0].status, 'pending',
+      'Manual results must keep player approvals')
+    const quickFinal = (await db.query("insert into live_matches(team_a_sets,completed_sets,started_at,resume_pin) values (1,'[[6,0]]',now(),'1234') returning id")).rows[0].id
+    await db.exec('set role anon')
+    await db.query("update live_matches set team_a_sets=2,completed_sets='[[6,0],[6,0]]',finished_at=now() where id=$1", [quickFinal])
+    await db.exec('reset role')
+    assert.equal((await db.query('select resume_pin from live_matches where id=$1', [quickFinal])).rows[0].resume_pin, '1234',
+      'Provisional win must retain the resume PIN')
+    await db.exec('set role anon')
+    await db.query('select finalize_live_match($1)', [quickFinal])
+    await assert.rejects(db.query('update live_matches set team_a_sets=1 where id=$1', [quickFinal]), /definitivne/)
+    await db.exec('reset role')
+    assert.equal((await db.query('select official_result_id from live_matches where id=$1', [quickFinal])).rows[0].official_result_id, null)
+    assert.equal((await db.query('select resume_pin from live_matches where id=$1', [quickFinal])).rows[0].resume_pin, null)
   } finally { await db.close() }
 })

@@ -316,17 +316,17 @@ public final class MainActivity extends Activity implements InputManager.InputDe
     private void updateSetup() {
         boolean blocked = clickers.blocked();
         setupScroll.setVisibility(blocked ? View.VISIBLE : View.GONE);
-        boolean ready = clickers.nextTeam() == -1;
+        boolean ready = clickers.nextTeam() == -1 && clickers.id(0) >= 0 && clickers.id(1) >= 0;
         continueMatch.setEnabled(ready);
         continueMatch.setTextColor(ready ? BACKGROUND_COLOR : Color.rgb(156, 174, 183));
         continueMatch.setBackground(panel(ready ? Color.rgb(168, 230, 60) : Color.rgb(25, 43, 52),
             ready ? Color.rgb(168, 230, 60) : Color.rgb(43, 62, 72)));
         for (int team = 0; team < 2; team++) {
-            boolean assigned = clickers.id(team) >= 0;
+            boolean assigned = clickers.assigned(team);
             int accent = team == 0 ? Color.rgb(168, 230, 60) : Color.rgb(141, 207, 235);
             teamCards[team].setText("TIM " + (team + 1) + "\n\n"
                 + (assigned ? "Kliker priradeny" : clickers.nextTeam() == team ? "Stlac a uvolni svoj kliker" : "Caka na priradenie")
-                + (assigned ? "\nZariadenie ID " + clickers.id(team) : ""));
+                + (assigned ? clickers.id(team) >= 0 ? "\nZariadenie ID " + clickers.id(team) : "\nCaka na opatovne pripojenie" : ""));
             teamCards[team].setTextColor(assigned || clickers.nextTeam() == team ? accent : Color.rgb(156, 174, 183));
             teamCards[team].setBackground(panel(Color.rgb(13, 28, 36),
                 assigned || clickers.nextTeam() == team ? accent : Color.rgb(43, 62, 72)));
@@ -335,7 +335,8 @@ public final class MainActivity extends Activity implements InputManager.InputDe
             ? "1/2: Stlac a uvolni kliker Timu 1. Toto neprida bod."
             : clickers.nextTeam() == 1
                 ? "Tim 1: ID " + clickers.id(0) + ". 2/2: Stlac a uvolni INY kliker pre Tim 2."
-                : "Tim 1: ID " + clickers.id(0) + " | Tim 2: ID " + clickers.id(1) + ". Potvrd oba klikre.");
+                : !ready ? "Priradenie zostava ulozene. Zapni povodne klikre a pockaj na pripojenie."
+                    : "Tim 1: ID " + clickers.id(0) + " | Tim 2: ID " + clickers.id(1) + ". Potvrd oba klikre.");
         if (web != null) web.setVisibility(blocked || (web.getUrl() != null
             && !AppPolicy.trusted(web.getUrl())) ? View.INVISIBLE : View.VISIBLE);
     }
@@ -356,6 +357,7 @@ public final class MainActivity extends Activity implements InputManager.InputDe
         int id = event.getDeviceId();
         int key = event.getKeyCode();
         String descriptor = device == null ? null : device.getDescriptor();
+        if (device != null && !device.isVirtual()) clickers.reconnect(id, descriptor, false);
         int team = clickers.team(id, descriptor);
         if (!clickers.blocked() && team < 0
             && (key == KeyEvent.KEYCODE_ENTER || key == KeyEvent.KEYCODE_SPACE))
@@ -373,8 +375,8 @@ public final class MainActivity extends Activity implements InputManager.InputDe
             return true;
         }
         if (clickers.invalidates(id) && team < 0) {
-            invalidate(id);
-            message("Identita klikra sa zmenila. Potvrd oba klikre znova; toto stlacenie neprida bod.");
+            disconnectClicker(id);
+            message("Zachyteny iny kliker. Povodne priradenie zostava; toto stlacenie neprida bod.");
             return true;
         }
         if (device == null || device.isVirtual()) {
@@ -551,25 +553,29 @@ public final class MainActivity extends Activity implements InputManager.InputDe
         super.onDestroy();
     }
 
-    @Override public void onInputDeviceAdded(int id) {}
-    @Override public void onInputDeviceRemoved(int id) { invalidate(id); }
+    @Override public void onInputDeviceAdded(int id) { validateAssignments(); }
+    @Override public void onInputDeviceRemoved(int id) { disconnectClicker(id); }
     @Override public void onInputDeviceChanged(int id) {
         InputDevice device = InputDevice.getDevice(id);
         if (clickers.invalidates(id) && (device == null || device.isVirtual()
-            || clickers.team(id, device.getDescriptor()) < 0)) invalidate(id);
+            || clickers.team(id, device.getDescriptor()) < 0)) disconnectClicker(id);
+        if (device != null && clickers.reconnect(id, device.getDescriptor(), device.isVirtual())) {
+            updateSetup();
+        }
     }
     private void validateAssignments() {
         for (int team = 0; team < 2; team++) {
             int id = clickers.id(team);
             if (id >= 0) onInputDeviceChanged(id);
         }
+        for (int id : InputDevice.getDeviceIds()) onInputDeviceChanged(id);
     }
-    private void invalidate(int id) {
+    private void disconnectClicker(int id) {
         if (clickers.invalidates(id)) {
             cancelPending();
-            clickers.reset();
+            clickers.disconnect(id);
             updateSetup();
-            message("Kliker bol odpojeny alebo zmeneny. Potvrd oba klikre znova.");
+            message("Kliker je docasne odpojeny. Priradenie zostava ulozene; po pripojeni mozes pokracovat.");
         }
     }
 }

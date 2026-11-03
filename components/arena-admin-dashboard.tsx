@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Building2, ExternalLink, LoaderCircle, Plus, RefreshCw } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { ArenaSponsorAdsManager } from '@/components/arena-sponsor-ads-manager'
+import { ArenaKioskDevices } from '@/components/arena-kiosk-devices'
 
 type ManagedArena = {
   id: string
@@ -183,6 +184,7 @@ export function ArenaAdminDashboard({ arenas }: { arenas: ManagedArena[] }) {
           )}
         </section>
 
+        <ArenaKioskDevices key={selectedArena.id} arenaId={selectedArena.id} />
         <ArenaSponsorAdsManager arenaId={selectedArena.id} />
 
         <p className="mt-5 text-xs leading-5 text-app-fg/40">
