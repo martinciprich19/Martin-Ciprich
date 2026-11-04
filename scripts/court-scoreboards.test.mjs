@@ -154,3 +154,33 @@ test('sponsor ads are public only while active and only assigned arena managers 
     await db.close()
   }
 })
+
+test('public scoreboard follows the serving team and player and clears them after match completion', async () => {
+  const db = await fixture(true)
+  try {
+    await db.exec(`
+      alter table public.live_matches add column serving_team text;
+      alter table public.live_matches add column serving_player smallint;
+      update public.live_matches set court_id = 20;
+    `)
+    await db.exec(readFileSync(new URL('./082_scoreboard_serving_player.sql', import.meta.url), 'utf8'))
+    for (const team of ['TEAM_A', 'TEAM_B']) {
+      for (const player of [1, 2]) {
+        await db.query('update public.live_matches set serving_team = $1, serving_player = $2', [team, player])
+        await db.exec('set role anon')
+        const row = (await db.query('select * from public.get_court_scoreboard(20)')).rows[0]
+        assert.equal(row.serving_team, team)
+        assert.equal(row.serving_player, player)
+        assert.equal(row.arena_id, 10)
+        await db.exec('reset role')
+      }
+    }
+    await db.exec('update public.live_matches set finished_at = now()')
+    const idle = (await db.query('select * from public.get_court_scoreboard(20)')).rows[0]
+    assert.equal(idle.match_id, null)
+    assert.equal(idle.serving_team, null)
+    assert.equal(idle.serving_player, null)
+    await db.exec('update public.arenas set is_active = false where id = 10')
+    assert.equal((await db.query('select * from public.get_court_scoreboard(20)')).rows.length, 0)
+  } finally { await db.close() }
+})

@@ -87,6 +87,9 @@ native-clicker version.
    sponsor enters from the right, using each ad's configured display duration.
    A single sponsor stays still; reduced-motion preferences disable sliding.
    Reload is inside the scoreboard header.
+   Apply `scripts/082_scoreboard_serving_player.sql` after 073 to show the
+   serving team and a tennis ball beside the current server. These follow the
+   stored serving team/player, including tie-breaks, on each score refresh.
 7. Verify a point from each clicker appears on the tablet and TV, then test a
    pause/resume, finalization and rematch. Reopen the Android app and confirm it
    returns to this court (or its remembered active match).

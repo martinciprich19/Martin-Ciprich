@@ -63,6 +63,26 @@ test('sponsors rotate in order with configured durations and refreshing does not
   render(0, 'active-match')
   effects[2]()
   assert.equal(timeout, null)
+  function nodes(tree) {
+    if (!tree || typeof tree !== 'object') return []
+    const children = tree.props?.children
+    return [tree, ...[children].flat(Infinity).flatMap(nodes)]
+  }
+  for (const team of ['TEAM_A', 'TEAM_B']) {
+    for (const player of [1, 2]) {
+      render(0, 'active-match')
+      state[0] = { ...state[0], serving_team: team, serving_player: player,
+        team_a_player1_name: 'A1', team_a_player2_name: 'A2',
+        team_b_player1_name: 'B1', team_b_player2_name: null }
+      position = 0
+      const tree = exports.ScoreboardView({ courtId: '1' })
+      const servers = nodes(tree).filter(node => node.props?.className === 'court-scoreboard-server')
+      assert.equal(servers.length, 1)
+      const name = servers[0].props.children[1].props.children
+      assert.equal(name, team === 'TEAM_A' ? `A${player}` : player === 1 ? 'B1' : 'Hráč 2')
+      assert.equal(nodes(tree).filter(node => node.props?.['aria-label'] === 'Podávajúci hráč').length, 1)
+    }
+  }
   render(0, null, ads.slice(0, 1))
   effects[2]()
   assert.equal(timeout, null)

@@ -33,6 +33,7 @@ test('TV scoreboard fits the viewport with large scores in every display state',
     team_b_player1_name: 'Hráč číslo tri', team_b_player2_name: 'Hráč číslo štyri',
     team_a_sets: 2, team_b_sets: 1, team_a_games: 6, team_b_games: 5,
     team_a_game_score: 40, team_b_game_score: 30,
+    serving_team: 'TEAM_A', serving_player: 2,
   }
   function render(state) {
     let stateIndex = 0

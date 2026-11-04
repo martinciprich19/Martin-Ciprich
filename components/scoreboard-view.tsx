@@ -24,6 +24,8 @@ type CourtScore = {
   team_b_sets: number | null
   started_at: string | null
   paused_at: string | null
+  serving_team: 'TEAM_A' | 'TEAM_B' | null
+  serving_player: 1 | 2 | null
 }
 
 type SponsorAd = {
@@ -216,7 +218,8 @@ export function ScoreboardView({ courtId }: { courtId: string }) {
             {[
               {
                 label: 'TÍM A',
-                players: [court.team_a_player1_name, court.team_a_player2_name].filter(Boolean),
+                serving: court.serving_team === 'TEAM_A',
+                players: [court.team_a_player1_name, court.team_a_player2_name],
                 sets: court.team_a_sets,
                 games: court.team_a_games,
                 points: court.tiebreak_score
@@ -227,7 +230,8 @@ export function ScoreboardView({ courtId }: { courtId: string }) {
               },
               {
                 label: 'TÍM B',
-                players: [court.team_b_player1_name, court.team_b_player2_name].filter(Boolean),
+                serving: court.serving_team === 'TEAM_B',
+                players: [court.team_b_player1_name, court.team_b_player2_name],
                 sets: court.team_b_sets,
                 games: court.team_b_games,
                 points: court.tiebreak_score
@@ -239,9 +243,18 @@ export function ScoreboardView({ courtId }: { courtId: string }) {
             ].map((team) => (
               <div key={team.label} className="court-scoreboard-team">
                 <div className="min-w-0 text-left">
-                  <p className="court-scoreboard-team-label">{team.label}</p>
+                  <p className="court-scoreboard-team-label">{team.label}{team.serving ? <span className="court-scoreboard-serving-label"> · PODÁVA</span> : null}</p>
                   <div className="court-scoreboard-players">
-                    {team.players.length ? team.players.map((name, index) => <p key={index} title={name ?? undefined}>{name}</p>) : <p>—</p>}
+                    {team.players.map((name, index) => {
+                      const serving = team.serving && court.serving_player === index + 1
+                      return <p key={index} className={serving ? 'court-scoreboard-server' : undefined} title={name ?? undefined}>
+                        {serving ? <svg className="court-scoreboard-ball" viewBox="0 0 32 32" role="img" aria-label="Podávajúci hráč">
+                          <circle cx="16" cy="16" r="15" fill="#ccff00" />
+                          <path d="M5 5c12 2 12 20 22 22M27 5C15 7 15 25 5 27" fill="none" stroke="#fff" strokeWidth="2" />
+                        </svg> : null}
+                        <span>{name || `Hráč ${index + 1}`}</span>
+                      </p>
+                    })}
                   </div>
                 </div>
                 <span className="court-scoreboard-number">{team.sets ?? 0}</span>
