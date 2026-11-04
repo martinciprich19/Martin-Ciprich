@@ -28,14 +28,16 @@ export default async function ArenaAdminPage() {
   }
 
   const arenaIds = (assignments ?? []).map((assignment) => String(assignment.arena_id))
-  if (arenaIds.length === 0) {
+  const isSuperAdmin = user.app_metadata?.role === 'super_admin'
+  if (!isSuperAdmin && arenaIds.length === 0) {
     return <AdminMessage message="Tento účet zatiaľ nemá priradenú žiadnu arénu. Prístup musí prideliť vlastník aplikácie." />
   }
 
-  const { data: rows, error: arenaError } = await supabase
+  let arenaQuery = supabase
     .from('arenas')
     .select('id, name, city, address, country_code')
-    .in('id', arenaIds)
+  if (!isSuperAdmin) arenaQuery = arenaQuery.in('id', arenaIds)
+  const { data: rows, error: arenaError } = await arenaQuery.order('name')
 
   if (arenaError) {
     console.error('Could not load assigned arenas:', arenaError)

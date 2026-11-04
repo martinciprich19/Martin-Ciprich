@@ -12,10 +12,12 @@ export async function POST(request: Request) {
   try { input = await request.json() } catch {
     return NextResponse.json({ error: 'Neplatná požiadavka.' }, { status: 400 })
   }
-  if (!input || typeof input !== 'object' || !('arenaId' in input) || !('name' in input)
+  if (!input || typeof input !== 'object' || !('arenaId' in input) || !('name' in input) || !('courtId' in input)
     || typeof input.arenaId !== 'string' || !/^[1-9]\d*$/.test(input.arenaId)
+    || typeof input.courtId !== 'string' || !/^[1-9]\d*$/.test(input.courtId)
+    || !Number.isSafeInteger(Number(input.arenaId)) || !Number.isSafeInteger(Number(input.courtId))
     || typeof input.name !== 'string' || !input.name.trim() || input.name.trim().length > 80) {
-    return NextResponse.json({ error: 'Vyplň arénu a názov zariadenia.' }, { status: 400 })
+    return NextResponse.json({ error: 'Vyplň arénu, kurt a názov zariadenia.' }, { status: 400 })
   }
   try {
     const supabase = await createClient()
@@ -26,10 +28,15 @@ export async function POST(request: Request) {
     if (accessError) throw accessError
     if (!allowed) return NextResponse.json({ error: 'Nemáš oprávnenie pre túto arénu.' }, { status: 403 })
     const token = randomBytes(32).toString('hex')
-    const { data: deviceId, error } = await supabase.rpc('authorize_kiosk_device', {
-      p_arena_id: input.arenaId, p_name: input.name.trim(), p_token: token,
+    const { data: deviceId, error } = await supabase.rpc('authorize_court_kiosk_device', {
+      p_arena_id: input.arenaId, p_court_id: input.courtId, p_name: input.name.trim(), p_token: token,
     })
-    if (error) throw error
+    if (error) {
+      console.error('Autorizácia kiosku pre kurt zlyhala:', { code: error.code, message: error.message })
+      const message = error.code === 'PGRST202' ? 'V Supabase spusti migráciu 080 pre priradenie tabletu ku kurtu.'
+        : ['22023', '23505', '42501'].includes(error.code) ? error.message : 'Zariadenie sa nepodarilo autorizovať.'
+      return NextResponse.json({ error: message }, { status: error.code === 'PGRST202' ? 503 : 400 })
+    }
     if (typeof deviceId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(deviceId)) {
       throw new Error('Databáza nevrátila platné zariadenie.')
     }
@@ -41,6 +48,6 @@ export async function POST(request: Request) {
     return response
   } catch (error) {
     console.error('Autorizácia kioskového zariadenia zlyhala:', error)
-    return NextResponse.json({ error: 'Zariadenie sa nepodarilo autorizovať. Over migráciu 076.' }, { status: 500 })
+    return NextResponse.json({ error: 'Zariadenie sa nepodarilo autorizovať. Over migráciu 080.' }, { status: 500 })
   }
 }

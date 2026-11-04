@@ -15,6 +15,8 @@ type ArenaRow = {
 type KioskRow = {
   id: string
   arena_id: number | string
+  court_id: number | string | null
+  device_role: string
   name: string
   created_at: string
   revoked_at: string | null
@@ -56,7 +58,7 @@ export default async function SuperAdminPage() {
       .select('id, name, city, address, country_code, is_active, courts_count')
       .order('name'),
     supabase.from('arena_kiosk_devices')
-      .select('id, arena_id, name, created_at, revoked_at')
+      .select('id, arena_id, court_id, device_role, name, created_at, revoked_at')
       .order('created_at', { ascending: false }),
     supabase.rpc('super_admin_list_arena_managers'),
     supabase.from('super_admin_audit_log')
@@ -89,6 +91,8 @@ export default async function SuperAdminPage() {
   const devices = ((deviceResult.data ?? []) as KioskRow[]).map((device) => ({
     id: device.id,
     arenaId: String(device.arena_id),
+    courtId: device.court_id === null ? null : String(device.court_id),
+    deviceRole: device.device_role,
     name: device.name,
     createdAt: device.created_at,
     revokedAt: device.revoked_at,

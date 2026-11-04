@@ -184,7 +184,7 @@ export function ArenaAdminDashboard({ arenas }: { arenas: ManagedArena[] }) {
           )}
         </section>
 
-        <ArenaKioskDevices key={selectedArena.id} arenaId={selectedArena.id} />
+        <ArenaKioskDevices key={selectedArena.id} arenaId={selectedArena.id} courts={courts} />
         <ArenaSponsorAdsManager arenaId={selectedArena.id} />
 
         <p className="mt-5 text-xs leading-5 text-app-fg/40">

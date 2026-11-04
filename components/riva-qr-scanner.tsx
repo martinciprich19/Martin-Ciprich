@@ -28,7 +28,7 @@ const slots = [
   { team: 2, player: 2 },
 ] as const
 
-export function RivaQrScanner({ onClose, kioskMode = false }: { onClose: () => void; kioskMode?: boolean }) {
+export function RivaQrScanner({ onClose, kioskMode = false, courtId = null }: { onClose: () => void; kioskMode?: boolean; courtId?: string | null }) {
   const router = useRouter()
   const { t } = useLanguage()
   const { country, isLoading: leagueLoading } = useLeague()
@@ -115,7 +115,8 @@ export function RivaQrScanner({ onClose, kioskMode = false }: { onClose: () => v
     setError('')
     scannerRef.current?.stop()
     try {
-      const { data, error: creationError } = await createClient().rpc('create_qr_device_match_with_settings', {
+      const { data, error: creationError } = await createClient().rpc(courtId ? 'create_qr_court_match_with_settings' : 'create_qr_device_match_with_settings', {
+        ...(courtId ? { p_court_id: Number(courtId) } : {}),
         p_scoring_type: settings.scoring_type,
         p_set_format: settings.set_format,
         p_third_set_format: settings.third_set_format,
@@ -128,13 +129,15 @@ export function RivaQrScanner({ onClose, kioskMode = false }: { onClose: () => v
         p_device_token: deviceTokenRef.current,
       })
       if (creationError?.code === 'PGRST202') {
-        throw new Error(tRef.current('V Supabase spusti SQL migráciu 057 pre nastavenia zápasu.', 'Apply SQL migration 057 in Supabase for match settings.'))
+        throw new Error(courtId
+          ? tRef.current('V Supabase spusti SQL migráciu 081 pre QR zápas na priradenom kurte.', 'Apply SQL migration 081 for a QR match on the assigned court.')
+          : tRef.current('V Supabase spusti SQL migráciu 057 pre nastavenia zápasu.', 'Apply SQL migration 057 in Supabase for match settings.'))
       }
       if (creationError) throw creationError
       if (typeof data !== 'string' || !/^[0-9a-f-]{36}$/i.test(data)) {
         throw new Error(tRef.current('Databáza nevrátila platné ID zápasu.', 'The database did not return a valid match ID.'))
       }
-      router.push(`/match?id=${encodeURIComponent(data)}${kioskMode ? '&mode=kiosk' : ''}`)
+      router.push(`/match?id=${encodeURIComponent(data)}${kioskMode ? '&mode=kiosk' : ''}${courtId ? `&courtId=${courtId}` : ''}`)
     } catch (creationError) {
       console.error('Vytvorenie QR zápasu zlyhalo:', creationError)
       setError(getErrorMessage(creationError, tRef.current('QR zápas sa nepodarilo vytvoriť. Skús to znova.', 'Could not create the QR match. Please retry.')))
@@ -142,7 +145,7 @@ export function RivaQrScanner({ onClose, kioskMode = false }: { onClose: () => v
       creationRef.current = false
       setIsCreating(false)
     }
-  }, [kioskMode, router])
+  }, [courtId, kioskMode, router])
 
   const addPlayer = useCallback((player: ScannedPlayer, slot = playersRef.current.findIndex((entry) => entry === null)) => {
     if (creationRef.current || playersRef.current.every(Boolean)) return

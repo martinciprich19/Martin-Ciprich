@@ -47,6 +47,7 @@ export async function fetchArenas(country?: CountryCode): Promise<Arena[]> {
   let query = createClient()
     .from('arenas')
     .select('id, country_code, subdivision_code, name, address, city, courts_count, opening_hours_weekday, opening_hours_weekend, opening_hours_note')
+    .eq('is_active', true)
   if (country) query = query.eq('country_code', country)
   const { data, error } = await query
     .order('name', { ascending: true })

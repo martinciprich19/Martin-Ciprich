@@ -11,8 +11,8 @@ web pages and backend; nothing is copied into a separate database.
 - Package: `sk.rivapadel.apptest`, distinct from the Chrome-installed PWA,
   standalone kiosk and Fully helper. It installs alongside them.
 - Cookies, login state and storage are private to this app. Log in separately.
-- No database schema migration or changes to other APKs are needed. Deploy the
-  matching web app changes before enabling native notifications.
+- Native notifications need the existing push migrations and matching web deployment.
+  Court-bound tablet/TV pairing additionally requires migrations 080 and 081 (see below).
 - **Tests against the deployed backend can create real matches, points and uploads.**
   Uninstalling the APK does not undo those records. Use deliberate test data.
 
@@ -54,6 +54,51 @@ and visible notification behavior should be checked on a physical Android
 device, both while the app is open and while it is in the background.
 
 ## Web features
+
+### Assign this Android installation to a court
+
+Use the existing Android app, not a Chrome tab: its private WebView cookie identifies
+the installation and its native clicker input remains available during matches.
+No new APK is required for this web/server change if the tablet already runs the
+native-clicker version.
+
+1. In Supabase apply `scripts/080_court_bound_kiosks.sql` after 071, 072, 076,
+   079 and the existing rematch migrations, then apply `scripts/081_remote_device_pairing.sql`.
+   Deploy the updated web application. Pairing code creation needs the server's
+   existing `SUPABASE_SERVICE_ROLE_KEY`; never put that key on a tablet or TV.
+2. Open the Android app on the tablet. On the home page choose **Pripojiť tablet / TV ku kurtu**
+   in the footer and **Zobraziť párovací kód**. No admin login is needed on the tablet.
+   Any existing local player session/push registration is cleared when generating a code.
+3. On your separate admin device sign in and open **Správa arény → Tablety a monitory kurtov**.
+   Enter the tablet's eight-character code, select an active court, enter its name,
+   select **Tablet – kiosk** and choose **Priradiť zariadenie**. The admin session stays here.
+4. The tablet automatically opens the court's game selection: quick game, PIN or QR.
+   For the TV open `https://www.rivapadel.app/device-pair` in its browser, generate
+   a different code and claim it from the same admin panel with **TV – monitor skóre**.
+   The TV automatically opens only its assigned court's scoreboard.
+5. Start the selected game and select the match rules. Confirm the native clickers
+   when the Android assignment screen appears, then select the first server.
+6. From the admin device, **Monitor skóre** in the same court row provides a
+   read-only preview of that court. It does not mirror the tablet's exact UI.
+7. Verify a point from each clicker appears on the tablet and TV, then test a
+   pause/resume, finalization and rematch. Reopen the Android app and confirm it
+   returns to this court (or its remembered active match).
+
+Each court can have one non-revoked tablet and one monitor. Codes expire after
+ten minutes, can be claimed once and are rate-limited. To replace a device,
+revoke the old device from another admin device before authorizing the replacement.
+Existing unbound registrations remain in legacy mode; revoke and reauthorize
+them to bind them to a court. Clearing app data or uninstalling removes its
+authorization cookie; the database registration must then be revoked/replaced.
+
+Every page request validates the installation token. Altering a court URL does
+not change the tablet's assignment. Pausing the court/arena displays a blocked
+screen without deleting the cookie, so reactivation and a reload restore access.
+Revocation removes kiosk mode on its next page request; it does not remotely erase
+the app or terminate an already-loaded match. Continuous heartbeat, remote commands,
+exact screen mirroring are not implemented. This is app-level
+navigation restriction, not Android device-owner/OS lock-task enforcement.
+Use Android screen pinning to prevent players leaving the RIVA application.
 
 All same-origin HTTPS pages remain inside the WebView. **Domov** opens the full
 home page and Android Back uses web history.

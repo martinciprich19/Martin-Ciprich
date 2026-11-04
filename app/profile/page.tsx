@@ -422,7 +422,7 @@ export default function ProfilePage() {
       if (arenaAssignmentsError) {
         console.error('Priradenie správcu arény sa nepodarilo načítať:', arenaAssignmentsError)
       } else {
-        setIsArenaManager((arenaAssignments ?? []).length > 0)
+        setIsArenaManager(user.app_metadata?.role === 'super_admin' || (arenaAssignments ?? []).length > 0)
       }
       if (!user.email) throw new Error('Prihlásený účet nemá e-mailovú adresu.')
       const { error: venueSyncError } = await createClient().rpc('refresh_my_auto_venue')

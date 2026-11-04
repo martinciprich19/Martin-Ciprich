@@ -24,8 +24,10 @@ Verify the update affected exactly the intended account. The user must sign out 
 ## Available now
 
 - View all arenas, activate/pause them, and create a club.
+- Paused arenas are excluded from player arena searches and selection lists (including registration and home-club selection) on the next data refresh. Admin panels retain access to paused arenas. This visibility change does not itself revoke kiosk authorization or stop an ongoing match.
 - Assign or remove Arena Admin access for an existing Supabase Auth account by email.
 - Review authorized kiosk registrations and revoke a device.
+- With migrations 080 and 081, use **Kurty a priradenie tabletu → Tablety a monitory kurtov** to claim a target device's one-time code from the admin device. Select its court and role (tablet or scoreboard); no admin login on the target is required. The same controls are available to assigned Arena Admins; the Android app retains native clicker input. See [tablet setup](./riva-android-app.md#assign-this-android-installation-to-a-court).
 - Send a global in-app announcement. If the existing `notifications` database webhook and push configuration are active, it also sends a push to users who opted in.
 - Review an append-only audit log for Super Admin actions.
 

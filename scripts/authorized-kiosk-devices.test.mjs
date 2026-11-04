@@ -66,14 +66,25 @@ test('proxy ignores legacy kiosk cookies and URL hints; only a validated device 
       delete: name => map.delete(name), getAll: () => [...map].map(([name,value]) => ({ name,value })) }
   }
   const response = (kind, status = 200) => ({ kind, status, cookies: jar([]), headers: new Headers() })
-  const NextResponse = { next: () => response('next'), redirect: url => ({ ...response('redirect',307), url: String(url) }),
-    json: (_body, options) => response('json',options.status) }
+  class NextResponse {
+    constructor(body, options) { Object.assign(this, response('html', options.status), { body }) }
+    static next() { return response('next') }
+    static redirect(url) { return { ...response('redirect',307), url: String(url) } }
+    static json(_body, options) { return response('json', options.status) }
+  }
   let authorized = true
+  let courtId = null
+  let deviceRole = 'kiosk'
+  let available = true
   let fail = false
   let checks = 0
   const proxy = new Function('createServerClient','createDatabaseClient','NextResponse','process',`${source};return proxy`)(
     () => { throw new Error('Auth should not be needed for public pages') },
-    () => ({ rpc: async () => { checks++; return { data: authorized, error: fail ? new Error('DB unavailable') : null } } }),
+    () => ({ rpc: async (name) => {
+      assert.equal(name, 'get_paired_device_context')
+      checks++
+      return { data: authorized ? [{ court_id: courtId, available, device_role: deviceRole }] : [], error: fail ? new Error('DB unavailable') : null }
+    } }),
     NextResponse, { env: { NEXT_PUBLIC_SUPABASE_URL:'https://db.test',NEXT_PUBLIC_SUPABASE_ANON_KEY:'test' } })
   const request = (path, cookies = []) => {
     const url = new URL(`https://riva.test${path}`)
@@ -99,6 +110,46 @@ test('proxy ignores legacy kiosk cookies and URL hints; only a validated device 
   fail = true
   r = await proxy(request('/', [['riva-kiosk-device',token]]))
   assert.equal(r.status,503)
+  fail = false
+  authorized = true
+  courtId = 7
+  r = await proxy(request('/', [['riva-kiosk-device',token]]))
+  assert.match(r.url, /\/match\?mode=kiosk&courtId=7$/)
+  r = await proxy(request('/match', [['riva-kiosk-device',token]]))
+  const selectionUrl = new URL(r.url)
+  assert.equal(selectionUrl.searchParams.get('courtId'), '7')
+  assert.equal(selectionUrl.searchParams.get('mode'), 'kiosk')
+  r = await proxy(request('/kiosk?courtId=999', [['riva-kiosk-device',token]]))
+  assert.match(r.url, /\/kiosk\?courtId=7$/)
+  r = await proxy(request('/match?id=game&courtId=999&view=viewer', [['riva-kiosk-device',token]]))
+  const matchUrl = new URL(r.url)
+  assert.equal(matchUrl.searchParams.get('id'), 'game')
+  assert.equal(matchUrl.searchParams.get('courtId'), '7')
+  assert.equal(matchUrl.searchParams.get('mode'), 'kiosk')
+  assert.equal(matchUrl.searchParams.has('view'), false)
+  r = await proxy(request('/match?id=game&courtId=7&mode=kiosk', [['riva-kiosk-device',token]]))
+  assert.equal(r.kind, 'next')
+  available = false
+  r = await proxy(request('/', [['riva-kiosk-device',token]]))
+  assert.equal(r.status, 403)
+  assert.match(r.body, /Kiosk pozastavený/)
+  assert.equal(r.cookies.get('riva-kiosk-device'), undefined, 'Suspension retains device authorization')
+  available = true
+  r = await proxy(request('/kiosk?courtId=7', [['riva-kiosk-device',token]]))
+  assert.equal(r.kind, 'next')
+  for (const path of ['/profile', '/players/1', '/rankings', '/arena-admin']) {
+    r = await proxy(request(path, [['riva-kiosk-device',token]]))
+    assert.match(r.url, /\/match\?mode=kiosk&courtId=7$/)
+  }
+  deviceRole = 'scoreboard'
+  r = await proxy(request('/match?id=game', [['riva-kiosk-device',token]]))
+  assert.match(r.url, /\/scoreboard\/7$/)
+  r = await proxy(request('/scoreboard/99', [['riva-kiosk-device',token]]))
+  assert.match(r.url, /\/scoreboard\/7$/)
+  r = await proxy(request('/scoreboard/7', [['riva-kiosk-device',token]]))
+  assert.equal(r.kind, 'next')
+  r = await proxy(request('/api/pause-match', [['riva-kiosk-device',token]]))
+  assert.equal(r.status, 403)
 })
 
 test('device API requires manager authorization and issues only private installation cookies', async () => {
@@ -123,7 +174,7 @@ test('device API requires manager authorization and issues only private installa
     randomBytes,NextResponse,async () => client)
   const request = (origin = 'https://riva.test') => new Request('https://riva.test/api/kiosk-device', {
     method:'POST',headers:{ origin,'content-type':'application/json' },
-    body:JSON.stringify({ arenaId:'1',name:'Tablet' }),
+    body:JSON.stringify({ arenaId:'1',courtId:'7',name:'Tablet' }),
   })
   assert.equal((await post(request('https://other.test'))).status,403)
   user = null
@@ -131,7 +182,7 @@ test('device API requires manager authorization and issues only private installa
   user = { id: manager }
   allowed = false
   assert.equal((await post(request())).status,403)
-  assert.equal(calls.some(call => call.name === 'authorize_kiosk_device'),false)
+  assert.equal(calls.some(call => call.name === 'authorize_court_kiosk_device'),false)
   allowed = true
   const response = await post(request())
   assert.equal(response.status,200)
@@ -142,4 +193,5 @@ test('device API requires manager authorization and issues only private installa
   assert.equal(deviceCookie[2].secure,true)
   assert.equal(deviceCookie[2].sameSite,'lax')
   assert.equal(calls.at(-1).args.p_token,deviceCookie[1])
+  assert.equal(calls.at(-1).args.p_court_id, '7')
 })

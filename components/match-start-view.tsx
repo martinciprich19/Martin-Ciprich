@@ -39,8 +39,8 @@ export function MatchStartView({ kioskMode = false }: { kioskMode?: boolean }) {
     setChoosingRules(false)
     setNicknames(['', '', '', ''])
     setError('')
-    router.replace(kioskMode ? '/match?mode=kiosk' : '/match')
-  }, [kioskMode, router])
+    router.replace(kioskMode ? `/match?mode=kiosk${courtId ? `&courtId=${courtId}` : ''}` : '/match')
+  }, [courtId, kioskMode, router])
 
   useKioskInactivity(matchId === null && (isScanning || choosingRules || isCreating), resetKioskFlow)
 
@@ -55,6 +55,7 @@ export function MatchStartView({ kioskMode = false }: { kioskMode?: boolean }) {
         .from('live_matches')
         .insert({
           challenge_id: null,
+          ...(courtId ? { court_id: Number(courtId) } : {}),
           country_code: country,
           ...settings,
           match_pin: null,
@@ -75,7 +76,7 @@ export function MatchStartView({ kioskMode = false }: { kioskMode?: boolean }) {
         throw new Error(t('Databáza nevrátila platný zápas.', 'The database did not return a valid match.'))
       }
       if (inactivityResetRef.current) return
-      router.push(`/match?id=${encodeURIComponent(data.id)}${kioskMode ? '&mode=kiosk' : ''}`)
+      router.push(`/match?id=${encodeURIComponent(data.id)}${kioskMode ? '&mode=kiosk' : ''}${courtId ? `&courtId=${courtId}` : ''}`)
     } catch (createError: unknown) {
       console.error('Vytvorenie rýchlej hry zlyhalo:', createError)
       setError(getErrorMessage(createError, t('Rýchlu hru sa nepodarilo vytvoriť. Skús to znova.', 'Could not create a quick game. Please try again.')))
@@ -86,7 +87,7 @@ export function MatchStartView({ kioskMode = false }: { kioskMode?: boolean }) {
   }
 
   if (matchId !== null) return <MatchView key={matchId} matchId={matchId} kioskMode={kioskMode} viewerMode={viewerMode} courtId={courtId} />
-  if (isScanning) return <RivaQrScanner key={country} kioskMode={kioskMode} onClose={() => setIsScanning(false)} />
+  if (isScanning) return <RivaQrScanner key={country} kioskMode={kioskMode} courtId={courtId} onClose={() => setIsScanning(false)} />
 
   const cardClass = 'group flex min-h-80 flex-col items-start rounded-3xl border bg-app-court/95 p-7 text-left shadow-xl transition duration-200 motion-safe:hover:-translate-y-1 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#a8e63c] sm:p-8'
 
@@ -108,7 +109,7 @@ export function MatchStartView({ kioskMode = false }: { kioskMode?: boolean }) {
           <span className="mt-auto flex items-center gap-2 pt-6 text-sm font-bold text-app-highlight">{isCreating ? t('Vytváram zápas…', 'Creating match…') : t('Poďme hrať', "Let's play")}<ArrowRight size={18} aria-hidden="true" className="transition-transform group-hover:translate-x-1" /></span>
         </button>
 
-        <Link href="/kiosk" className={`${cardClass} border-sky-300/20 hover:border-sky-300/60 hover:shadow-[0_16px_45px_rgba(125,211,252,0.1)]`}>
+        <Link href={courtId ? `/kiosk?courtId=${courtId}` : '/kiosk'} className={`${cardClass} border-sky-300/20 hover:border-sky-300/60 hover:shadow-[0_16px_45px_rgba(125,211,252,0.1)]`}>
           <span className="flex h-20 w-20 items-center justify-center rounded-2xl bg-sky-300/10 text-app-sky-200"><Keyboard size={38} aria-hidden="true" /></span>
           <span className="mt-6 text-2xl font-black">{t('Zadaj PIN kód', 'Enter PIN code')}</span>
           <span className="mt-3 text-sm leading-6 text-app-fg/55">{t('Zadaj 4-miestny PIN z potvrdenej výzvy alebo pokračuj v uloženom prerušenom zápase.', 'Enter the four-digit PIN from a confirmed challenge or resume a saved paused match.')}</span>

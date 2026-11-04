@@ -356,7 +356,7 @@ export function MatchView({ matchId, kioskMode = false, viewerMode = false, cour
     } catch (resetError) {
       console.error('QR kioskový token sa nepodarilo odstrániť:', resetError)
     }
-    router.replace(kioskMode && courtId ? `/kiosk?courtId=${encodeURIComponent(courtId)}` : kioskMode ? '/match?mode=kiosk' : '/match')
+    router.replace(kioskMode ? `/match?mode=kiosk${courtId ? `&courtId=${encodeURIComponent(courtId)}` : ''}` : '/match')
     router.refresh()
   }, [courtId, kioskMode, matchId, router])
 
@@ -810,7 +810,7 @@ export function MatchView({ matchId, kioskMode = false, viewerMode = false, cour
       if (data !== pending.id) throw new Error('Databáza nepotvrdila vytvorenie ďalšieho zápasu.')
       audioRef.current?.stop()
       clearQrDeviceToken(matchId)
-      router.replace(`/match?id=${encodeURIComponent(pending.id)}${kioskMode ? '&mode=kiosk' : ''}`)
+      router.replace(`/match?id=${encodeURIComponent(pending.id)}${kioskMode ? '&mode=kiosk' : ''}${courtId ? `&courtId=${encodeURIComponent(courtId)}` : ''}`)
     } catch (creationError) {
       console.error('Vytvorenie ďalšieho zápasu zlyhalo:', creationError)
       setError(getErrorMessage(creationError, 'Ďalší zápas sa nepodarilo vytvoriť. Over SQL migráciu 065 a skús znova.'))

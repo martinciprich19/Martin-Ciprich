@@ -32,6 +32,8 @@ type Arena = {
 type Kiosk = {
   id: string
   arenaId: string
+  courtId: string | null
+  deviceRole: string
   name: string
   createdAt: string
   revokedAt: string | null
@@ -109,6 +111,9 @@ export function SuperAdminDashboard({ arenas, devices, managers, audit }: Props)
           </div>
           <Link href="/profile" className="rounded-lg border border-app-line/15 px-4 py-2 text-sm font-bold text-app-fg/70 hover:border-app-league/50">
             Späť do aplikácie
+          </Link>
+          <Link href="/arena-admin" className="rounded-lg border border-app-line/15 px-4 py-2 text-sm font-bold text-app-fg/70 hover:border-app-league/50">
+            Kurty a priradenie tabletu
           </Link>
         </header>
 
@@ -299,8 +304,9 @@ function DeviceManagement({ devices, arenas, busy, runAction }: {
           {devices.map((device) => (
             <li key={device.id} className="flex flex-wrap items-center justify-between gap-3 py-3 first:pt-0">
               <div>
-                <p className="font-bold">{device.name}</p>
-                <p className="mt-1 text-xs text-app-fg/45">{arenaNames.get(device.arenaId) ?? `Aréna ${device.arenaId}`} · autorizované {formatDate(device.createdAt)}</p>
+                <p className="font-bold">{device.name} · {device.deviceRole === 'scoreboard' ? 'TV' : 'Tablet'}</p>
+                <p className="mt-1 text-xs text-app-fg/45">{arenaNames.get(device.arenaId) ?? `Aréna ${device.arenaId}`} · {device.courtId ? `Kurt ID ${device.courtId}` : 'Bez priradeného kurtu'} · autorizované {formatDate(device.createdAt)}</p>
+                {device.courtId ? <Link href={`/scoreboard/${encodeURIComponent(device.courtId)}`} target="_blank" className="mt-1 inline-block text-xs text-app-league">Monitor skóre kurtu</Link> : null}
               </div>
               {device.revokedAt ? <span className="text-xs text-app-fg/40">Odvolané {formatDate(device.revokedAt)}</span> : (
                 <button type="button" disabled={busy} onClick={() => {

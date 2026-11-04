@@ -59,7 +59,9 @@ export default function Home() {
         </div>
 
       </section>
-      <footer className="border-t border-app-line/10 px-6 py-7 text-center text-[10px] uppercase tracking-[.18em] text-app-fg/30">RIVA Padel</footer>
+      <footer className="border-t border-app-line/10 px-6 py-7 text-center text-[10px] uppercase tracking-[.18em] text-app-fg/30">
+        RIVA Padel · <Link href="/device-pair" className="text-app-fg/60 hover:text-app-accent">{t('Pripojiť tablet / TV ku kurtu', 'Pair tablet / TV with a court')}</Link>
+      </footer>
     </main>
   )
 }
