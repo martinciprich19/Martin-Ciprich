@@ -7,7 +7,7 @@ web pages and backend; nothing is copied into a separate database.
 
 ## Isolation and installation
 
-- App name: **RIVA Padel Test**, version 1.9.
+- App name: **RIVA Padel Test**, version 1.10.
 - Package: `sk.rivapadel.apptest`, distinct from the Chrome-installed PWA,
   standalone kiosk and Fully helper. It installs alongside them.
 - Cookies, login state and storage are private to this app. Log in separately.
@@ -59,8 +59,21 @@ device, both while the app is open and while it is in the background.
 
 Use the existing Android app, not a Chrome tab: its private WebView cookie identifies
 the installation and its native clicker input remains available during matches.
-No new APK is required for this web/server change if the tablet already runs the
-native-clicker version.
+Pairing itself requires no new APK if the tablet already runs the native-clicker
+version. The private live admin screen preview requires Android app version 1.10.
+
+For the preview apply `scripts/083_kiosk_screen_preview.sql` after 081, deploy
+the web, then install the new `android/riva-app/dist/riva-padel-test.apk` over
+the existing installation (do not uninstall or clear data). In arena management,
+**Živý náhľad kiosku** opens an admin-only read-only image of that court's tablet.
+The app captures its own interface, including native clicker assignment, only
+while a manager is viewing; frames refresh roughly every three seconds. No
+remote control, Android system dialogs, or live camera/video surfaces are shared.
+When the app is backgrounded or requests stop, capture stops. Old frames are
+hidden after ten seconds; the private database retains only the latest frame per
+device. The tablet must be active, paired and online.
+If OneDrive locks intermediate build files, `build.ps1 -BuildRoot` can point to
+a local folder outside OneDrive; the signed APK is still copied into `dist`.
 
 1. In Supabase apply `scripts/080_court_bound_kiosks.sql` after 071, 072, 076,
    079 and the existing rematch migrations, then apply `scripts/081_remote_device_pairing.sql`.
@@ -106,7 +119,7 @@ not change the tablet's assignment. Pausing the court/arena displays a blocked
 screen without deleting the cookie, so reactivation and a reload restore access.
 Revocation removes kiosk mode on its next page request; it does not remotely erase
 the app or terminate an already-loaded match. Continuous heartbeat, remote commands,
-exact screen mirroring are not implemented. This is app-level
+interactive screen streaming are not implemented. This is app-level
 navigation restriction, not Android device-owner/OS lock-task enforcement.
 Use Android screen pinning to prevent players leaving the RIVA application.
 

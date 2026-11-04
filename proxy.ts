@@ -6,7 +6,7 @@ const PROTECTED_PREFIXES = ['/profile']
 const GUEST_ONLY_PATHS = ['/auth/login', '/auth/sign-up']
 const KIOSK_COOKIE = 'riva-kiosk-mode'
 const KIOSK_ALLOWED_PATHS = new Set(['/match', '/kiosk'])
-const KIOSK_ALLOWED_API_PATHS = new Set(['/api/match-speech', '/api/pause-match', '/api/match-resume'])
+const KIOSK_ALLOWED_API_PATHS = new Set(['/api/match-speech', '/api/pause-match', '/api/match-resume', '/api/kiosk-preview'])
 
 function redirectKeepingCookies(url: URL, from: NextResponse) {
   const response = NextResponse.redirect(url)

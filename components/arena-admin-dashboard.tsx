@@ -167,8 +167,8 @@ export function ArenaAdminDashboard({ arenas }: { arenas: ManagedArena[] }) {
                     <p className="font-bold">{court.name}</p>
                     <p className={`mt-1 text-xs ${court.is_active ? 'text-emerald-300' : 'text-app-fg/40'}`}>{court.is_active ? 'Aktívny' : 'Vypnutý'}</p>
                     <div className="mt-3 flex flex-wrap gap-3 text-xs font-semibold">
-                      <a href={`/kiosk?courtId=${encodeURIComponent(String(court.id))}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-app-fg/65 hover:text-app-league">
-                        Kiosk pre hráčov <ExternalLink size={12} aria-hidden="true" />
+                      <a href={`/kiosk-preview/${encodeURIComponent(String(court.id))}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-app-fg/65 hover:text-app-league">
+                        Živý náhľad kiosku <ExternalLink size={12} aria-hidden="true" />
                       </a>
                       <a href={`/scoreboard/${encodeURIComponent(String(court.id))}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-app-fg/65 hover:text-app-league">
                         Monitor skóre <ExternalLink size={12} aria-hidden="true" />

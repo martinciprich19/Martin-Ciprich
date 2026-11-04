@@ -48,6 +48,7 @@ public final class MainActivity extends Activity implements InputManager.InputDe
     private static final int PUSH_PERMISSION_REQUEST = 13;
     private final ClickerSession clickers = new ClickerSession();
     private WebView web;
+    private ScreenPreview screenPreview;
     private TextView status;
     private TextView setupPrompt;
     private TextView receipt;
@@ -129,6 +130,7 @@ public final class MainActivity extends Activity implements InputManager.InputDe
             13, Color.rgb(156, 174, 183), false), 18);
         root.addView(setupScroll, new LinearLayout.LayoutParams(-1, -1));
         web = new WebView(this);
+        screenPreview = new ScreenPreview(this, web);
         web.setBackgroundColor(BACKGROUND_COLOR);
         web.getSettings().setJavaScriptEnabled(true);
         web.getSettings().setDomStorageEnabled(true);
@@ -596,6 +598,7 @@ public final class MainActivity extends Activity implements InputManager.InputDe
         immersive();
         if (web == null) return;
         web.onResume();
+        screenPreview.start();
         inputs.registerInputDeviceListener(this, null);
         validateAssignments();
         trackMatch(web.getUrl());
@@ -604,6 +607,7 @@ public final class MainActivity extends Activity implements InputManager.InputDe
 
     @Override protected void onPause() {
         foreground = false;
+        if (screenPreview != null) screenPreview.stop();
         cancelPending();
         clickers.pause();
         // Keep a pending file/camera request alive while Android's own picker or permission dialog is open.
@@ -614,6 +618,7 @@ public final class MainActivity extends Activity implements InputManager.InputDe
     }
 
     @Override protected void onDestroy() {
+        if (screenPreview != null) screenPreview.stop();
         denyCamera();
         cancelFiles();
         if (web != null) web.destroy();

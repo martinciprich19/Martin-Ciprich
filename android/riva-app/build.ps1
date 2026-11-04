@@ -1,6 +1,7 @@
 param(
     [string]$SdkRoot = $env:ANDROID_HOME,
-    [string]$JavaHome = $env:JAVA_HOME
+    [string]$JavaHome = $env:JAVA_HOME,
+    [string]$BuildRoot = ''
 )
 $ErrorActionPreference = 'Stop'
 $ProjectRoot = (Resolve-Path $PSScriptRoot).Path
@@ -45,7 +46,9 @@ if (!(Test-Path -LiteralPath $key -PathType Leaf)) {
 
 Push-Location $ProjectRoot
 try {
-    & $gradle --no-daemon --stacktrace :app:assembleDebug
+    $buildArgs = @('--no-daemon', '--stacktrace', ':app:assembleDebug')
+    if ($BuildRoot) { $buildArgs += "-PrivaBuildRoot=$BuildRoot" }
+    & $gradle @buildArgs
     if ($LASTEXITCODE -ne 0) { throw "Gradle build failed with exit code $LASTEXITCODE" }
 } finally {
     Pop-Location
@@ -53,7 +56,9 @@ try {
 
 $apk = Join-Path $ProjectRoot 'dist\riva-padel-test.apk'
 New-Item -ItemType Directory -Force -Path (Split-Path $apk) | Out-Null
-Copy-Item -LiteralPath (Join-Path $ProjectRoot 'app\build\outputs\apk\debug\app-debug.apk') -Destination $apk -Force
+$outputRoot = Join-Path $ProjectRoot 'app\build'
+if ($BuildRoot) { $outputRoot = Join-Path $BuildRoot 'app' }
+Copy-Item -LiteralPath (Join-Path $outputRoot 'outputs\apk\debug\app-debug.apk') -Destination $apk -Force
 & "$sdkTools\apksigner.bat" verify --verbose $apk
 if ($LASTEXITCODE -ne 0) { throw 'APK signature verification failed.' }
 & "$sdkTools\aapt2.exe" dump badging $apk
