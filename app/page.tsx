@@ -49,7 +49,7 @@ export default function Home() {
 
         {menuOpen && <div className="mx-6 rounded-2xl border border-app-line/10 bg-app-court/95 p-5 backdrop-blur lg:hidden"><nav className="flex flex-col gap-4">{localizedNavItems.map((item) => <Link onClick={() => setMenuOpen(false)} key={item.label} href={item.href} className="text-sm text-app-fg/80">{item.label}</Link>)}</nav></div>}
 
-        <div className="mx-auto flex w-full max-w-[1260px] px-6 pb-24 pt-20 lg:px-10 lg:pb-32 lg:pt-28">
+        <div className="mx-auto flex w-full max-w-[1260px] px-6 pb-24 pt-[clamp(128px,18svh,176px)] lg:px-10 lg:pb-32 lg:pt-[clamp(160px,22svh,224px)]">
           <div className="max-w-[590px]">
             <p className="mb-5 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.28em] text-app-accent"><span className="h-px w-8 bg-[#a8e63c]" /> {t('RIVA Padel')}</p>
             <h1 className="text-[46px] font-black uppercase leading-[.94] tracking-[-.05em] text-app-fg sm:text-[64px] lg:text-[76px]">{t('Hraj.')}<br /><span className="text-app-accent">{t('Vyzývaj.')}</span><br /><span className="text-app-accent">{t('Zlepšuj sa.')}</span><br />{t('Staň sa najlepším.')}</h1>

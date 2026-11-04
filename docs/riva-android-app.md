@@ -121,6 +121,11 @@ login/device storage. Unsaved form edits or unsent points are not recovered.
 The button does not overlap the bottom navigation or other controls.
 This requires web deployment, not a new APK.
 
+On mobile, selecting another profile bottom-navigation tab slides its content
+up from below the screen over 860 ms, matching the side menu easing. The header
+and bottom navigation stay in place. Selecting the current tab does not restart
+the animation; desktop and reduced-motion users see an immediate tab switch.
+
 Android's document picker supports single and multiple file inputs for profile
 photos and sponsor images without broad storage permission. File access
 uses Android's content-provider grants for the selected files. QR camera capture
