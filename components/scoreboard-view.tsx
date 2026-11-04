@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { LoaderCircle, Radio, WifiOff } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
+import { PageReloadButton } from '@/components/page-reload-button'
 
 type CourtScore = {
   court_id: number | string
@@ -46,6 +47,7 @@ export function ScoreboardView({ courtId }: { courtId: string }) {
   const [ads, setAds] = useState<SponsorAd[]>([])
   const [currentAdIndex, setCurrentAdIndex] = useState(0)
   const failureLogged = useRef(false)
+  const hasMatch = court?.match_id !== null && court?.match_id !== undefined
 
   const refresh = useCallback(async (active: () => boolean = () => true) => {
     try {
@@ -88,6 +90,8 @@ export function ScoreboardView({ courtId }: { courtId: string }) {
   useEffect(() => {
     if (!court) return
     let active = true
+    setAds([])
+    setCurrentAdIndex(0)
     const loadAds = async () => {
       const { data, error } = await createClient()
         .from('arena_sponsor_ads')
@@ -102,8 +106,16 @@ export function ScoreboardView({ courtId }: { courtId: string }) {
         return
       }
       if (active) {
-        setAds((data ?? []) as SponsorAd[])
-        setCurrentAdIndex(0)
+        const nextAds = (data ?? []) as SponsorAd[]
+        setAds(previous => {
+          const unchanged = previous.length === nextAds.length && previous.every((ad, index) => {
+            const next = nextAds[index]
+            return ad.id === next.id && ad.image_path === next.image_path
+              && ad.sponsor_name === next.sponsor_name && ad.display_seconds === next.display_seconds
+              && ad.sort_order === next.sort_order
+          })
+          return unchanged ? previous : nextAds
+        })
       }
     }
     void loadAds()
@@ -115,6 +127,7 @@ export function ScoreboardView({ courtId }: { courtId: string }) {
   }, [court?.arena_id])
 
   useEffect(() => {
+    if (hasMatch) return
     if (ads.length < 2) {
       setCurrentAdIndex(0)
       return
@@ -124,24 +137,29 @@ export function ScoreboardView({ courtId }: { courtId: string }) {
       ? Math.min(60, Math.max(5, activeAd.display_seconds))
       : 10
     const timer = window.setTimeout(
-      () => setCurrentAdIndex((index) => (index + 1) % ads.length),
+      () => setCurrentAdIndex((index) => index + 1),
       duration * 1000,
     )
     return () => window.clearTimeout(timer)
-  }, [ads, currentAdIndex])
+  }, [ads, currentAdIndex, hasMatch])
 
-  const hasMatch = court?.match_id !== null && court?.match_id !== undefined
+  const currentAd = ads.length ? ads[currentAdIndex % ads.length] : null
+  const previousAd = ads.length > 1 && currentAdIndex > 0
+    ? ads[(currentAdIndex - 1) % ads.length] : null
 
   return (
-    <main className="flex min-h-screen flex-col bg-[#080d10] px-5 py-5 text-white sm:px-10 sm:py-8">
-      <header className="flex items-center justify-between gap-4 border-b border-white/10 pb-4">
-        <div>
-          <p className="text-xs font-black uppercase tracking-[0.3em] text-[#ccff00]">RIVA PADEL / LIVE</p>
-          <h1 className="mt-1 text-xl font-bold sm:text-2xl">{court?.court_name ?? 'Skóre kurtu'}</h1>
+    <main className="court-scoreboard">
+      <header className="court-scoreboard-header">
+        <div className="min-w-0">
+          <p className="court-scoreboard-brand">RIVA PADEL / LIVE</p>
+          <h1 className="court-scoreboard-title">{court?.court_name ?? 'Skóre kurtu'}</h1>
         </div>
-        <span className="inline-flex items-center gap-2 text-xs font-semibold text-emerald-300" aria-label="Obrazovka je aktívna">
-          <Radio size={16} aria-hidden="true" /> LIVE
-        </span>
+        <div className="flex shrink-0 items-center gap-4">
+          <span className="inline-flex items-center gap-2 text-xs font-semibold text-emerald-300" aria-label="Obrazovka je aktívna">
+            <Radio size={16} aria-hidden="true" /> LIVE
+          </span>
+          <PageReloadButton />
+        </div>
       </header>
 
       {failed ? (
@@ -160,17 +178,22 @@ export function ScoreboardView({ courtId }: { courtId: string }) {
           <h2 className="mt-5 text-2xl font-black">Kurt sa nenašiel</h2>
           <p className="mt-2 text-sm text-white/50">Skontroluj adresu monitora v správcovskom paneli arény.</p>
         </section>
-      ) : !hasMatch && ads.length > 0 ? (
-        <section className="flex flex-1 flex-col items-center justify-center py-4" aria-live="polite">
-          <div className="flex min-h-0 flex-1 w-full items-center justify-center">
+      ) : !hasMatch && currentAd ? (
+        <section className="court-scoreboard-ad" aria-live="polite">
+          <div key={`${currentAd.id}-${currentAdIndex}`} className="court-scoreboard-ad-window">
+            {previousAd ? <img
+              src={createClient().storage.from('arena-sponsor-ads').getPublicUrl(previousAd.image_path).data.publicUrl}
+              alt=""
+              aria-hidden="true"
+              className="court-scoreboard-ad-image court-scoreboard-ad-outgoing"
+            /> : null}
             <img
-              key={ads[currentAdIndex % ads.length].id}
-              src={createClient().storage.from('arena-sponsor-ads').getPublicUrl(ads[currentAdIndex % ads.length].image_path).data.publicUrl}
-              alt={`Reklama sponzora ${ads[currentAdIndex % ads.length].sponsor_name}`}
-              className="max-h-[78vh] max-w-full object-contain"
+              src={createClient().storage.from('arena-sponsor-ads').getPublicUrl(currentAd.image_path).data.publicUrl}
+              alt={`Reklama sponzora ${currentAd.sponsor_name}`}
+              className={`court-scoreboard-ad-image${previousAd ? ' court-scoreboard-ad-incoming' : ''}`}
             />
           </div>
-          <p className="pt-4 text-sm font-semibold text-white/50">{ads[currentAdIndex % ads.length].sponsor_name}</p>
+          <p className="court-scoreboard-ad-caption">{currentAd.sponsor_name}</p>
         </section>
       ) : !hasMatch ? (
         <section className="flex flex-1 flex-col items-center justify-center text-center">
@@ -181,19 +204,19 @@ export function ScoreboardView({ courtId }: { courtId: string }) {
           <p className="mt-3 text-lg text-white/50">Skóre zápasu sa zobrazí po jeho spustení na kiosku tohto kurtu.</p>
         </section>
       ) : (
-        <section className="flex flex-1 flex-col justify-center" aria-live="polite">
-          <div className="mx-auto w-full max-w-6xl">
-            {court.paused_at ? <p className="mb-5 text-center text-lg font-black uppercase tracking-[0.2em] text-amber-300">Zápas je pozastavený</p> : null}
-            <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-4 border-b border-white/10 px-2 py-3 text-center text-xs font-black uppercase tracking-[0.18em] text-white/45 sm:grid-cols-[minmax(0,1fr)_minmax(90px,0.3fr)_minmax(90px,0.3fr)_minmax(100px,0.35fr)] sm:gap-x-8 sm:px-8 sm:text-sm">
+        <section className="court-scoreboard-match" aria-live="polite">
+          {court.paused_at ? <p className="court-scoreboard-paused">Zápas je pozastavený</p> : null}
+          <div className="court-scoreboard-table">
+            <div className="court-scoreboard-columns">
               <span className="text-left">Hráči</span>
-              <span className="hidden sm:block">Sety</span>
-              <span className="hidden sm:block">Gemy</span>
+              <span>Sety</span>
+              <span>Gemy</span>
               <span>{court.tiebreak_score ? 'Tie-break' : 'Body'}</span>
             </div>
             {[
               {
                 label: 'TÍM A',
-                players: [court.team_a_player1_name, court.team_a_player2_name].filter(Boolean).join(' / '),
+                players: [court.team_a_player1_name, court.team_a_player2_name].filter(Boolean),
                 sets: court.team_a_sets,
                 games: court.team_a_games,
                 points: court.tiebreak_score
@@ -204,7 +227,7 @@ export function ScoreboardView({ courtId }: { courtId: string }) {
               },
               {
                 label: 'TÍM B',
-                players: [court.team_b_player1_name, court.team_b_player2_name].filter(Boolean).join(' / '),
+                players: [court.team_b_player1_name, court.team_b_player2_name].filter(Boolean),
                 sets: court.team_b_sets,
                 games: court.team_b_games,
                 points: court.tiebreak_score
@@ -214,21 +237,22 @@ export function ScoreboardView({ courtId }: { courtId: string }) {
                     : formatGameScore(court.team_b_game_score),
               },
             ].map((team) => (
-              <div key={team.label} className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-4 border-b border-white/10 px-2 py-7 text-center sm:grid-cols-[minmax(0,1fr)_minmax(90px,0.3fr)_minmax(90px,0.3fr)_minmax(100px,0.35fr)] sm:gap-x-8 sm:px-8 sm:py-10">
+              <div key={team.label} className="court-scoreboard-team">
                 <div className="min-w-0 text-left">
-                  <p className="text-[10px] font-black tracking-[0.2em] text-[#ccff00] sm:text-xs">{team.label}</p>
-                  <p className="mt-2 truncate text-xl font-black sm:text-4xl">{team.players || '—'}</p>
-                  <p className="mt-2 text-xs text-white/35 sm:hidden">Sety {team.sets ?? 0} · Gemy {team.games ?? 0}</p>
+                  <p className="court-scoreboard-team-label">{team.label}</p>
+                  <div className="court-scoreboard-players">
+                    {team.players.length ? team.players.map((name, index) => <p key={index} title={name ?? undefined}>{name}</p>) : <p>—</p>}
+                  </div>
                 </div>
-                <span className="hidden text-3xl font-bold tabular-nums sm:block sm:text-5xl">{team.sets ?? 0}</span>
-                <span className="hidden text-3xl font-bold tabular-nums sm:block sm:text-5xl">{team.games ?? 0}</span>
-                <span className="text-4xl font-black tabular-nums text-[#ccff00] sm:text-7xl">{team.points}</span>
+                <span className="court-scoreboard-number">{team.sets ?? 0}</span>
+                <span className="court-scoreboard-number">{team.games ?? 0}</span>
+                <span className="court-scoreboard-points">{team.points}</span>
               </div>
             ))}
           </div>
         </section>
       )}
-      <footer className="pt-4 text-center text-[10px] font-bold uppercase tracking-[0.2em] text-white/25">RIVA PADEL · ŽIVÉ SKÓRE</footer>
+      <footer className="court-scoreboard-footer">RIVA PADEL · ŽIVÉ SKÓRE</footer>
     </main>
   )
 }

@@ -25,7 +25,7 @@ const pagesWithReloadHeader = new Set(['/', '/profile', '/how-it-works', '/match
 
 export function PageReloadToolbar() {
   const pathname = usePathname()
-  if (pagesWithReloadHeader.has(pathname)) return null
+  if (pagesWithReloadHeader.has(pathname) || pathname.startsWith('/scoreboard/')) return null
 
   return (
     <div className="flex min-h-14 items-center justify-end border-b border-app-line/10 bg-app-canvas px-4 py-1">

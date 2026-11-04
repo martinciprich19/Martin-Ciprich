@@ -80,6 +80,13 @@ native-clicker version.
    when the Android assignment screen appears, then select the first server.
 6. From the admin device, **Monitor skóre** in the same court row provides a
    read-only preview of that court. It does not mirror the tablet's exact UI.
+   The TV scoreboard fills the browser viewport without scrolling. Points are
+   the largest numbers; sets and games stay visible alongside both teams.
+   Player names occupy separate lines. While the court is idle, sponsor images
+   fill the available width with a centered crop and slide left as the next
+   sponsor enters from the right, using each ad's configured display duration.
+   A single sponsor stays still; reduced-motion preferences disable sliding.
+   Reload is inside the scoreboard header.
 7. Verify a point from each clicker appears on the tablet and TV, then test a
    pause/resume, finalization and rematch. Reopen the Android app and confirm it
    returns to this court (or its remembered active match).

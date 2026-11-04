@@ -26,6 +26,49 @@ button, a { -webkit-tap-highlight-color: transparent; touch-action: manipulation
 ::selection { background: var(--lime); color: #061016; }
 .hero-noise { background-image: radial-gradient(circle at 20% 10%, rgba(255,255,255,.04) 0 1px, transparent 1px); background-size: 5px 5px; }
 
+.court-scoreboard {
+  position: fixed;
+  inset: 0;
+  height: 100vh;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 2vh 3vw;
+  background: #080d10;
+  color: white;
+  font-family: var(--font-inter), system-ui, sans-serif;
+}
+.court-scoreboard > section { flex: 1; min-height: 0; overflow: hidden; }
+.court-scoreboard-header { display: flex; flex-shrink: 0; align-items: center; justify-content: space-between; gap: 16px; padding-bottom: 1.5vh; border-bottom: 1px solid #ffffff1a; }
+.court-scoreboard-brand { font-size: clamp(10px, 1.6vh, 24px); font-weight: 700; letter-spacing: .2em; color: #ccff00; }
+.court-scoreboard-title { font-size: clamp(16px, 3.5vh, 48px); line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.court-scoreboard-match { display: flex; flex-direction: column; }
+.court-scoreboard-paused { flex-shrink: 0; padding: 1vh 0; text-align: center; font-size: clamp(12px, 2.5vh, 36px); font-weight: 700; color: #fcd34d; }
+.court-scoreboard-table { flex: 1; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr) minmax(0, 1fr); }
+.court-scoreboard-columns, .court-scoreboard-team { display: grid; grid-template-columns: minmax(0, 2.4fr) minmax(0, .8fr) minmax(0, .8fr) minmax(0, 1.15fr); align-items: center; gap: 1vw; border-bottom: 1px solid #ffffff1a; text-align: center; }
+.court-scoreboard-columns { padding: 1.5vh 0; font-size: clamp(10px, 2vh, 28px); font-weight: 700; text-transform: uppercase; letter-spacing: .12em; color: #ffffff80; }
+.court-scoreboard-team { min-height: 0; }
+.court-scoreboard-team-label { font-size: clamp(10px, 2vh, 28px); letter-spacing: .15em; font-weight: 700; color: #ccff00; }
+.court-scoreboard-players { margin-top: 1vh; font-size: clamp(14px, min(4vw, 5.5vh), 80px); font-weight: 700; line-height: 1.3; }
+.court-scoreboard-players p { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.court-scoreboard-number, .court-scoreboard-points { min-width: 0; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.3; letter-spacing: -.05em; }
+.court-scoreboard-number { font-size: clamp(24px, min(10vw, 16vh), 400px); }
+.court-scoreboard-points { font-size: clamp(32px, min(13vw, 23vh), 600px); color: #ccff00; }
+.court-scoreboard-ad { display: flex; flex-direction: column; align-items: center; padding-top: 1vh; }
+.court-scoreboard-ad-window { position: relative; flex: 1; min-height: 0; width: 100%; overflow: hidden; }
+.court-scoreboard-ad-image { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center; }
+.court-scoreboard-ad-caption { flex-shrink: 0; padding-top: 1vh; font-size: clamp(12px, 2.5vh, 36px); font-weight: 700; color: #ffffffb3; }
+@keyframes court-sponsor-in { from { transform: translateX(100%); } to { transform: translateX(0); } }
+@keyframes court-sponsor-out { from { transform: translateX(0); } to { transform: translateX(-100%); } }
+.court-scoreboard-ad-incoming { animation: court-sponsor-in 800ms ease-in-out both; }
+.court-scoreboard-ad-outgoing { animation: court-sponsor-out 800ms ease-in-out both; }
+@media (prefers-reduced-motion: reduce) {
+  .court-scoreboard-ad-incoming { animation: none; }
+  .court-scoreboard-ad-outgoing { display: none; }
+}
+.court-scoreboard-footer { flex-shrink: 0; padding-top: 1vh; text-align: center; font-size: clamp(8px, 1.3vh, 18px); font-weight: 700; letter-spacing: .2em; color: #ffffff40; }
+
 @keyframes riva-startup-exit {
   0%, 88% { opacity: 1; visibility: visible; }
   100% { opacity: 0; visibility: hidden; }

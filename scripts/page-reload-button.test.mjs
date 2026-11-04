@@ -70,10 +70,12 @@ test('reload is inside existing top headers with a non-overlapping fallback on o
     if (name === '@/components/language-provider') return { useLanguage: () => ({ t: () => 'Reload page' }) }
     throw new Error(`Unexpected import: ${name}`)
   } })
-  for (pathname of ['/', '/profile', '/how-it-works', '/match', '/live-matches', '/rankings', '/tournaments']) {
+  for (pathname of ['/', '/profile', '/how-it-works', '/match', '/live-matches', '/rankings', '/tournaments', '/scoreboard/1']) {
     assert.equal(exports.PageReloadToolbar(), null, `No duplicate toolbar on ${pathname}`)
   }
-  for (pathname of ['/auth/login', '/auth/sign-up', '/kiosk', '/arena-admin', '/scoreboard/1', '/players/1', '/find-player']) {
+  const scoreboard = await readFile(new URL('../components/scoreboard-view.tsx', import.meta.url), 'utf8')
+  assert.match(scoreboard.slice(scoreboard.indexOf('<header'), scoreboard.indexOf('</header>')), /<PageReloadButton \/>/)
+  for (pathname of ['/auth/login', '/auth/sign-up', '/kiosk', '/arena-admin', '/players/1', '/find-player']) {
     const toolbar = exports.PageReloadToolbar()
     assert.equal(toolbar.type, 'div')
     assert.doesNotMatch(toolbar.props.className, /fixed|absolute/)
