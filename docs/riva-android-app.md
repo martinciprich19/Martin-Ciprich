@@ -182,6 +182,15 @@ handling. Each feature below needs a real-device test before release.
 
 ## Native clickers
 
+Version 1.12 adds the normal Android VIBRATE permission for the mobile bottom
+navigation's 15ms tap feedback (no runtime prompt). Feedback runs on each
+activation, including the selected tab, and does not change navigation or the
+screen animation. It uses the browser Vibration API: supported Android browsers
+and WebViews may vibrate, subject to device/user settings; iOS Safari/PWA does
+not support it and continues without vibration. Existing Android installations
+need the 1.12 APK update for the permission. Verify the physical feedback on a
+real device; automated tests cover API invocation and unsupported/denied cases.
+
 Version 1.6 uses the approved RIVA PLAY TOGETHER artwork as the Android launcher
 icon. Web logos, browser/PWA icons and notification icons use the same image;
 web changes require a separate deployment. Generated variants preserve the

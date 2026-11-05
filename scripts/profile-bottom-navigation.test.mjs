@@ -10,18 +10,24 @@ test('every bottom navigation destination slides in without restarting the selec
   assert.ok(handler)
   for (const tab of ['rankings', 'opponents', 'matches', 'messages', 'profile']) {
     for (const active of [false, true]) {
-      const calls = []
-      vm.runInNewContext(handler, {
-        tab, active,
-        setMenuOpen: value => calls.push(['menu', value]),
-        setBottomNavigationTab: value => calls.push(['animation', value]),
-        setActiveTab: value => calls.push(['tab', value]),
-        window: { scrollTo: options => calls.push(['scroll', options.top, options.behavior]) },
-      })
-      assert.deepEqual(calls, [
-        ['menu', false], ...(!active ? [['animation', tab]] : []),
-        ['tab', tab], ['scroll', 0, 'instant'],
-      ])
+      for (const vibration of ['supported', 'unsupported', 'blocked']) {
+        const calls = []
+        vm.runInNewContext(handler, {
+          tab, active,
+          navigator: vibration === 'unsupported' ? {} : {
+            vibrate: duration => { calls.push(['vibrate', duration]); return vibration === 'supported' },
+          },
+          setMenuOpen: value => calls.push(['menu', value]),
+          setBottomNavigationTab: value => calls.push(['animation', value]),
+          setActiveTab: value => calls.push(['tab', value]),
+          window: { scrollTo: options => calls.push(['scroll', options.top, options.behavior]) },
+        })
+        assert.deepEqual(calls, [
+          ...(vibration === 'unsupported' ? [] : [['vibrate', 15]]),
+          ['menu', false], ...(!active ? [['animation', tab]] : []),
+          ['tab', tab], ['scroll', 0, 'instant'],
+        ])
+      }
     }
   }
   assert.match(page, /key=\{activeTab\} className=\{bottomNavigationTab === activeTab \? 'profile-bottom-screen-enter' : undefined\}/)
@@ -29,6 +35,11 @@ test('every bottom navigation destination slides in without restarting the selec
   const wrapper = page.indexOf("className={bottomNavigationTab === activeTab")
   assert.ok(wrapper > page.indexOf('</header>', page.indexOf('className="profile-toolbar')))
   assert.ok(wrapper < page.indexOf('Zadať výsledok</button>'))
+})
+
+test('Android grants the normal vibration permission without requiring a runtime prompt', () => {
+  const manifest = readFileSync(new URL('../android/riva-app/AndroidManifest.xml', import.meta.url), 'utf8')
+  assert.match(manifest, /<uses-permission android:name="android\.permission\.VIBRATE"\s*\/>/)
 })
 
 test('bottom screen animation matches the side menu timing and respects reduced motion', () => {
