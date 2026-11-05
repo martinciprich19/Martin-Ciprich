@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import { ArenaSponsorAdsManager } from '@/components/arena-sponsor-ads-manager'
 import { ArenaKioskDevices } from '@/components/arena-kiosk-devices'
 import { ClickerRentals } from '@/components/clicker-rentals'
+import { ArenaSettlements } from '@/components/arena-settlements'
 
 type ManagedArena = {
   id: string
@@ -186,6 +187,7 @@ export function ArenaAdminDashboard({ arenas }: { arenas: ManagedArena[] }) {
         </section>
 
         <ClickerRentals key={`rentals-${selectedArena.id}`} arenaId={selectedArena.id} courts={loading ? [] : courts.filter(court => String(court.arena_id) === selectedArena.id)} />
+        <ArenaSettlements key={`settlements-${selectedArena.id}`} arenaId={selectedArena.id} />
         <ArenaKioskDevices key={selectedArena.id} arenaId={selectedArena.id} courts={courts} />
         <ArenaSponsorAdsManager arenaId={selectedArena.id} />
 

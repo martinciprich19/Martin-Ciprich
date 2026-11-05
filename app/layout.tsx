@@ -7,6 +7,7 @@ import { LeagueProvider } from '@/components/league-provider'
 import { PageReloadToolbar } from '@/components/page-reload-button'
 import { StartupSplash } from '@/components/startup-splash'
 import { DeviceHeartbeat } from '@/components/device-heartbeat'
+import { DeviceReloadListener } from '@/components/device-reload-listener'
 
 const inter = Inter({
   subsets: ['latin', 'latin-ext'],
@@ -43,5 +44,5 @@ export const viewport: Viewport = {
 }
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="sk" className={`${inter.variable} dark`}><body><LanguageProvider><LeagueProvider><StartupSplash /><PushNotificationListener /><DeviceHeartbeat /><PageReloadToolbar />{children}</LeagueProvider></LanguageProvider></body></html>
+  return <html lang="sk" className={`${inter.variable} dark`}><body><LanguageProvider><LeagueProvider><StartupSplash /><PushNotificationListener /><DeviceHeartbeat /><DeviceReloadListener /><PageReloadToolbar />{children}</LeagueProvider></LanguageProvider></body></html>
 }

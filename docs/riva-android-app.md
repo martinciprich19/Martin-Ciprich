@@ -182,6 +182,15 @@ handling. Each feature below needs a real-device test before release.
 
 ## Native clickers
 
+Version 1.13 fixes bottom-navigation feedback in the Android WebView by exposing
+`RivaNativeHaptics.tap()` and calling Android `performHapticFeedback(KEYBOARD_TAP)`
+on the UI thread. It only runs for a trusted foreground page, is rate-limited to
+one pulse per 80ms and respects Android touch-feedback settings. Unsupported or
+disabled feedback is logged without blocking navigation. Browsers/older APKs
+retain the 15ms Vibration API fallback; iOS web remains unsupported. Install
+1.13 and deploy the web change together. Actual pulse strength/duration depends
+on the Android device, and physical feedback still needs a real-device test.
+
 Version 1.12 adds the normal Android VIBRATE permission for the mobile bottom
 navigation's 15ms tap feedback (no runtime prompt). Feedback runs on each
 activation, including the selected tab, and does not change navigation or the

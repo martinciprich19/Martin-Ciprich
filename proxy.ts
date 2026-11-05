@@ -6,7 +6,7 @@ const PROTECTED_PREFIXES = ['/profile']
 const GUEST_ONLY_PATHS = ['/auth/login', '/auth/sign-up']
 const KIOSK_COOKIE = 'riva-kiosk-mode'
 const KIOSK_ALLOWED_PATHS = new Set(['/match', '/kiosk'])
-const KIOSK_ALLOWED_API_PATHS = new Set(['/api/match-speech', '/api/pause-match', '/api/match-resume', '/api/kiosk-preview', '/api/device-heartbeat'])
+const KIOSK_ALLOWED_API_PATHS = new Set(['/api/match-speech', '/api/pause-match', '/api/match-resume', '/api/kiosk-preview', '/api/device-heartbeat', '/api/device-reload'])
 
 function redirectKeepingCookies(url: URL, from: NextResponse) {
   const response = NextResponse.redirect(url)
@@ -75,7 +75,7 @@ export async function proxy(request: NextRequest) {
       return finish(response)
     }
     if (deviceRole === 'scoreboard') {
-      if (pathname === '/api/device-heartbeat') return finish(NextResponse.next({ request }))
+      if (pathname === '/api/device-heartbeat' || pathname === '/api/device-reload') return finish(NextResponse.next({ request }))
       if (!kioskCourtId) throw new Error('Monitor nemá priradený kurt.')
       const destination = `/scoreboard/${kioskCourtId}`
       if (pathname !== destination) {

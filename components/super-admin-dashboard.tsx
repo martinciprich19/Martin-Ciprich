@@ -4,13 +4,15 @@ import { AppBackground } from '@/components/app-background'
 import { DeviceTelemetryStatus } from '@/components/device-telemetry-status'
 import { SuperAdminMatchAnalytics } from '@/components/super-admin-match-analytics'
 import { ClickerRentals } from '@/components/clicker-rentals'
+import { ArenaSettlements } from '@/components/arena-settlements'
+import { DeviceReloadControl } from '@/components/device-reload-control'
+import { SuperAdminElo } from '@/components/super-admin-elo'
 import { createClient } from '@/lib/supabase/client'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useState, type FormEvent, type ReactNode } from 'react'
 import {
   Activity,
-  AlertTriangle,
   BellRing,
   Building2,
   ClipboardList,
@@ -66,7 +68,7 @@ type Props = {
   audit: AuditEntry[]
 }
 
-type Section = 'overview' | 'arenas' | 'devices' | 'analytics' | 'rentals' | 'system' | 'audit'
+type Section = 'overview' | 'arenas' | 'devices' | 'analytics' | 'rentals' | 'settlements' | 'elo' | 'system' | 'audit'
 
 const sections: { id: Section; label: string; icon: typeof Activity }[] = [
   { id: 'overview', label: 'Prehľad', icon: Activity },
@@ -74,6 +76,8 @@ const sections: { id: Section; label: string; icon: typeof Activity }[] = [
   { id: 'devices', label: 'Zariadenia', icon: Tablet },
   { id: 'analytics', label: 'Štatistiky zápasov', icon: Activity },
   { id: 'rentals', label: 'Prenájmy klikrov', icon: ClipboardList },
+  { id: 'settlements', label: 'Vyúčtovanie a platby', icon: ClipboardList },
+  { id: 'elo', label: 'Opravy ELO', icon: Activity },
   { id: 'system', label: 'Oznámenia', icon: BellRing },
   { id: 'audit', label: 'Audit', icon: ClipboardList },
 ]
@@ -139,13 +143,11 @@ export function SuperAdminDashboard({ arenas, devices, managers, audit }: Props)
         {section === 'devices' ? <DeviceManagement devices={devices} arenas={arenas} busy={busy} runAction={runAction} /> : null}
         {section === 'analytics' ? <SuperAdminMatchAnalytics /> : null}
         {section === 'rentals' ? <ClickerRentals superAdmin /> : null}
+        {section === 'settlements' ? <ArenaSettlements superAdmin /> : null}
+        {section === 'elo' ? <SuperAdminElo /> : null}
         {section === 'system' ? <SystemAnnouncements busy={busy} runAction={runAction} /> : null}
         {section === 'audit' ? <AuditHistory audit={audit} /> : null}
 
-        <section className="mt-7 flex items-start gap-3 rounded-xl border border-amber-300/20 bg-amber-300/[0.06] p-4 text-sm leading-6 text-app-fg/65">
-          <AlertTriangle size={18} className="mt-0.5 shrink-0 text-amber-200" aria-hidden="true" />
-          <p>Pripravované funkcie: vzdialený reštart, fakturácia, riešenie sporov a manuálne úpravy ELO. Stav zariadení nájdeš v sekcii Zariadenia; batéria a verzia APK vyžadujú Android aplikáciu 1.11.</p>
-        </section>
       </div>
     </main>
   )
@@ -316,14 +318,15 @@ function DeviceManagement({ devices, arenas, busy, runAction }: {
                 <p className="mt-1 text-xs text-app-fg/45">{arenaNames.get(device.arenaId) ?? `Aréna ${device.arenaId}`} · {device.courtId ? `Kurt ID ${device.courtId}` : 'Bez priradeného kurtu'} · autorizované {formatDate(device.createdAt)}</p>
                 {device.courtId ? <Link href={`/scoreboard/${encodeURIComponent(device.courtId)}`} target="_blank" className="mt-1 inline-block text-xs text-app-league">Monitor skóre kurtu</Link> : null}
               </div>
-              {device.revokedAt ? <span className="text-xs text-app-fg/40">Odvolané {formatDate(device.revokedAt)}</span> : (
+              {device.revokedAt ? <span className="text-xs text-app-fg/40">Odvolané {formatDate(device.revokedAt)}</span> : (<div className="space-y-3">
+                {device.courtId ? <DeviceReloadControl deviceId={device.id} /> : null}
                 <button type="button" disabled={busy} onClick={() => {
                   if (!window.confirm(`Odvolať autorizáciu zariadenia ${device.name}?`)) return
                   void runAction(async () => {
                     const { error } = await createClient().rpc('super_admin_revoke_kiosk_device', { p_device_id: device.id })
                     if (error) throw error
                   }, 'Autorizácia kiosk zariadenia bola odvolaná.')
-                }} className="rounded-lg border border-red-300/20 px-3 py-2 text-xs font-bold text-red-200 hover:bg-red-400/10 disabled:opacity-50">Odvolať</button>
+                }} className="rounded-lg border border-red-300/20 px-3 py-2 text-xs font-bold text-red-200 hover:bg-red-400/10 disabled:opacity-50">Odvolať</button></div>
               )}
             </li>
           ))}
@@ -407,6 +410,10 @@ function formatDate(value: string) {
 function auditLabel(action: string) {
   const labels: Record<string, string> = {
     'arena.created': 'Vytvorená aréna',
+    'payment.recorded': 'Zaevidovaná prijatá platba',
+    'payment.voided': 'Stornovaná platba',
+    'device.reload_requested': 'Vyžiadané obnovenie aplikácie',
+    'elo.adjusted': 'Manuálna oprava ELO',
     'arena.updated': 'Upravená aréna',
     'arena.deleted': 'Odstránená aréna',
     'arena_manager.assigned': 'Priradený správca',

@@ -13,6 +13,8 @@ import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Build;
+import android.os.SystemClock;
+import android.view.HapticFeedbackConstants;
 import android.util.Log;
 import android.view.InputDevice;
 import android.view.KeyEvent;
@@ -138,6 +140,7 @@ public final class MainActivity extends Activity implements InputManager.InputDe
         web.getSettings().setAllowContentAccess(true);
         web.getSettings().setMediaPlaybackRequiresUserGesture(false);
         web.addJavascriptInterface(new NativePushBridge(), "RivaNativePush");
+        web.addJavascriptInterface(new NativeHapticsBridge(), "RivaNativeHaptics");
         web.getSettings().setUserAgentString(web.getSettings().getUserAgentString()
             + " RivaAndroidKiosk/1 RivaPadelTest/1 RivaTelemetry/1");
         CookieManager.getInstance().setAcceptCookie(true);
@@ -259,6 +262,22 @@ public final class MainActivity extends Activity implements InputManager.InputDe
         navigate(AppPolicy.trusted(notificationUrl) ? notificationUrl
             : AppPolicy.resumable(rememberedMatch) ? rememberedMatch : AppPolicy.HOME);
         immersive();
+    }
+
+    private final class NativeHapticsBridge {
+        private long lastTap;
+
+        @JavascriptInterface public void tap() {
+            runOnUiThread(() -> {
+                if (!foreground || web == null || !AppPolicy.trusted(web.getUrl())) return;
+                long now = SystemClock.elapsedRealtime();
+                if (now - lastTap < 80) return;
+                lastTap = now;
+                if (!web.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)) {
+                    Log.d(TAG, "Navigation haptic unavailable or disabled by device settings.");
+                }
+            });
+        }
     }
 
     private final class NativePushBridge {

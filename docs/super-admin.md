@@ -49,10 +49,11 @@ Verify the update affected exactly the intended account. The user must sign out 
 
 ## Not yet implemented
 
-Remote commands and acknowledgements, network diagnostics, restarts/updates are
-not implemented. Billing and license controls, feature-flag enforcement, player
-merging/ELO changes, and official result dispute workflows also need product rules
-and database support before they can safely be managed here.
+Operating-system reboots, application updates, network diagnostics, invoicing,
+license controls, feature-flag enforcement, player merging and official result
+dispute workflows are not implemented. Web-app reload, manual receipts and ELO
+corrections are supported as described below. The former blanket yellow
+"upcoming features" notice is no longer displayed across every admin section.
 
 Run the focused database test with `npm run test:super-admin`.
 
@@ -82,8 +83,93 @@ or a record of money already paid. Existing matches do not backfill rentals.
 Only Super Admin can void an incorrect record, with a mandatory reason. The
 record, original staff ID, void actor, reason and timestamps remain stored.
 Voiding removes the charge from its original month, including closed past
-months; there is no settlement locking or paid-status workflow. Arena staff
+months; there is no settlement locking. Receipt balances require migration 087. Arena staff
 must request corrections from the platform owner. Report access is checked in
 the database, independently of the UI; managers can only view their own arenas.
 
 Validate with `node --test scripts/clicker-rentals.test.mjs`.
+
+## Monthly settlements and receipts (087)
+
+Apply `scripts/087_arena_settlements.sql` after 086. **Super Admin →
+Vyuctovanie a platby** shows each arena's monthly platform-owner share, received
+payments and outstanding balance. Positive balances are due, zero is settled,
+and negative balances are explicitly shown as overpayments. The arena manager
+sees only their own arena's read-only report in Arena Admin.
+
+Enter every real payment separately: arena, allocation month, EUR amount, actual
+receipt date and reference/note. Partial payments are supported. The allocation
+month, not the bank receipt date, determines which balance is credited. There
+is no bank synchronization, invoice generation, debt ageing, automatic carryover
+or fiscal/period locking. Receipts may exceed the current rental balance. Voids
+of rentals and receipts change the original month's live balance.
+
+Receipts store integer cents, actor and server recording time, and use a UUID
+for idempotent retries. Only Super Admin may record or void them; a void requires
+a reason and preserves the original record and the void actor/time. Incorrect
+allocation is corrected by voiding and entering a new receipt. Neither managers
+nor Super Admin clients have direct UPDATE/DELETE access to the ledger. Reports
+and mutation RPCs enforce permissions independently of the UI; receipt mutations
+also appear in the global audit.
+
+## Safe remote web-app reload (088)
+
+Apply `scripts/088_device_reload_commands.sql` after 084 and deploy the web.
+In **Zariadenia**, **Obnovit aplikaciu** requests a full page reload on the paired
+tablet or scoreboard, not an operating-system reboot or a native process restart.
+Only Super Admin can request it. Commands expire after five minutes, and repeated
+requests reuse an unacknowledged, unexpired command. Requests for revoked,
+unbound or suspended devices are rejected.
+
+The database checks for a started, unfinished, non-early-ended court match both
+when requesting and when polling a command, including paused games. Such a match
+blocks delivery; this is a point-in-time check, not a lock against a game starting
+after delivery. Do not schedule maintenance while players are preparing a game.
+Device polling runs every ten seconds while the document is visible. A command
+is retained until acknowledged or expired, so lost responses do not lose it.
+
+The page saves the command ID in sessionStorage before reloading. Only a new
+listener mount after reload sends the acknowledgement with the device's private
+token. The panel distinguishes waiting, delivered, confirmed reconnect and expiry
+without confirmation; confirmation is not proof of OS reboot. Only the matching,
+currently authorized device may poll/acknowledge its own command. Administrators
+never receive device tokens. Acknowledgements may arrive after expiry if the
+reload was slow.
+
+After deploying this feature, manually refresh existing tablets/TVs once so
+they load the listener. It works in the existing Android WebView and a compatible
+Hisense TV browser without a new APK, provided the app page, JavaScript,
+sessionStorage and internet connection are available. An off/sleeping/offline
+device cannot be awakened or rebooted by this feature. Actual TV and Android
+delivery still requires a real-device acceptance test.
+
+## Manual ELO corrections (089)
+
+Apply `scripts/089_manual_elo_adjustments.sql` after 035 and 079. In **Opravy ELO**,
+search by name or exact profile ID, verify the selected player and loaded values,
+choose seasonal/career/both ratings, enter integer targets and a mandatory reason,
+then confirm. Only trusted Super Admin can search/manage this interface or read
+the correction ledger. Direct player rating writes remain blocked.
+
+The transaction takes the same advisory lock as match-stat recalculation,
+replays existing matches, verifies the expected loaded ratings and records the
+delta needed to reach the target. Stale values are rejected rather than
+overwritten. UUID retries cannot apply the same correction twice. Search refreshes
+seasonal ratings after a season rollover before showing the values.
+
+Recalculation merges corrections with confirmed matches chronologically.
+Subsequent matches use the corrected rating. A seasonal delta resets at the
+next January/July boundary; a career delta persists and contributes to the
+historical career peak. Neither correction changes wins/matches played or the
+starting rating. A retrospective result correction may change the replayed
+rating, but never deletes a manual correction. If replay cannot reach the target
+(for example because a counted match has a future/missing date), the correction
+is rejected atomically with an explicit error.
+
+History stores who, when, why, player ID, original season and both before/after
+ratings, with pagination. History is immutable: an erroneous correction is fixed
+by a new correction with its own reason, not by erasing the original. The global
+audit also records the before/after values and reason.
+
+Validate these additions with:
+`node --test scripts/admin-operations.test.mjs scripts/admin-operations-ui.test.mjs`.

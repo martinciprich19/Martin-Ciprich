@@ -1,5 +1,7 @@
 'use client'
 
+import { navigationTapFeedback } from '@/lib/haptics'
+
 import { AppBackground } from '@/components/app-background'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
@@ -667,7 +669,7 @@ export default function ProfilePage() {
             const active = activeTab === tab
             return (
               <li key={tab} className="min-w-0 flex-1">
-                <Link href={href} scroll={false} onClick={() => { if (typeof navigator.vibrate === 'function') navigator.vibrate(15); setMenuOpen(false); if (!active) setBottomNavigationTab(tab); setActiveTab(tab); window.scrollTo({ top: 0, behavior: 'instant' }) }} aria-current={active ? 'page' : undefined} className={`flex min-h-14 flex-col items-center justify-center gap-1 px-0.5 text-[9px] font-bold transition-colors ${active ? 'text-app-league' : 'text-app-fg/45 active:text-app-fg/80'}`}>
+                <Link href={href} scroll={false} onClick={() => { navigationTapFeedback(); setMenuOpen(false); if (!active) setBottomNavigationTab(tab); setActiveTab(tab); window.scrollTo({ top: 0, behavior: 'instant' }) }} aria-current={active ? 'page' : undefined} className={`flex min-h-14 flex-col items-center justify-center gap-1 px-0.5 text-[9px] font-bold transition-colors ${active ? 'text-app-league' : 'text-app-fg/45 active:text-app-fg/80'}`}>
                   <span className={`relative flex h-7 w-10 items-center justify-center rounded-full transition-colors ${active ? 'bg-[#ccff00]/15' : ''}`}><Icon size={20} strokeWidth={active ? 2.5 : 1.8} />{tab === 'matches' && pendingMatchApprovalCount > 0 ? <span aria-label={t(`${pendingMatchApprovalCount} zápasov čaká na potvrdenie`, `${pendingMatchApprovalCount} matches awaiting confirmation`)} className="absolute -top-1 right-0 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-black text-app-fg">{pendingMatchApprovalCount > 9 ? '9+' : pendingMatchApprovalCount}</span> : null}{tab === 'messages' && unreadCommunicationCount > 0 ? <span aria-label={t(`${unreadCommunicationCount} neprečítaných`, `${unreadCommunicationCount} unread`)} className="absolute -top-1 right-0 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-black text-app-fg">{unreadCommunicationCount > 9 ? '9+' : unreadCommunicationCount}</span> : null}</span>
                   <span className="max-w-full truncate leading-tight">{t(short, label)}</span>
                 </Link>
