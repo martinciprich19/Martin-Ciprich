@@ -1,6 +1,10 @@
 package sk.rivapadel.apptest;
 
 import android.app.Activity;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.os.BatteryManager;
+import android.os.SystemClock;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.util.Log;
@@ -20,6 +24,7 @@ final class ScreenPreview {
     private final WebView web;
     private ScheduledExecutorService worker;
     private volatile boolean active;
+    private long lastHeartbeat;
     private static final String ENDPOINT = "https://www.rivapadel.app/api/kiosk-preview";
 
     ScreenPreview(Activity activity, WebView web) {
@@ -30,6 +35,7 @@ final class ScreenPreview {
     void start() {
         stop();
         active = true;
+        lastHeartbeat = 0;
         worker = Executors.newSingleThreadScheduledExecutor();
         worker.scheduleWithFixedDelay(this::request, 2, 3, TimeUnit.SECONDS);
     }
@@ -53,6 +59,10 @@ final class ScreenPreview {
         if (!active) return;
         String cookie = CookieManager.getInstance().getCookie(ENDPOINT);
         if (cookie == null || !cookie.contains("riva-kiosk-device=")) return;
+        if (lastHeartbeat == 0 || SystemClock.elapsedRealtime() - lastHeartbeat >= 20000) {
+            heartbeat(cookie);
+            lastHeartbeat = SystemClock.elapsedRealtime();
+        }
         HttpURLConnection connection = null;
         try {
             connection = connection(cookie);
@@ -71,6 +81,37 @@ final class ScreenPreview {
             }
         } catch (Exception error) {
             if (active) Log.e("RivaScreenPreview", "Preview request failed", error);
+        } finally {
+            if (connection != null) connection.disconnect();
+        }
+    }
+
+    private void heartbeat(String cookie) {
+        HttpURLConnection connection = null;
+        try {
+            connection = (HttpURLConnection) new URL("https://www.rivapadel.app/api/device-heartbeat").openConnection();
+            connection.setConnectTimeout(5000);
+            connection.setReadTimeout(5000);
+            connection.setInstanceFollowRedirects(false);
+            connection.setRequestMethod("POST");
+            connection.setRequestProperty("Cookie", cookie);
+            connection.setRequestProperty("X-Riva-Source", "android");
+            connection.setRequestProperty("X-Riva-Version",
+                activity.getPackageManager().getPackageInfo(activity.getPackageName(), 0).versionName);
+            Intent battery = activity.registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+            if (battery != null) {
+                int level = battery.getIntExtra(BatteryManager.EXTRA_LEVEL, -1);
+                int scale = battery.getIntExtra(BatteryManager.EXTRA_SCALE, -1);
+                if (level >= 0 && scale > 0 && level <= scale) {
+                    connection.setRequestProperty("X-Riva-Battery", String.valueOf(Math.round(level * 100f / scale)));
+                }
+                int status = battery.getIntExtra(BatteryManager.EXTRA_STATUS, -1);
+                if (status != -1) connection.setRequestProperty("X-Riva-Charging",
+                    String.valueOf(status == BatteryManager.BATTERY_STATUS_CHARGING || status == BatteryManager.BATTERY_STATUS_FULL));
+            }
+            if (connection.getResponseCode() != 200) throw new Exception("Heartbeat HTTP " + connection.getResponseCode());
+        } catch (Exception error) {
+            if (active) Log.e("RivaScreenPreview", "Device heartbeat failed", error);
         } finally {
             if (connection != null) connection.disconnect();
         }

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { getErrorMessage } from '@/lib/errors'
+import { DeviceTelemetryStatus } from '@/components/device-telemetry-status'
 
 type Device = { id: string; name: string; court_id: number | string | null; device_role: string; created_at: string; revoked_at: string | null }
 type Court = { id: number | string; name: string; is_active: boolean }
@@ -87,8 +88,9 @@ export function ArenaKioskDevices({ arenaId, courts }: { arenaId: string; courts
     <p className="mt-3 text-xs text-app-fg/45">Admin zostáva prihlásený iba tu. Kód je jednorazový; každý kurt má jeden tablet a jeden monitor. Vymazanie údajov cieľovej aplikácie alebo prehliadača odstráni lokálne oprávnenie.</p>
     {error ? <p role="alert" className="mt-4 text-sm text-app-red-200">{error}</p> : null}
     {notice ? <p role="status" className="mt-4 text-sm text-emerald-300">{notice}</p> : null}
-    <ul className="mt-5 space-y-3">{devices.map(device => <li key={device.id} className="flex items-center justify-between gap-3 rounded-xl border border-app-line/10 p-4">
+    <ul className="mt-5 space-y-3">{devices.map(device => <li key={device.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-app-line/10 p-4">
       <div><p className="font-bold">{device.name}</p><p className="text-xs text-app-fg/50">{device.revoked_at ? 'Autorizácia zrušená' : device.device_role === 'scoreboard' ? 'Monitor skóre' : 'Tablet – kiosk'} · {device.court_id === null ? 'Bez priradeného kurtu (staršia autorizácia)' : courts.find(court => String(court.id) === String(device.court_id))?.name ?? `Kurt ${device.court_id}`}</p></div>
+      <DeviceTelemetryStatus deviceId={device.id} revoked={Boolean(device.revoked_at)} />
       {!device.revoked_at ? <button disabled={busy} onClick={() => void revoke(device.id)} className="rounded-lg border border-app-line/20 px-3 py-2 text-sm disabled:opacity-40">Zrušiť autorizáciu</button> : null}
     </li>)}</ul>
   </section>

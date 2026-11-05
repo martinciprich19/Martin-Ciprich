@@ -4,7 +4,7 @@ export function StartupSplash() {
       <div className="startup-splash-mark">
         <div className="startup-splash-aura" />
         <img
-          src="/images/riva-padel-play-together-compact-logo.png?v=2"
+          src="/images/riva-padel-play-together-compact-logo.png?v=3"
           alt=""
           fetchPriority="high"
           decoding="async"

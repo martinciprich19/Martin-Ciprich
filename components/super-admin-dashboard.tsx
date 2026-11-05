@@ -1,6 +1,9 @@
 'use client'
 
 import { AppBackground } from '@/components/app-background'
+import { DeviceTelemetryStatus } from '@/components/device-telemetry-status'
+import { SuperAdminMatchAnalytics } from '@/components/super-admin-match-analytics'
+import { ClickerRentals } from '@/components/clicker-rentals'
 import { createClient } from '@/lib/supabase/client'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -63,12 +66,14 @@ type Props = {
   audit: AuditEntry[]
 }
 
-type Section = 'overview' | 'arenas' | 'devices' | 'system' | 'audit'
+type Section = 'overview' | 'arenas' | 'devices' | 'analytics' | 'rentals' | 'system' | 'audit'
 
 const sections: { id: Section; label: string; icon: typeof Activity }[] = [
   { id: 'overview', label: 'Prehľad', icon: Activity },
   { id: 'arenas', label: 'Arény a správcovia', icon: Building2 },
   { id: 'devices', label: 'Zariadenia', icon: Tablet },
+  { id: 'analytics', label: 'Štatistiky zápasov', icon: Activity },
+  { id: 'rentals', label: 'Prenájmy klikrov', icon: ClipboardList },
   { id: 'system', label: 'Oznámenia', icon: BellRing },
   { id: 'audit', label: 'Audit', icon: ClipboardList },
 ]
@@ -132,12 +137,14 @@ export function SuperAdminDashboard({ arenas, devices, managers, audit }: Props)
         {section === 'overview' ? <Overview arenas={arenas} devices={devices} managers={managers} /> : null}
         {section === 'arenas' ? <ArenaManagement arenas={arenas} managers={managers} busy={busy} runAction={runAction} /> : null}
         {section === 'devices' ? <DeviceManagement devices={devices} arenas={arenas} busy={busy} runAction={runAction} /> : null}
+        {section === 'analytics' ? <SuperAdminMatchAnalytics /> : null}
+        {section === 'rentals' ? <ClickerRentals superAdmin /> : null}
         {section === 'system' ? <SystemAnnouncements busy={busy} runAction={runAction} /> : null}
         {section === 'audit' ? <AuditHistory audit={audit} /> : null}
 
         <section className="mt-7 flex items-start gap-3 rounded-xl border border-amber-300/20 bg-amber-300/[0.06] p-4 text-sm leading-6 text-app-fg/65">
           <AlertTriangle size={18} className="mt-0.5 shrink-0 text-amber-200" aria-hidden="true" />
-          <p>Online stav, batéria, verzia aplikácie, vzdialený reštart, fakturácia, spory a úpravy ELO nie sú zapnuté: aplikácia zatiaľ nemá potrebné telemetrické rozhranie ani pravidlá schvaľovania.</p>
+          <p>Pripravované funkcie: vzdialený reštart, fakturácia, riešenie sporov a manuálne úpravy ELO. Stav zariadení nájdeš v sekcii Zariadenia; batéria a verzia APK vyžadujú Android aplikáciu 1.11.</p>
         </section>
       </div>
     </main>
@@ -297,7 +304,7 @@ function DeviceManagement({ devices, arenas, busy, runAction }: {
     <Panel title="Autorizované kiosky" eyebrow={`${devices.length} ZARIADENÍ`} icon={<Tablet size={17} />}>
       <div className="mb-4 flex items-start gap-2 rounded-lg bg-app-ink/60 p-3 text-xs leading-5 text-app-fg/55">
         <Radio size={15} className="mt-0.5 shrink-0 text-app-league" />
-        Táto evidencia ukazuje udelené a odvolané oprávnenia. Nie je to živý stav pripojenia zariadení.
+        Stav sa obnovuje každých 15 sekúnd. Po 90 sekundách bez signálu sa zobrazí „Bez spojenia“. Aktívna aréna neznamená pripojené zariadenie.
       </div>
       {devices.length === 0 ? <p className="text-sm text-app-fg/50">Zatiaľ nie sú autorizované žiadne kiosk zariadenia.</p> : (
         <ul className="divide-y divide-app-line/10">
@@ -305,6 +312,7 @@ function DeviceManagement({ devices, arenas, busy, runAction }: {
             <li key={device.id} className="flex flex-wrap items-center justify-between gap-3 py-3 first:pt-0">
               <div>
                 <p className="font-bold">{device.name} · {device.deviceRole === 'scoreboard' ? 'TV' : 'Tablet'}</p>
+                <DeviceTelemetryStatus deviceId={device.id} revoked={Boolean(device.revokedAt)} />
                 <p className="mt-1 text-xs text-app-fg/45">{arenaNames.get(device.arenaId) ?? `Aréna ${device.arenaId}`} · {device.courtId ? `Kurt ID ${device.courtId}` : 'Bez priradeného kurtu'} · autorizované {formatDate(device.createdAt)}</p>
                 {device.courtId ? <Link href={`/scoreboard/${encodeURIComponent(device.courtId)}`} target="_blank" className="mt-1 inline-block text-xs text-app-league">Monitor skóre kurtu</Link> : null}
               </div>

@@ -7,7 +7,7 @@ web pages and backend; nothing is copied into a separate database.
 
 ## Isolation and installation
 
-- App name: **RIVA Padel Test**, version 1.10.
+- App name: **RIVA Padel Test**, version 1.11.
 - Package: `sk.rivapadel.apptest`, distinct from the Chrome-installed PWA,
   standalone kiosk and Fully helper. It installs alongside them.
 - Cookies, login state and storage are private to this app. Log in separately.
@@ -61,6 +61,20 @@ Use the existing Android app, not a Chrome tab: its private WebView cookie ident
 the installation and its native clicker input remains available during matches.
 Pairing itself requires no new APK if the tablet already runs the native-clicker
 version. The private live admin screen preview requires Android app version 1.10.
+
+Device connection monitoring requires `scripts/084_device_telemetry.sql` after
+081 and a web deployment. Visible browser pages report every 20 seconds; Android
+1.11 reports battery percentage, charging and APK version while foregrounded,
+including native clicker setup. Older APKs report browser presence only.
+Arena managers and Super Admin see the last signal in device lists refreshed
+every 15 seconds. A signal up to 90 seconds old is online; older means **Bez
+spojenia**, not a proven hardware failure. No signal yet means unknown.
+Battery/version are device-reported and may be stale: always check the last
+signal. TV browsers do not report battery or APK version. Only the latest
+server-timestamped state is stored; no history, location or network names.
+Revoked devices and suspended arenas/courts cannot report. App backgrounding,
+sleep, browser timer throttling and network failures can cause a stale status.
+Install APK 1.11 over the existing app without clearing data to preserve pairing.
 
 For the preview apply `scripts/083_kiosk_screen_preview.sql` after 081, deploy
 the web, then install the new `android/riva-app/dist/riva-padel-test.apk` over
@@ -171,7 +185,7 @@ handling. Each feature below needs a real-device test before release.
 Version 1.6 uses the approved RIVA PLAY TOGETHER artwork as the Android launcher
 icon. Web logos, browser/PWA icons and notification icons use the same image;
 web changes require a separate deployment. Generated variants preserve the
-complete image and its padding. Regenerate using
+complete artwork. Regenerate using
 `node scripts\generate-riva-brand-assets.mjs <approved-image-path>`.
 
 Version 1.8 removes only the approved image's empty margins for the native launcher
@@ -179,7 +193,13 @@ icon, making the artwork about 83% of the visible icon width. Android 8+ uses an
 adaptive icon with a dark background and a 72dp artwork layer within the 108dp
 canvas, avoiding legacy-icon shrinking by the launcher. Older Android retains
 a bitmap fallback. All bright artwork fits the guaranteed 66dp safe circle,
-including the PLAY TOGETHER text. Web/PWA assets and in-app logos are unchanged.
+including the PLAY TOGETHER text. Web/PWA assets and in-app logos now use the same
+83% artwork width: only empty source margins are removed, while component frames
+and layout dimensions stay unchanged. This includes the startup splash, Apple
+touch icon, browser icon and push notifications. Web asset URLs use revision 3
+to invalidate cached images; existing installed PWA icons may require re-adding
+the home-screen shortcut. The native icon itself is unchanged by this web update,
+so no new APK is needed for the logo adjustment.
 Run `node scripts\generate-riva-brand-assets.mjs` without an argument to regenerate
 from the saved approved source. Install the new APK as an update; actual launcher
 size and icon cache refresh still need verification on the device.

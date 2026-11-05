@@ -36,15 +36,20 @@ test('manifest references the new artwork in correctly sized standalone app icon
   assert.equal(result.theme_color, '#0b0f17')
   assert.equal(result.background_color, '#0b0f17')
   assert.deepEqual(result.icons.map((icon) => [icon.src, icon.sizes]), [
-    ['/images/riva-padel-play-together-compact-icon-192.png?v=2', '192x192'],
-    ['/images/riva-padel-play-together-compact-icon-512.png?v=2', '512x512'],
+    ['/images/riva-padel-play-together-compact-icon-192.png?v=3', '192x192'],
+    ['/images/riva-padel-play-together-compact-icon-512.png?v=3', '512x512'],
   ])
 })
 
 test('browser, Apple and PWA assets use the same new logo without cropping', async () => {
   const logo = await readFile(new URL('../public/images/riva-padel-play-together-compact-logo.png', import.meta.url))
   const approved = await readFile(new URL('../public/images/riva-approved-logo.png', import.meta.url))
-  assert.deepEqual(await sharp(logo).raw().toBuffer(), await sharp(approved).resize(768, 768).raw().toBuffer())
+  const nativeIcon = await readFile(new URL('../android/riva-app/res/drawable/app_icon.png', import.meta.url))
+  assert.ok((await sharp(logo).raw().toBuffer()).equals(
+    await sharp(approved).extract(await artworkCrop(approved)).resize(768, 768).raw().toBuffer()),
+  'Web logo must use the same uncropped artwork bounds as the native icon')
+  assert.deepEqual(await sharp(nativeIcon).raw().toBuffer(),
+    await sharp(approved).extract(await artworkCrop(approved)).resize(512, 512).raw().toBuffer())
   const { data, info } = await sharp(logo).removeAlpha().raw().toBuffer({ resolveWithObject: true })
   let left = info.width
   let right = -1
@@ -60,7 +65,8 @@ test('browser, Apple and PWA assets use the same new logo without cropping', asy
       bottom = Math.max(bottom, y)
     }
   }
-  assert.ok((right - left + 1) / info.width >= 0.45, 'Approved artwork must remain visible without cropping its original padding')
+  assert.ok((right - left + 1) / info.width >= 0.82, 'Artwork must occupy at least 82% of the frame width')
+  assert.ok((right - left + 1) / info.width <= 0.85, 'Artwork must retain a safe margin')
   assert.ok(left > 0 && top > 0 && right < info.width - 1 && bottom < info.height - 1, 'Entire artwork must retain padding')
   for (const [size, name] of [
     [192, 'riva-padel-play-together-compact-icon-192.png'],
@@ -73,7 +79,7 @@ test('browser, Apple and PWA assets use the same new logo without cropping', asy
     assert.equal(metadata.height, size)
     assert.deepEqual(
       await sharp(icon).raw().toBuffer(),
-      await sharp(logo).resize(size, size, { fit: 'contain', background: '#0b0f19' }).raw().toBuffer(),
+      await sharp(approved).extract(await artworkCrop(approved)).resize(size, size).raw().toBuffer(),
     )
   }
   const [layout, component] = await Promise.all([
@@ -83,7 +89,24 @@ test('browser, Apple and PWA assets use the same new logo without cropping', asy
   assert.match(layout, /riva-padel-play-together-compact-icon-192\.png/)
   assert.match(layout, /riva-padel-play-together-compact-apple-touch-icon\.png/)
   assert.match(component, /riva-padel-play-together-compact-logo\.png/)
+  const splash = await readSource('../components/startup-splash.tsx')
+  const worker = await readSource('../public/firebase-messaging-sw.js')
+  for (const source of [layout, component, splash, worker]) assert.match(source, /compact-.*\.png\?v=3/)
 })
+
+async function artworkCrop(approved) {
+  const { data, info } = await sharp(approved).removeAlpha().raw().toBuffer({ resolveWithObject: true })
+  let left = info.width, right = -1, top = info.height, bottom = -1
+  for (let y = 0; y < info.height; y++) for (let x = 0; x < info.width; x++) {
+    const offset = (y * info.width + x) * info.channels
+    if (Math.max(...data.subarray(offset, offset + 3)) <= 150) continue
+    left = Math.min(left, x); right = Math.max(right, x)
+    top = Math.min(top, y); bottom = Math.max(bottom, y)
+  }
+  const size = Math.ceil(Math.max(right - left + 1, bottom - top + 1) / 0.83)
+  return { left: Math.floor((left + right + 1 - size) / 2),
+    top: Math.floor((top + bottom + 1 - size) / 2), width: size, height: size }
+}
 
 test('Android adaptive icon enlarges the approved artwork without cropping and retains legacy support', async () => {
   const approved = await readFile(new URL('../public/images/riva-approved-logo.png', import.meta.url))

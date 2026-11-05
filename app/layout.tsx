@@ -6,6 +6,7 @@ import { PushNotificationListener } from '@/components/push-notifications'
 import { LeagueProvider } from '@/components/league-provider'
 import { PageReloadToolbar } from '@/components/page-reload-button'
 import { StartupSplash } from '@/components/startup-splash'
+import { DeviceHeartbeat } from '@/components/device-heartbeat'
 
 const inter = Inter({
   subsets: ['latin', 'latin-ext'],
@@ -26,8 +27,8 @@ export const metadata: Metadata = {
     'apple-mobile-web-app-capable': 'yes',
   },
   icons: {
-    icon: [{ url: '/images/riva-padel-play-together-compact-icon-192.png?v=2', type: 'image/png', sizes: '192x192' }],
-    apple: [{ url: '/images/riva-padel-play-together-compact-apple-touch-icon.png?v=2', type: 'image/png', sizes: '180x180' }],
+    icon: [{ url: '/images/riva-padel-play-together-compact-icon-192.png?v=3', type: 'image/png', sizes: '192x192' }],
+    apple: [{ url: '/images/riva-padel-play-together-compact-apple-touch-icon.png?v=3', type: 'image/png', sizes: '180x180' }],
   },
 }
 
@@ -42,5 +43,5 @@ export const viewport: Viewport = {
 }
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="sk" className={`${inter.variable} dark`}><body><LanguageProvider><LeagueProvider><StartupSplash /><PushNotificationListener /><PageReloadToolbar />{children}</LeagueProvider></LanguageProvider></body></html>
+  return <html lang="sk" className={`${inter.variable} dark`}><body><LanguageProvider><LeagueProvider><StartupSplash /><PushNotificationListener /><DeviceHeartbeat /><PageReloadToolbar />{children}</LeagueProvider></LanguageProvider></body></html>
 }

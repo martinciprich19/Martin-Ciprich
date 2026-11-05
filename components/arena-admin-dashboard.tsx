@@ -5,6 +5,7 @@ import { Building2, ExternalLink, LoaderCircle, Plus, RefreshCw } from 'lucide-r
 import { createClient } from '@/lib/supabase/client'
 import { ArenaSponsorAdsManager } from '@/components/arena-sponsor-ads-manager'
 import { ArenaKioskDevices } from '@/components/arena-kiosk-devices'
+import { ClickerRentals } from '@/components/clicker-rentals'
 
 type ManagedArena = {
   id: string
@@ -184,6 +185,7 @@ export function ArenaAdminDashboard({ arenas }: { arenas: ManagedArena[] }) {
           )}
         </section>
 
+        <ClickerRentals key={`rentals-${selectedArena.id}`} arenaId={selectedArena.id} courts={loading ? [] : courts.filter(court => String(court.arena_id) === selectedArena.id)} />
         <ArenaKioskDevices key={selectedArena.id} arenaId={selectedArena.id} courts={courts} />
         <ArenaSponsorAdsManager arenaId={selectedArena.id} />
 

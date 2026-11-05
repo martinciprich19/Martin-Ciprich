@@ -51,6 +51,7 @@ test('tablets bind to one active court, retain identity during suspension and lo
     await db.exec(await read('080_court_bound_kiosks.sql'))
     await db.exec(await read('081_remote_device_pairing.sql'))
     await db.exec(await read('083_kiosk_screen_preview.sql'))
+    await db.exec(await read('084_device_telemetry.sql'))
     const previousMatch = '00000000-0000-0000-0000-000000000021'
     const nextMatch = '00000000-0000-0000-0000-000000000022'
     await db.query('insert into live_matches(id,court_id) values ($1,7),($2,null)', [previousMatch, nextMatch])
@@ -64,6 +65,21 @@ test('tablets bind to one active court, retain identity during suspension and lo
       await assert.rejects(db.query("select authorize_court_kiosk_device(1,$1,'Tablet',$2)", [courtId, 'a'.repeat(64)]), /aktívny kurt/)
     }
     const id = (await db.query("select authorize_court_kiosk_device(1,7,'Tablet',$1) as id", ['a'.repeat(64)])).rows[0].id
+    await db.exec('reset role; set role anon')
+    await assert.rejects(db.query("select report_device_heartbeat($1,'android',101,false,'1.11')", ['a'.repeat(64)]), /Neplatné/)
+    await assert.rejects(db.query("select report_device_heartbeat($1,'browser',50,false,null)", ['a'.repeat(64)]), /Neplatné/)
+    await assert.rejects(db.query("select report_device_heartbeat($1,'android',50,true,'1.11')", ['b'.repeat(64)]), /Neautorizované/)
+    assert.equal((await db.query("select report_device_heartbeat($1,'android',50,true,'1.11') as updated", ['a'.repeat(64)])).rows[0].updated, true)
+    assert.equal((await db.query("select report_device_heartbeat($1,'android',20,false,'1.11') as updated", ['a'.repeat(64)])).rows[0].updated, false)
+    await db.exec('reset role; set role authenticated')
+    const telemetry = (await db.query('select battery_percent,is_charging,app_version,last_seen_at from arena_kiosk_devices')).rows[0]
+    assert.equal(telemetry.battery_percent, 50)
+    assert.equal(telemetry.is_charging, true)
+    assert.equal(telemetry.app_version, '1.11')
+    assert.ok(telemetry.last_seen_at)
+    await db.query("select set_config('request.user',$1,false)", [stranger])
+    assert.equal((await db.query('select last_seen_at from arena_kiosk_devices')).rows.length, 0)
+    await db.query("select set_config('request.user',$1,false)", [manager])
     await assert.rejects(db.query("select authorize_court_kiosk_device(1,7,'Second',$1)", ['b'.repeat(64)]), /už má/)
     assert.equal((await db.query('select court_id from arena_kiosk_devices')).rows[0].court_id, 7)
     await db.query('select * from request_kiosk_preview(7)')
@@ -91,15 +107,19 @@ test('tablets bind to one active court, retain identity during suspension and lo
     assert.deepEqual((await db.query('select * from get_kiosk_device_context($1)', ['b'.repeat(64)])).rows, [])
     await assert.rejects(db.query("select authorize_court_kiosk_device(1,7,'Tablet',$1)", ['b'.repeat(64)]), /permission denied/)
     await db.exec('reset role; update arena_courts set is_active=false where id=7; set role anon')
+    await assert.rejects(db.query("select report_device_heartbeat($1,'browser',null,null,null)", ['a'.repeat(64)]), /Neautorizované/)
     assert.deepEqual((await db.query('select * from get_kiosk_device_context($1)', ['a'.repeat(64)])).rows, [{ court_id: 7, available: false }])
     assert.equal((await db.query('select is_authorized_kiosk_device($1) as ok', ['a'.repeat(64)])).rows[0].ok, false)
     await db.exec('reset role; update arena_courts set is_active=true where id=7; update arenas set is_active=false where id=1; set role anon')
     assert.equal((await db.query('select * from get_kiosk_device_context($1)', ['a'.repeat(64)])).rows[0].available, false)
     await db.exec('reset role; update arenas set is_active=true where id=1; set role authenticated')
     await db.query('select revoke_kiosk_device($1)', [id])
+    await db.exec('reset role; set role anon')
+    await assert.rejects(db.query("select report_device_heartbeat($1,'browser',null,null,null)", ['a'.repeat(64)]), /Neautorizované/)
     assert.deepEqual((await db.query('select * from get_kiosk_device_context($1)', ['a'.repeat(64)])).rows, [])
 
     // Super Admin authorization survives logout but not removal of the trusted role.
+    await db.exec('reset role; set role authenticated')
     await db.query("select set_config('request.user',$1,false)", [owner])
     await db.exec(`set request.claims = '{"app_metadata":{"role":"super_admin"}}'`)
     await db.query("select authorize_court_kiosk_device(2,9,'Owner tablet',$1)", ['c'.repeat(64)])
@@ -178,6 +198,7 @@ test('admin claims the target code without navigating or signing out the admin d
           useCallback: fn => fn, useEffect: () => {},
         }
         if (name === '@/lib/errors') return { getErrorMessage: error => error.message }
+        if (name === '@/components/device-telemetry-status') return { DeviceTelemetryStatus: 'DeviceTelemetryStatus' }
         if (name === '@/lib/notifications') return { disablePushNotifications: async () => calls.push(['disablePush']) }
         if (name === '@/lib/supabase/client') return { createClient: () => ({
           rpc: async (name, args) => {

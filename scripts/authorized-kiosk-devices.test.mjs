@@ -142,6 +142,8 @@ test('proxy ignores legacy kiosk cookies and URL hints; only a validated device 
     assert.match(r.url, /\/match\?mode=kiosk&courtId=7$/)
   }
   deviceRole = 'scoreboard'
+  r = await proxy(request('/api/device-heartbeat', [['riva-kiosk-device',token]]))
+  assert.equal(r.kind, 'next')
   r = await proxy(request('/match?id=game', [['riva-kiosk-device',token]]))
   assert.match(r.url, /\/scoreboard\/7$/)
   r = await proxy(request('/scoreboard/99', [['riva-kiosk-device',token]]))

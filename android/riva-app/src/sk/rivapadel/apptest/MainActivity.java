@@ -139,7 +139,7 @@ public final class MainActivity extends Activity implements InputManager.InputDe
         web.getSettings().setMediaPlaybackRequiresUserGesture(false);
         web.addJavascriptInterface(new NativePushBridge(), "RivaNativePush");
         web.getSettings().setUserAgentString(web.getSettings().getUserAgentString()
-            + " RivaAndroidKiosk/1 RivaPadelTest/1");
+            + " RivaAndroidKiosk/1 RivaPadelTest/1 RivaTelemetry/1");
         CookieManager.getInstance().setAcceptCookie(true);
         CookieManager.getInstance().setAcceptThirdPartyCookies(web, false);
         web.setWebViewClient(new WebViewClient() {
