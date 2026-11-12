@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import vm from 'node:vm'
 import test from 'node:test'
+import * as rankingOrder from '../lib/ranking-order.ts'
 
 const require = createRequire(import.meta.url)
 const swc = require('next/dist/build/swc')
@@ -57,6 +58,7 @@ function harness(country = 'SK', deferred = false) {
       }),
     },
     '@/lib/errors': { getErrorMessage: error => error.message },
+    '@/lib/ranking-order': rankingOrder,
     '@/components/player-avatar': { PlayerAvatar: 'avatar' },
   }
   const module = { exports: {} }
@@ -124,6 +126,7 @@ for (const country of ['SK', 'NL']) {
     assert.match(rows[2], /SK/)
     nodes(tree, 'input')[0].props.onChange({ target: { value: 'Slovak' } })
     assert.equal(nodes(view.render(), 'li').length, 1, 'European name search still works')
+    assert.match(text(nodes(view.render(), 'li')[0]), /^03Slovak Player/, 'Search preserves actual ranking')
     nodes(tree, 'input')[0].props.onChange({ target: { value: '' } })
     tab(tree, 'Národný rebríček').props.onClick()
     view.render()

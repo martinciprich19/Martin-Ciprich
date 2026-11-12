@@ -17,6 +17,12 @@ does not apply SQL to Supabase.
 
 ## Country, language and membership
 
+The profile displays national and regional/provincial positions for the player's
+own national league using the same profile list, ELO, wins and region matching as
+the national leaderboard. Search filters do not renumber leaderboard places.
+If the profile or its region is missing, or rankings cannot be loaded, the
+position is unavailable instead of assuming first place.
+
 - Registration explicitly selects Slovakia or the Netherlands and a subdivision.
   Selecting a country defaults the language to Slovak or Dutch. The user can
   independently select English, Slovak or Dutch before submitting.
@@ -73,3 +79,16 @@ In the browser, verify the Dutch registration form offers twelve provinces,
 switching back restores eight Slovak regions, and language selection remains
 independent of browsing country. Verify authenticated ranking and result entry
 with real test accounts in each country after both migrations are applied.
+# Signup profile repair
+
+If Postgres logs show `column "qr_code" of relation "proffiles" does not exist`
+during an `auth.users` insert, and the deployed `on_auth_user_created` trigger
+calls `public.handle_new_user()`, apply `scripts/092_repair_signup_profile.sql`
+in the Supabase SQL Editor. It checks the trigger and bigint identity profile ID
+before replacing the incompatible function. It neither backfills existing users
+nor changes the schema or existing profiles. The existing profile insert
+triggers still populate and validate national league, language, region and gender.
+An existing profile with the same email causes an explicit error instead of
+silently creating a duplicate or claiming it; investigate such cases separately.
+After installation, verify a new signup and email confirmation on the deployed
+app and inspect Auth/Postgres logs if it still fails.

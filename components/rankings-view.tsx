@@ -14,6 +14,7 @@ import { getErrorMessage } from '@/lib/errors'
 import { PlayerAvatar } from '@/components/player-avatar'
 import type { Gender } from '@/lib/profiles'
 import type { CountryCode } from '@/lib/countries'
+import { compareRankingPlayers, normalizeRankingRegion } from '@/lib/ranking-order'
 
 type RankingTab = 'national' | 'european' | 'arenas'
 type RankingPlayer = {
@@ -36,10 +37,6 @@ type RankingPlayer = {
 
 const ALL_REGIONS = ''
 const fieldClass = 'w-full rounded-lg border border-app-line/10 bg-app-panel px-3 py-2.5 text-sm text-app-fg outline-none focus:border-[#ccff00]'
-
-function normalizeRegion(value: string) {
-  return value.trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').toLowerCase().replace(/\s*kraj$/, '').trim()
-}
 
 type RankingsViewProps = {
   onMessage?: (player: { id: string; name: string; elo: number; region: string }) => void
@@ -134,17 +131,17 @@ function CountryRankingsView({ onMessage, publicView = false }: RankingsViewProp
   }, [rankingCountry, rankingScope, publicView])
 
   const visiblePlayers = useMemo(() => {
-    const selectedRegion = normalizeRegion(region)
-    const showAllRegions = !selectedRegion || selectedRegion === normalizeRegion('Všetky kraje') || selectedRegion === normalizeRegion('Celé Slovensko')
+    const selectedRegion = normalizeRankingRegion(region)
+    const showAllRegions = !selectedRegion || selectedRegion === normalizeRankingRegion('Všetky kraje') || selectedRegion === normalizeRankingRegion('Celé Slovensko')
     return players
       .filter((player) => {
         if (tab === 'arenas') return Boolean(arenaId) && (player.autoVenueId || player.homeVenueId) === arenaId
         if (tab === 'european') return true
-        return showAllRegions || normalizeRegion(player.region) === selectedRegion
+        return showAllRegions || normalizeRankingRegion(player.region) === selectedRegion
       })
-      .filter((player) => player.name.toLowerCase().includes(search.trim().toLowerCase()))
-      .sort((first, second) => second.elo - first.elo || second.wins - first.wins)
+      .sort(compareRankingPlayers)
       .map((player, index) => ({ ...player, rank: index + 1 }))
+      .filter((player) => player.name.toLowerCase().includes(search.trim().toLowerCase()))
   }, [players, tab, arenaId, region, search])
 
   function openMessage(player: RankingPlayer) {

@@ -69,6 +69,10 @@ for (const senderType of ['uuid', 'bigint']) {
       const migration = await readFile(new URL('066_repair_activity_notifications.sql', import.meta.url), 'utf8')
       await db.exec(migration)
       await db.exec(migration)
+      await db.exec(await readFile(new URL('090_push_notification_preferences.sql', import.meta.url), 'utf8'))
+      const acceptanceMigration = await readFile(new URL('091_acceptance_notifications.sql', import.meta.url), 'utf8')
+      await db.exec(acceptanceMigration)
+      await db.exec(acceptanceMigration)
       const identity = async player => {
         await db.exec('reset role')
         await db.query("select set_config('request.email',$1,false)", [`player${player}@test.invalid`])
@@ -86,6 +90,16 @@ for (const senderType of ['uuid', 'bigint']) {
       assert.equal((await db.query('select * from notifications')).rows.length, 0)
       await db.exec('reset role')
       await db.exec("update friendships set status='accepted'")
+      const friendAccepted = (await db.query("select * from notifications where type='friend_request_accepted'")).rows
+      assert.equal(friendAccepted.length, 1)
+      assert.equal(friendAccepted[0].user_id, 1)
+      assert.equal(friendAccepted[0].sender_profile_id, 2)
+      assert.match(friendAccepted[0].message, /Player 2 prijal/)
+      await db.exec("update friendships set status='accepted'")
+      assert.equal((await db.query("select count(*)::int as n from notifications where type='friend_request_accepted'")).rows[0].n, 1)
+      await db.exec('set role service_role')
+      assert.deepEqual((await db.query('select push_notification_tokens($1) as token', [friendAccepted[0].id])).rows.map(row => row.token), ['player-1-device-token-long-enough'])
+      await db.exec('reset role')
       await identity(1)
       const invitation = (await db.query('select create_pair_invitation($1) as id', [2])).rows[0].id
       await identity(2)
@@ -96,15 +110,18 @@ for (const senderType of ['uuid', 'bigint']) {
       const challenge = (await db.query(`select create_challenge(1,2,3,4,now()+interval '1 day',null) as id`)).rows[0].id
       await db.exec('reset role')
       const notices = (await db.query('select * from notifications order by type,user_id')).rows
-      assert.equal(notices.length, 6)
+      assert.equal(notices.length, 7)
+      assert.equal(notices.filter(row => row.type === 'friend_request_accepted').length, 1)
       for (const type of ['friend_request', 'message', 'pair_invitation']) {
         const found = notices.filter(row => row.type === type)
         assert.equal(found.length, 1)
         assert.equal(found[0].user_id, 2)
       }
       assert.deepEqual(notices.filter(row => row.type === 'challenge_request').map(row => row.user_id), [2, 3, 4])
-      assert.ok(notices.every(row => row.sender_profile_id === 1 && row.sender_id === null
+      assert.ok(notices.filter(row => row.type !== 'friend_request_accepted').every(row => row.sender_profile_id === 1 && row.sender_id === null
         && !row.is_read && row.title && row.message.includes('Player 1') && row.body === row.message))
+      assert.ok(notices.filter(row => row.type === 'friend_request_accepted').every(row => row.sender_profile_id === 2
+        && row.sender_id === null && !row.is_read && row.message.includes('Player 2') && row.body === row.message))
       assert.ok(notices.every(row => !row.message.includes('Secret chat text')))
       assert.ok(notices.filter(row => row.type === 'challenge_request').every(row => row.challenge_id === challenge))
       await db.exec('set role service_role')
@@ -119,15 +136,38 @@ for (const senderType of ['uuid', 'bigint']) {
       for (const player of [3, 4]) {
         await identity(player)
         assert.equal((await db.query('select * from notifications')).rows.length, 1)
+        if (player === 3) {
+          await db.query('select respond_to_pair_challenge($1,true)', [challenge])
+          await db.exec('reset role')
+          assert.equal((await db.query("select count(*)::int as n from notifications where type='challenge_team_accepted'")).rows[0].n, 0)
+          continue
+        }
         await db.query('select respond_to_pair_challenge($1,true)', [challenge])
       }
       await db.exec('reset role')
       assert.equal((await db.query('select status from challenges')).rows[0].status, 'accepted')
+      const acceptedNotices = (await db.query(`select id,user_id,type,title,message,source_activity_key,challenge_id
+        from notifications where type='challenge_team_accepted' order by user_id`)).rows
+      assert.deepEqual(acceptedNotices.map(row => row.user_id), [1, 2])
+      assert.ok(acceptedNotices.every(row => row.title === 'Súperova dvojica prijala výzvu'
+        && row.message.includes('Player 3 & Player 4') && row.challenge_id === null
+        && row.source_activity_key === `challenge_pair_accepted:${challenge}`))
+      await db.exec('set role service_role')
+      for (const notice of acceptedNotices) {
+        assert.deepEqual((await db.query('select push_notification_tokens($1) as token', [notice.id])).rows.map(row => row.token),
+          [`player-${notice.user_id}-device-token-long-enough`])
+      }
+      await db.exec('reset role')
+      await db.exec(`update proffiles set settings='{"emailChallenges":false}' where id=2`)
+      await db.exec('set role service_role')
+      assert.deepEqual((await db.query("select push_notification_tokens($1) as token", [acceptedNotices[1].id])).rows, [])
+      await db.exec('reset role')
       assert.equal((await db.query("select is_read from notifications where type='message'")).rows[0].is_read, true)
       assert.equal((await db.query('select is_read from messages')).rows[0].is_read, true)
-      assert.equal((await db.query('select count(*)::int as n from notifications')).rows[0].n, 6)
+      assert.equal((await db.query('select count(*)::int as n from notifications')).rows[0].n, 9)
       await db.exec(migration)
-      assert.equal((await db.query('select count(*)::int as n from notifications')).rows[0].n, 6)
+      await db.exec(acceptanceMigration)
+      assert.equal((await db.query('select count(*)::int as n from notifications')).rows[0].n, 9)
       // Even a repeated execution of the new trigger cannot duplicate a source event.
       await db.exec(`create trigger test_duplicate after insert on messages
         for each row execute function notify_activity_recipient();`)

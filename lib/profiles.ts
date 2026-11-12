@@ -146,13 +146,21 @@ export async function fetchVisiblePlayerPhone(profileId: string): Promise<string
 export async function fetchPlayerProfiles(countryOrOptions?: CountryCode | { includeDeleted?: boolean }, options: { includeDeleted?: boolean } = {}): Promise<PlayerProfile[]> {
   const country = typeof countryOrOptions === 'string' ? countryOrOptions : undefined
   const { includeDeleted = false } = typeof countryOrOptions === 'object' ? countryOrOptions : options
-  const { data, error } = await withSeasonColumns((columns) => {
-    let query = createClient().from('proffiles').select(columns)
-    if (country) query = query.eq('country_code', country)
-    return (includeDeleted ? query : query.not('email', 'like', `%${DELETED_PROFILE_EMAIL_DOMAIN}`)).order('full_name', { ascending: true })
-  }, PUBLIC_PROFILE_COLUMNS)
-  if (error) throw error
-  return ((data ?? []) as unknown as ProfileRow[]).map((row) => normalizeProfile(row))
+  const profiles: PlayerProfile[] = []
+  const pageSize = 500
+  for (let start = 0; ; start += pageSize) {
+    const { data, error } = await withSeasonColumns((columns) => {
+      let query = createClient().from('proffiles').select(columns)
+      if (country) query = query.eq('country_code', country)
+      return (includeDeleted ? query : query.not('email', 'like', `%${DELETED_PROFILE_EMAIL_DOMAIN}`))
+        .order('full_name', { ascending: true }).order('id', { ascending: true }).range(start, start + pageSize - 1)
+    }, PUBLIC_PROFILE_COLUMNS)
+    if (error) throw error
+    const rows = (data ?? []) as unknown as ProfileRow[]
+    profiles.push(...rows.map((row) => normalizeProfile(row)))
+    if (rows.length < pageSize) break
+  }
+  return profiles
 }
 
 // Resets the seasonal ELO after a season boundary (1. január / 1. júl). No-op otherwise.

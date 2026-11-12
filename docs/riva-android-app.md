@@ -182,6 +182,12 @@ handling. Each feature below needs a real-device test before release.
 
 ## Native clickers
 
+Version 1.14 fixes a false "clicker temporarily disconnected" toast at startup.
+The unassigned ID sentinel (-1) is no longer treated as a connected clicker by
+the disconnect predicate. Ordinary player navigation has no clicker warning;
+real assigned-device disconnects still retain their warning and team mapping.
+Install APK 1.14 as an update; no database or web deployment is required.
+
 Version 1.13 fixes bottom-navigation feedback in the Android WebView by exposing
 `RivaNativeHaptics.tap()` and calling Android `performHapticFeedback(KEYBOARD_TAP)`
 on the UI thread. It only runs for a trusted foreground page, is rate-limited to

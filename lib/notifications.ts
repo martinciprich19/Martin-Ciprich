@@ -101,6 +101,8 @@ export async function fetchNotifications(userId: string | number): Promise<Leagu
       : row.type === 'match_finished' ? 'Zápas sa skončil'
       : row.type === 'match_paused' ? 'Zápas prerušený'
       : row.type === 'friend_request' ? 'Žiadosť o priateľstvo'
+      : row.type === 'friend_request_accepted' ? 'Žiadosť o priateľstvo prijatá'
+      : row.type === 'challenge_team_accepted' ? 'Súperova dvojica prijala výzvu'
       : row.type === 'pair_invitation' ? 'Pozvanie do dvojice'
       : ['message', 'new_message', 'direct_message'].includes(String(row.type)) ? 'Nová správa'
       : ['pair_challenge', 'challenge_request'].includes(String(row.type)) ? 'Nová výzva na zápas'

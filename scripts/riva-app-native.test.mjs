@@ -94,6 +94,7 @@ test('real native clicker session and navigation policy preserve team identity a
           check(!AppPolicy.resumable(AppPolicy.HOME),"home not match");
           check(!AppPolicy.resumable("https://www.rivapadel.app/match?mode=kiosk"),"selection not match");
           ClickerSession s=new ClickerSession();
+          check(!s.invalidates(-1)&&!s.invalidates(-2)&&!s.invalidates(0),"unassigned startup IDs never disconnect");
           check(!s.blocked()&&!s.confirm(),"selection accessible");
           check(s.track("match1")&&s.blocked(),"match locks");
           check(!s.assign(1,"virtual",true),"no virtual assignment");
@@ -124,6 +125,7 @@ test('real native clicker session and navigation policy preserve team identity a
           check(s.invalidates(16)&&s.invalidates(17)&&!s.invalidates(99),"invalidation");
           s.press(16,24,0);
           s.disconnect(16);s.disconnect(17);
+          check(!s.invalidates(-1)&&!s.invalidates(16)&&!s.invalidates(17),"sleep does not repeat disconnect warnings");
           check(!s.blocked()&&s.nextTeam()==-1,"sleep preserves both team assignments and confirmation");
           check(s.team(16,"first")==-1,"disconnected ID cannot score");
           check(!s.reconnect(26,"unknown",false)&&!s.reconnect(26,"first",true),"unknown and virtual devices rejected");

@@ -318,6 +318,12 @@ test('webhook rejects unauthorized/invalid events and uses stored content and re
   notification = { type: 'friend_request', message: 'Alice ti poslala žiadosť.' }
   assert.equal((await route.POST(request(event))).status, 200)
   assert.equal(delivered.data.title, 'Žiadosť o priateľstvo')
+  notification = { type: 'friend_request_accepted', title: 'Žiadosť o priateľstvo prijatá', message: 'Bob prijal tvoju žiadosť.' }
+  assert.equal((await route.POST(request(event))).status, 200)
+  assert.equal(delivered.data.title, 'Žiadosť o priateľstvo prijatá')
+  notification = { type: 'challenge_team_accepted', title: 'Súperova dvojica prijala výzvu', message: 'Dvojica prijala výzvu.' }
+  assert.equal((await route.POST(request(event))).status, 200)
+  assert.equal(delivered.data.title, 'Súperova dvojica prijala výzvu')
   notification = { type: 'message', message: 'Alice ti poslala novú správu.' }
   assert.equal((await route.POST(request(event))).status, 200)
   assert.equal(delivered.data.title, 'Nová správa')

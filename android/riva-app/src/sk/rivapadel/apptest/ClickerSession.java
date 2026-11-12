@@ -48,7 +48,7 @@ final class ClickerSession {
         return -1;
     }
 
-    boolean invalidates(int id) { return ids[0] == id || ids[1] == id; }
+    boolean invalidates(int id) { return id >= 0 && (ids[0] == id || ids[1] == id); }
 
     boolean reconnect(int id, String descriptor, boolean virtual) {
         if (id < 0 || virtual || descriptor == null || descriptor.isEmpty()) return false;

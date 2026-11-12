@@ -1,5 +1,44 @@
 # Web Push (FCM)
 
+## Notification category switches
+
+Apply migration `090_push_notification_preferences.sql` after 049 and 036 and
+then apply `091_acceptance_notifications.sql` after 066 and 090. Deploy the web changes. The three profile notification switches save immediately
+through an authenticated, own-profile RPC that merges just the selected key.
+Failed saves keep the old switch value and display an error. Category changes
+apply account-wide to all registered Android and browser devices.
+
+The existing JSON keys are retained for compatibility despite their `email`
+prefix; they now control Firebase push, not email delivery:
+
+- `emailChallenges`: `challenge_request`, `pair_challenge` and
+  `challenge_team_accepted` (default enabled).
+- `emailMessages`: `message`, `new_message`, `direct_message` (default enabled).
+- `emailTournaments`: tournament invitation/event and league `news` types
+  including Super Admin `system_announcement` broadcasts (default disabled,
+  explicit opt-in required).
+
+`push_notification_tokens`, used by the shared Android/Web Firebase webhook,
+checks these settings on the server before returning tokens. The master
+`pushAlerts=false` overrides all categories. A category switch does not request
+OS permission or register a device: users still enable **Notifikacie na mobile**
+on each device. In-app inbox rows and badges are independent and are not deleted
+or hidden by push category switches.
+
+Friend requests, pair invitations and match-result/finished/paused alerts
+remain controlled by the master push setting only; the
+three category switches do not claim to control them. Existing already-delivered
+or in-flight pushes cannot be recalled. Do not rerun migration 049 after 090
+without reapplying 090 and 091, as 049 reinstalls the older recipient resolver.
+Migration 091 creates one private notification when a pending friend request is
+accepted, for the original requester. Once both members of the challenged pair
+accept, it notifies both members of the challenging pair. The latter is a
+read-only notification, not another accept/decline action.
+The tournament switch filters notifications when inserted; it does not create
+a tournament invitation sender or replay announcements to newly opted-in users.
+
+Validate with `node --test scripts/push-preferences.test.mjs`.
+
 ## Deployment setup
 
 1. Run [049_web_push_notifications.sql](../scripts/049_web_push_notifications.sql)

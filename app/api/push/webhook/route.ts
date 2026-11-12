@@ -50,6 +50,8 @@ export async function POST(request: Request) {
       pair_invitation: 'Pozvanie do dvojice',
       pair_challenge: 'Nová výzva na zápas',
       challenge_request: 'Nová výzva na zápas',
+      challenge_team_accepted: 'Súperova dvojica prijala výzvu',
+      friend_request_accepted: 'Žiadosť o priateľstvo prijatá',
       match_result: 'Potvrď výsledok',
       message: 'Nová správa',
       new_message: 'Nová správa',

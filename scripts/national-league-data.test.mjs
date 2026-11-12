@@ -12,13 +12,16 @@ function dataLayer(rows = {}) {
       const query = new Proxy({}, {
         get(_, key) {
           if (key === 'then') return (resolve) => {
-            const value = rows[table] ?? []
+            let value = rows[table] ?? []
+            const range = call.operations.find(op => op[0] === 'range')
+            if (range && Array.isArray(value)) value = value.slice(range[1], range[2] + 1)
             const data = call.operations.some(op => op[0] === 'maybeSingle') || Array.isArray(value) ? value : [value]
             resolve({ data, error: null, count: 0 })
           }
           return (...args) => { call.operations.push([key, ...args]); return query }
         },
       })
+
       return query
     },
   }
@@ -41,6 +44,20 @@ function dataLayer(rows = {}) {
   }
   return { calls, load }
 }
+
+test('player directories fetch all pages with deterministic tie order', async () => {
+  const rows = Array.from({ length: 1105 }, (_, i) => ({
+    id: i + 1, full_name: `Player ${i + 1}`, email: `player${i + 1}@test.invalid`,
+    country_code: 'SK', elo_rating: 1000, matches_won: 0,
+  }))
+  const { calls, load } = dataLayer({ proffiles: rows })
+  const result = await load('@/lib/profiles').fetchPlayerProfiles('SK')
+  assert.equal(result.length, 1105)
+  assert.deepEqual(calls.map(call => call.operations.find(op => op[0] === 'range')),
+    [['range', 0, 499], ['range', 500, 999], ['range', 1000, 1499]])
+  assert.ok(calls.every(call => call.operations.some(op => op[0] === 'eq' && op[1] === 'country_code' && op[2] === 'SK')))
+  assert.ok(calls.every(call => call.operations.filter(op => op[0] === 'order').map(op => op[1]).join(',') === 'full_name,id'))
+})
 
 test('national directories accept optional country without changing legacy all-country calls', async () => {
   const { calls, load } = dataLayer()
