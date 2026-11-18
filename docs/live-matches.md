@@ -16,11 +16,11 @@ Apply `scripts/067_public_live_matches.sql` in the Supabase SQL Editor after the
 
 Quick games without an arena and QR matches whose arena name is not registered remain visible, but have no region/arena filter value. Populate `arenas.region` for partner arenas in Supabase to make regional filtering available for older arena records.
 
-QR league match setup requires selecting an active arena from the current kiosk
-league; arbitrary arena names are not accepted. The arena directory is filtered
-by the selected national league, so classify Dutch venues with the correct
-country before use (see [national-leagues.md](./national-leagues.md) and
-`scripts/070_classify_existing_arenas.sql` for the reviewed Flevopadel venue).
+QR league match setup requires selecting an active arena from the all-country
+arena directory; arbitrary arena names are not accepted. The players and
+official result remain in their membership league, while the venue may be in
+another country. Challenges and manually submitted results still require a
+venue in the participants' league.
 
 ## National-league backend
 
@@ -71,10 +71,13 @@ not execute SQL migrations. If the function already exists, reload PostgREST's
 schema with `notify pgrst, 'reload schema';` before considering reapplication.
 Do not rerun older migrations over later definitions without checking them.
 
-QR arena selection uses the selected browsing league and the SWR key
-`['arenas', country]`, with a fetcher passing only the country to `fetchArenas`.
-Changing league resets the in-progress QR setup so an arena selected in the
-previous country is not retained. The match detail dialog requests the
-all-country directory using `() => fetchArenas()`. Do not pass `fetchArenas` directly as the
+QR arena selection uses the all-country SWR key `['arenas', 'all']` and a
+fetcher calling `fetchArenas()` without a country. The match detail dialog also
+requests the all-country directory using `() => fetchArenas()`. Do not pass `fetchArenas` directly as the
 fetcher for the string SWR key `arenas`: SWR passes that key as the first argument,
 which would incorrectly filter `country_code` by the literal value `arenas`.
+
+After migrations through 095, apply `scripts/096_qr_cross_country_arenas.sql`
+in Supabase before deploying this QR arena behavior. It exempts only QR venues
+from the league-country check and links registered QR results to their source
+live match; mixed-league players and non-QR arena checks remain rejected.

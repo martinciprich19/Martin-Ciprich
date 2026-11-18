@@ -15,6 +15,12 @@ The first migration has already been applied by the project owner. The second
 migration is a separate required database deployment; changing application files
 does not apply SQL to Supabase.
 
+To allow QR matches to use active arenas in another country, apply
+[096_qr_cross_country_arenas.sql](../scripts/096_qr_cross_country_arenas.sql)
+after the already deployed migrations through 095, then deploy the updated app.
+This exception is limited to QR venues: the roster and official result still
+belong to the players' shared membership league.
+
 ## Country, language and membership
 
 The profile displays national and regional/provincial positions for the player's

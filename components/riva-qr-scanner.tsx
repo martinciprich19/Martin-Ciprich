@@ -30,7 +30,7 @@ const slots = [
 export function RivaQrScanner({ onClose, kioskMode = false, courtId = null }: { onClose: () => void; kioskMode?: boolean; courtId?: string | null }) {
   const router = useRouter()
   const { t } = useLanguage()
-  const { country, isLoading: leagueLoading } = useLeague()
+  const { isLoading: leagueLoading } = useLeague()
   const tRef = useRef(t)
   tRef.current = t
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -45,7 +45,7 @@ export function RivaQrScanner({ onClose, kioskMode = false, courtId = null }: { 
   const [players, setPlayers] = useState<QrRoster>([null, null, null, null])
   const [lastScannedPlayer, setLastScannedPlayer] = useState<ScannedPlayer | null>(null)
   const [selectedArenaId, setSelectedArenaId] = useState('')
-  const { data: arenas = [], error: arenasError, isLoading: arenasLoading, mutate: reloadArenas } = useSWR(leagueLoading ? null : ['arenas', country], ([, selectedCountry]) => fetchArenas(selectedCountry))
+  const { data: arenas = [], error: arenasError, isLoading: arenasLoading, mutate: reloadArenas } = useSWR(leagueLoading ? null : ['arenas', 'all'], () => fetchArenas())
   const arenaRef = useRef('')
   const [setupReady, setSetupReady] = useState(false)
   const [isChecking, setIsChecking] = useState(false)
@@ -77,7 +77,7 @@ export function RivaQrScanner({ onClose, kioskMode = false, courtId = null }: { 
     setError('')
     try {
       const selectedArena = arenas.find((item) => item.id === selectedArenaId)
-      if (!selectedArena) throw new Error(t('Vyber arénu zo zoznamu svojej ligy.', 'Select an arena from your league list.'))
+      if (!selectedArena) throw new Error(t('Vyber aktívnu arénu zo zoznamu.', 'Select an active arena from the list.'))
       arenaRef.current = selectedArena.name
       liveMatchIdRef.current = crypto.randomUUID()
       deviceTokenRef.current = createQrDeviceToken()
@@ -258,13 +258,13 @@ export function RivaQrScanner({ onClose, kioskMode = false, courtId = null }: { 
           <select id="qr-match-arena" required value={selectedArenaId} onChange={(event) => setSelectedArenaId(event.target.value)}
             disabled={isChecking || leagueLoading || arenasLoading || Boolean(arenasError) || arenas.length === 0}
             className="mt-2 min-h-12 w-full rounded-xl border border-app-line/20 bg-app-court px-3 outline-none focus:border-[#a8e63c] disabled:opacity-60">
-            <option value="">{t('Vyber arénu svojej ligy', 'Select an arena in your league')}</option>
+            <option value="">{t('Vyber aktívnu arénu', 'Select any active arena')}</option>
             {arenas.map((item) => <option key={item.id} value={item.id}>{item.name}{item.city ? ` · ${item.city}` : ''}</option>)}
           </select>
           {arenasLoading || leagueLoading ? <p role="status" className="mt-2 text-xs text-app-fg/50">{t('Načítavam arény…', 'Loading arenas…')}</p>
             : arenasError ? <div role="alert" className="mt-2 text-xs text-app-amber-200">{t('Zoznam arén sa nepodarilo načítať.', 'Could not load the arena list.')} <button type="button" onClick={() => void reloadArenas()} className="underline">{t('Skúsiť znova', 'Retry')}</button></div>
-              : arenas.length === 0 ? <p role="status" className="mt-2 text-xs text-app-amber-200">{t('Pre túto ligu zatiaľ nie sú dostupné aktívne arény.', 'There are no active arenas available for this league yet.')}</p>
-                : <p className="mt-2 text-xs text-app-fg/45">{t('Zobrazujú sa iba aktívne arény národnej ligy zvolenej na kiosku.', 'Only active arenas in the kiosk’s selected national league are shown.')}</p>}
+              : arenas.length === 0 ? <p role="status" className="mt-2 text-xs text-app-amber-200">{t('Zatiaľ nie sú dostupné aktívne arény.', 'There are no active arenas available yet.')}</p>
+                : <p className="mt-2 text-xs text-app-fg/45">{t('Pre QR zápas môžeš vybrať aktívnu arénu v ktorejkoľvek krajine.', 'For a QR match, you can select an active arena in any country.')}</p>}
           <button type="submit" disabled={isChecking || leagueLoading || arenasLoading || Boolean(arenasError) || arenas.length === 0 || !selectedArenaId} className="min-h-12 rounded-xl bg-[#a8e63c] px-5 font-bold text-[#061016] disabled:cursor-not-allowed disabled:opacity-50">{isChecking ? t('Pripravujem skener…', 'Preparing scanner…') : t('Začať skenovanie', 'Start scanning')}</button>
         </form> : <>
           <div className="mt-5 grid grid-cols-2 gap-3">

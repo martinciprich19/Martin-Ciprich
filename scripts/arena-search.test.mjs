@@ -22,34 +22,33 @@ test('match detail fetches all arenas without passing the SWR key as a country',
     assert.equal(calls[0].length, 0)
   }
 })
-test('QR arena fetcher uses the selected country, not the SWR key or all countries', async () => {
+test('QR arena fetcher loads active arenas across countries without passing the SWR key', async () => {
   const source = readFileSync(new URL('../components/riva-qr-scanner.tsx', import.meta.url), 'utf8')
   assert.match(source, /useLeague\(\)/)
-  const fetcher = source.match(/useSWR\(leagueLoading \? null : \['arenas', country\], (\(\[, selectedCountry\]\) => fetchArenas\(selectedCountry\))\)/)?.[1]
+  const fetcher = source.match(/useSWR\(leagueLoading \? null : \['arenas', 'all'\], (\(\) => fetchArenas\(\))\)/)?.[1]
   assert.ok(fetcher)
   const directory = [{ name: 'Žilina', country_code: 'SK' }, { name: 'Lelystad', country_code: 'NL' }]
   const calls = []
   const callback = vm.runInNewContext(fetcher, {
-    fetchArenas: (country) => {
-      calls.push(country)
-      return directory.filter(arena => arena.country_code === country)
+    fetchArenas: (...args) => {
+      calls.push(args)
+      return directory
     },
   })
-  for (const country of ['SK', 'NL', 'SK']) {
-    const result = await callback(['arenas', country])
-    assert.deepEqual(result, directory.filter(arena => arena.country_code === country))
-  }
-  assert.deepEqual(calls, ['SK', 'NL', 'SK'])
+  assert.deepEqual(await callback(), directory)
+  assert.deepEqual(calls, [[]])
   const parent = readFileSync(new URL('../components/match-start-view.tsx', import.meta.url), 'utf8')
   assert.match(parent, /<RivaQrScanner key=\{country\}/)
 })
-test('QR match setup requires selecting an active arena from the current league', () => {
+test('QR match setup requires selecting any active arena regardless of league', () => {
   const source = readFileSync(new URL('../components/riva-qr-scanner.tsx', import.meta.url), 'utf8')
   assert.match(source, /<select id="qr-match-arena" required value=\{selectedArenaId\}/)
   assert.match(source, /arenas\.map\(\(item\) => <option key=\{item\.id\} value=\{item\.id\}\>/)
   assert.match(source, /const selectedArena = arenas\.find\(\(item\) => item\.id === selectedArenaId\)/)
   assert.match(source, /arenaRef\.current = selectedArena\.name/)
   assert.match(source, /arenas\.length === 0 \|\| !selectedArenaId/)
+  assert.match(source, /Vyber aktívnu arénu/)
+  assert.match(source, /Select any active arena/)
   assert.doesNotMatch(source, /Vyber zo zoznamu alebo zadaj vlastnú arénu/)
 })
 test('arena search lists all arenas and matches names, cities and addresses without accents', () => {

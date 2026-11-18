@@ -71,6 +71,7 @@ test('national routing integrates with existing QR, results, rematch and score g
     const routing = await sql('069_national_league_routing.sql')
     await db.exec(routing)
     await db.exec(routing)
+    await db.exec(await sql('096_qr_cross_country_arenas.sql'))
     assert.deepEqual((await db.query('select country_code,team_a_games from live_matches where id=$1', [oldQuick])).rows[0],
       { country_code: 'SK', team_a_games: 3 })
     await db.exec(`
@@ -116,6 +117,10 @@ test('national routing integrates with existing QR, results, rematch and score g
     const token = 'a'.repeat(64)
     await db.exec('set role anon')
     await db.query("select create_qr_device_match_with_settings($1::uuid,5,6,7,8,'NL Arena',$2,'advantage','standard','super_tiebreak')", [qr, token])
+    const crossCountryQr = '00000000-0000-0000-0000-000000000273'
+    await db.query("select create_qr_device_match_with_settings($1::uuid,1,2,3,4,'NL Arena',$2,'advantage','standard','super_tiebreak')",
+      [crossCountryQr, 'b'.repeat(64)])
+    assert.equal((await db.query('select country_code from live_matches where id=$1', [crossCountryQr])).rows[0].country_code, 'SK')
     await assert.rejects(db.query("select create_qr_device_match($1::uuid,5,6,7,1,'NL Arena',$2)",
       ['00000000-0000-0000-0000-000000000270', token]), /same national league/)
     await db.query('select set_config($1,$2,false)', ['request.headers', JSON.stringify({ 'x-riva-qr-device': token })])
@@ -126,6 +131,34 @@ test('national routing integrates with existing QR, results, rematch and score g
     await assert.rejects(db.query("update live_matches set scoring_type='advantage' where id=$1", [quick.id]), /Pravidla/)
     await db.exec('reset role')
     assert.equal((await db.query('select country_code from live_matches where id=$1', [qr])).rows[0].country_code, 'NL')
+    assert.equal((await db.query('select country_code from live_matches where id=$1', [crossCountryQr])).rows[0].country_code, 'SK')
+
+    await db.query('select set_config($1,$2,false)', ['request.jwt.claims', JSON.stringify({
+      sub: '00000000-0000-0000-0000-000000000001', email: 'player1@test.invalid',
+    })])
+    await db.exec('set role authenticated')
+    const registeredCrossQr = '00000000-0000-0000-0000-000000000274'
+    await db.query("select create_qr_live_match($1::uuid,1,2,3,4,'NL Arena')", [registeredCrossQr])
+    assert.equal((await db.query('select country_code from live_matches where id=$1', [registeredCrossQr])).rows[0].country_code, 'SK')
+    await db.exec('reset role')
+    await db.query(`update live_matches set team_a_sets=2,completed_sets='[[6,4],[6,4]]',
+      started_at=now(),finished_at=now() where id=$1`, [registeredCrossQr])
+    const crossResultId = (await db.query('select official_result_id from live_matches where id=$1', [registeredCrossQr])).rows[0].official_result_id
+    const crossResult = (await db.query('select id::text as id,country_code,qr_live_match_id from matches where id::text=$1',
+      [crossResultId])).rows[0]
+    assert.equal(crossResult.country_code, 'SK')
+    assert.equal(crossResult.qr_live_match_id, registeredCrossQr)
+    await db.query("delete from notifications where match_id=$1 and type='match_result'", [crossResult.id])
+    await assert.rejects(db.query(`insert into matches (
+      player1_id,team1_player1_id,team1_player2_id,player2_id,team2_player1_id,team2_player2_id,
+      winner_id,match_date,status,player1_sets_won,player2_sets_won,player1_games_won,player2_games_won,
+      result_sets,arena_name,submitted_by,approved_profile_ids
+    ) values (1,1,2,3,3,4,1,now(),'pending',2,0,12,8,
+      '[{"team1Score":6,"team2Score":4},{"team1Score":6,"team2Score":4}]',
+      'NL Arena',1,'{}')`), /same national league/)
+    await db.query('select set_config($1,$2,false)', ['request.jwt.claims', JSON.stringify({
+      sub: '00000000-0000-0000-0000-000000000005', email: 'player5@test.invalid',
+    })])
     assert.ok((await db.query('select * from get_public_live_matches()')).rows.some(row => row.id === qr && row.country_code === 'NL'))
     assert.equal((await db.query("select * from get_public_live_matches('SK')")).rows.some(row => row.id === qr), false)
     const nlLive = (await db.query("select * from get_public_live_matches('NL')")).rows.find(row => row.id === qr)
@@ -157,6 +190,9 @@ test('national routing integrates with existing QR, results, rematch and score g
     for (const file of ['031_player_stats_from_confirmed_matches.sql', '034_seasonal_and_career_elo.sql',
       '035_fix_recalculate_safeupdate.sql', '077_live_match_finalization.sql']) await db.exec(await sql(file))
     await db.exec(await sql('077_live_match_finalization.sql'))
+    await db.query('select set_config($1,$2,false)', ['request.jwt.claims', JSON.stringify({
+      sub: '00000000-0000-0000-0000-000000000005', email: 'player5@test.invalid',
+    })])
     const correctable = '00000000-0000-0000-0000-000000000277'
     await db.exec('set role anon')
     await db.query("select create_qr_device_match_with_settings($1,5,6,7,8,'NL Arena',$2,'golden_point','standard','full_set')",
@@ -202,8 +238,12 @@ test('national routing integrates with existing QR, results, rematch and score g
     await assert.rejects(db.query('select finalize_live_match($1)', [correctable]), /dohraj/)
     await saveScore(awardLivePoint(tracked, 'TEAM_A'))
     await assert.rejects(db.query('update live_matches set result_finalized_at=now() where id=$1', [correctable]))
+    await db.query("select set_config('request.jwt.claims','{}',false)")
     await db.query("select set_config('request.headers','{}',false)")
     await assert.rejects(db.query('select finalize_live_match($1)', [correctable]), /opravnenie/)
+    await db.query('select set_config($1,$2,false)', ['request.jwt.claims', JSON.stringify({
+      sub: '00000000-0000-0000-0000-000000000005', email: 'player5@test.invalid',
+    })])
     await db.query("select set_config('request.headers',$1,false)", [JSON.stringify({ 'x-riva-qr-device': token })])
     const next = '00000000-0000-0000-0000-000000000278'
     await assert.rejects(db.query('select create_live_match_rematch($1,$2,$3,array[0,0,1,2]::smallint[])',
