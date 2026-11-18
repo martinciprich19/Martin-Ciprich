@@ -323,6 +323,8 @@ export function MatchView({ matchId, kioskMode = false, viewerMode = false, cour
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [showLiveStatistics, setShowLiveStatistics] = useState(false)
+  const [team1WinProbability, setTeam1WinProbability] = useState<number | null>(null)
+  const [winProbabilityError, setWinProbabilityError] = useState(false)
   const [pointFlash, setPointFlash] = useState<Team | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [avatars, setAvatars] = useState<MatchAvatars | null>(null)
@@ -380,6 +382,37 @@ export function MatchView({ matchId, kioskMode = false, viewerMode = false, cour
     void loadAvatars()
     return () => { active = false }
   }, [matchId, leagueMatch, needsLogin, match?.is_pin_activated, avatarRetry])
+
+  useEffect(() => {
+    if (!match || !leagueMatch) {
+      setTeam1WinProbability(null)
+      setWinProbabilityError(false)
+      return
+    }
+    let active = true
+    setTeam1WinProbability(null)
+    setWinProbabilityError(false)
+    const client = supabaseRef.current ?? createClient()
+    void (async () => {
+      try {
+        const { data, error } = await client.rpc('live_match_win_probability', { p_match_id: String(match.id) })
+        if (error) throw error
+        if (data === null) {
+          if (active) setTeam1WinProbability(null)
+          return
+        }
+        const probability = typeof data === 'number' ? data : Number(data)
+        if (!Number.isFinite(probability) || probability < 0 || probability > 1) {
+          throw new Error('Databáza vrátila neplatnú predzápasovú šancu.')
+        }
+        if (active) setTeam1WinProbability(probability)
+      } catch (error: unknown) {
+        console.error('Načítanie predzápasovej šance zlyhalo:', error)
+        if (active) setWinProbabilityError(true)
+      }
+    })()
+    return () => { active = false }
+  }, [match?.id, match?.official_result_id, match?.result_finalized_at, leagueMatch])
 
   useEffect(() => {
     if (!match?.started_at || match.finished_at || match.paused_at) {
@@ -939,6 +972,7 @@ export function MatchView({ matchId, kioskMode = false, viewerMode = false, cour
   const durationLabel = match.started_at ? formatDuration(durationSeconds) : '00:00'
   const loginNotice = needsLogin ? <p role="status" className="court-stat-warning text-center text-xs text-app-amber-200">{t('Nie si prihlásený. Zápas môžeš sledovať, ale skóre môže meniť iba prihlásený organizátor.', 'You are not signed in. You can watch the match, but only the signed-in organizer can change the score.')} <Link href="/auth/login" className="underline">{t('Prihlásiť sa', 'Sign in')}</Link></p> : null
   const avatarNotice = avatarError ? <div className="court-avatar-error" role="alert">{t('Profilové fotky sa nepodarilo načítať. Skontroluj SQL migráciu 051.', 'Profile photos could not be loaded. Check SQL migration 051.')} <button type="button" onClick={() => setAvatarRetry((retry) => retry + 1)}>{t('Skúsiť znova', 'Retry')}</button></div> : null
+  const winProbabilityNotice = winProbabilityError ? <p role="alert" className="court-stat-warning text-center text-xs text-app-amber-200">{t('Predzápasovú šancu sa nepodarilo načítať. Skontroluj SQL migráciu 099.', 'Pre-match win chance could not be loaded. Check SQL migration 099.')}</p> : null
   function resultPlayer(name: string, slot: number) {
     return <span key={slot} className="result-score-player">{leagueMatch ? <PlayerAvatar name={name} src={avatars?.[slot]} className="size-8 text-xs" /> : null}<span>{name}</span></span>
   }
@@ -985,7 +1019,8 @@ export function MatchView({ matchId, kioskMode = false, viewerMode = false, cour
         {showLiveStatistics ? (
           <section id="spectator-match-statistics" className="mt-5 rounded-2xl border border-app-line/10 bg-app-court/90 p-4 sm:p-6" aria-label={t('Štatistiky zápasu', 'Match statistics')}>
             {!match.statistics_complete ? <p className="court-stat-warning mb-4 text-center text-xs text-app-amber-200">{t('Staršie body a sety neboli zaznamenávané. Štatistiky sú iba od zapnutia sledovania.', 'Earlier points and sets were not recorded. Statistics cover only the tracked period.')}</p> : null}
-            <MatchStatistics match={match} showAvatars={leagueMatch} avatars={avatars} showRules={false} />
+            {winProbabilityNotice}
+            <MatchStatistics match={match} showAvatars={leagueMatch} avatars={avatars} showRules={false} team1WinProbability={team1WinProbability} />
           </section>
         ) : null}
       </section>
@@ -997,7 +1032,8 @@ export function MatchView({ matchId, kioskMode = false, viewerMode = false, cour
         <h1 className="text-center text-3xl font-black">{t('Zápas ukončený bez výsledku', 'Match ended without a result')}</h1>
         {leagueMatch ? <p className="mt-4 text-center text-app-fg/70">{t('Priebeh a štatistiky sú uložené. Víťaz nebol určený a ELO sa nezapočítava. PIN už neplatí.', 'The timeline and statistics are saved. No winner was declared and ELO is unchanged. The PIN has expired.')}</p> : null}
         <p className="mt-4 text-center">{match.team_a_sets} : {match.team_b_sets} {t('na sety', 'sets')} · {match.team_a_games} : {match.team_b_games} {t('na gemy', 'games')} · {durationLabel}</p>
-        <MatchStatistics match={match} showAvatars={leagueMatch} avatars={avatars} showRules={leagueMatch} />
+        {winProbabilityNotice}
+        <MatchStatistics match={match} showAvatars={leagueMatch} avatars={avatars} showRules={leagueMatch} team1WinProbability={team1WinProbability} />
         <button type="button" onClick={resetKiosk} disabled={isSaving} className="mx-auto mt-8 block min-h-12 rounded-xl bg-[#a8e63c] px-6 py-3 font-bold text-[#061016]">{t('Späť na výber hry', 'Back to game selection')}</button>
       </section>
     )
@@ -1048,7 +1084,8 @@ export function MatchView({ matchId, kioskMode = false, viewerMode = false, cour
             ? t('Starší výsledok používa pôvodné potvrdenia v profiloch hráčov.', 'This older result uses the original player profile confirmations.')
             : t('Potvrdenia hráčov nie sú potrebné. ELO sa započíta pri „Ukončiť zápas“ alebo „Hrať ďalší zápas“. Dovtedy môžete vrátiť víťazný bod.', 'Player confirmations are not required. ELO is applied when you choose “End match” or “Play another match”. Until then, you can undo the winning point.')}</p> : null}
         {!match.statistics_complete ? <p className="court-stat-warning text-center text-xs text-app-amber-200">{t('Staršie body a sety neboli zaznamenávané. Štatistiky sú iba od zapnutia sledovania.', 'Earlier points and sets were not recorded. Statistics cover only the tracked period.')}</p> : null}
-        <MatchStatistics match={match} showAvatars={leagueMatch} avatars={avatars} showRules={leagueMatch} />
+        {winProbabilityNotice}
+        <MatchStatistics match={match} showAvatars={leagueMatch} avatars={avatars} showRules={leagueMatch} team1WinProbability={team1WinProbability} />
         {canEdit ? <fieldset className="mx-auto mt-3 w-full max-w-2xl rounded-xl border border-app-line/10 bg-app-court/70 p-2.5">
           <legend className="px-1.5 text-xs font-bold text-app-fg/65">{t('Dvojice pre ďalší zápas', 'Next match teams')}</legend>
           <div className="grid grid-cols-3 gap-1.5">
@@ -1240,7 +1277,8 @@ export function MatchView({ matchId, kioskMode = false, viewerMode = false, cour
       {showLiveStatistics ? (
         <section id="live-match-statistics" className="mt-5 rounded-2xl border border-app-line/10 bg-app-court/90 p-4 sm:p-6" aria-label={t('Štatistiky zápasu', 'Match statistics')}>
           {!match.statistics_complete ? <p className="court-stat-warning mb-4 text-center text-xs text-app-amber-200">{t('Staršie body a sety neboli zaznamenávané. Štatistiky sú iba od zapnutia sledovania.', 'Earlier points and sets were not recorded. Statistics cover only the tracked period.')}</p> : null}
-          <MatchStatistics match={match} showAvatars={leagueMatch} avatars={avatars} showRules={leagueMatch} />
+          {winProbabilityNotice}
+          <MatchStatistics match={match} showAvatars={leagueMatch} avatars={avatars} showRules={leagueMatch} team1WinProbability={team1WinProbability} />
         </section>
       ) : null}
 

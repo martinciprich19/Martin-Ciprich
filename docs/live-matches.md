@@ -85,3 +85,7 @@ allow authorized arena admins and Super Admins to finalize QR results from
 shared devices, link registered QR results to their source live match, and
 preserve the players' league. Mixed-league players and non-QR arena checks
 remain rejected.
+
+Apply `scripts/099_live_match_win_probability.sql` after 098 to show the
+pre-match ELO win chance in live-match statistics. It returns only the team
+probability, not individual profile ratings.
