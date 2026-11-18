@@ -72,6 +72,18 @@ test('national routing integrates with existing QR, results, rematch and score g
     await db.exec(routing)
     await db.exec(routing)
     await db.exec(await sql('096_qr_cross_country_arenas.sql'))
+    await db.exec(`
+      create function public.is_super_admin() returns boolean language sql stable as $$
+        select coalesce(auth.jwt()->'app_metadata'->>'role'='super_admin',false)
+      $$;
+      alter table public.live_matches add column court_id bigint;
+      create table public.arena_admins(arena_id bigint,user_id uuid,primary key(arena_id,user_id));
+      create table public.arena_courts(id bigint primary key,arena_id bigint,is_active boolean default true);
+      insert into public.arena_courts(id,arena_id) values (7,2);
+      insert into public.arena_admins(arena_id,user_id)
+        values (2,'00000000-0000-0000-0000-000000000009');
+    `)
+    await db.exec(await sql('098_qr_admin_finalization.sql'))
     assert.deepEqual((await db.query('select country_code,team_a_games from live_matches where id=$1', [oldQuick])).rows[0],
       { country_code: 'SK', team_a_games: 3 })
     await db.exec(`
@@ -141,6 +153,20 @@ test('national routing integrates with existing QR, results, rematch and score g
     await db.query("select create_qr_live_match($1::uuid,1,2,3,4,'NL Arena')", [registeredCrossQr])
     assert.equal((await db.query('select country_code from live_matches where id=$1', [registeredCrossQr])).rows[0].country_code, 'SK')
     await db.exec('reset role')
+    await db.query('update live_matches set court_id=7 where id=$1', [registeredCrossQr])
+    await db.query('select set_config($1,$2,false)', ['request.jwt.claims', JSON.stringify({
+      sub: '00000000-0000-0000-0000-000000000009', email: 'arena-admin@test.invalid',
+    })])
+    assert.equal((await db.query('select can_manage_live_match($1) as allowed', [registeredCrossQr])).rows[0].allowed, true)
+    await db.query('select set_config($1,$2,false)', ['request.jwt.claims', JSON.stringify({
+      sub: '00000000-0000-0000-0000-000000000010', email: 'unrelated@test.invalid',
+    })])
+    assert.equal((await db.query('select can_manage_live_match($1) as allowed', [registeredCrossQr])).rows[0].allowed, false)
+    await db.exec('reset role')
+    await db.query('select set_config($1,$2,false)', ['request.jwt.claims', JSON.stringify({
+      sub: '00000000-0000-0000-0000-000000000010', email: 'super-admin@test.invalid',
+      app_metadata: { role: 'super_admin' },
+    })])
     await db.query(`update live_matches set team_a_sets=2,completed_sets='[[6,4],[6,4]]',
       started_at=now(),finished_at=now() where id=$1`, [registeredCrossQr])
     const crossResultId = (await db.query('select official_result_id from live_matches where id=$1', [registeredCrossQr])).rows[0].official_result_id

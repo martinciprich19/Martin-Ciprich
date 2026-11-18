@@ -19,9 +19,12 @@ To allow QR matches to use active arenas in another country, apply
 [096_qr_cross_country_arenas.sql](../scripts/096_qr_cross_country_arenas.sql)
 after the already deployed migrations through 095, then apply
 [097_qr_court_cross_country.sql](../scripts/097_qr_court_cross_country.sql)
-and deploy the updated app. Both free QR setup and court-paired QR setup allow
-any active arena, while the roster and official result remain in the players'
-shared membership league.
+followed by
+[098_qr_admin_finalization.sql](../scripts/098_qr_admin_finalization.sql), then
+deploy the updated app. Both free QR setup and court-paired QR setup allow any
+active arena, and authorized arena admins and Super Admins can finalize QR
+results from shared devices. The roster and official result remain in the
+players' shared membership league.
 
 ## Country, language and membership
 

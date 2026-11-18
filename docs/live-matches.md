@@ -77,8 +77,11 @@ requests the all-country directory using `() => fetchArenas()`. Do not pass `fet
 fetcher for the string SWR key `arenas`: SWR passes that key as the first argument,
 which would incorrectly filter `country_code` by the literal value `arenas`.
 
-After migrations through 095, apply `scripts/096_qr_cross_country_arenas.sql`
-and then `scripts/097_qr_court_cross_country.sql` in Supabase before deploying
-this QR arena behavior. They allow any active arena for free and court-paired
-QR matches, link registered QR results to their source live match, and preserve
-the players' league. Mixed-league players and non-QR arena checks remain rejected.
+After migrations through 095, apply `scripts/096_qr_cross_country_arenas.sql`,
+`scripts/097_qr_court_cross_country.sql`, and
+`scripts/098_qr_admin_finalization.sql` in order before deploying this QR arena
+behavior. They allow any active arena for free and court-paired QR matches,
+allow authorized arena admins and Super Admins to finalize QR results from
+shared devices, link registered QR results to their source live match, and
+preserve the players' league. Mixed-league players and non-QR arena checks
+remain rejected.
