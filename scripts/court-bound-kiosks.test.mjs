@@ -27,7 +27,7 @@ test('tablets bind to one active court, retain identity during suspension and lo
         select coalesce(auth.jwt()->'app_metadata'->>'role' = 'super_admin',false);
       $$;
       create table arenas(id bigint primary key,is_active boolean not null,name text default 'Arena',country_code text default 'SK');
-      insert into arenas(id,is_active) values (1,true),(2,true);
+      insert into arenas(id,is_active,country_code) values (1,true,'SK'),(2,true,'NL');
       create table arena_courts(id bigint primary key,arena_id bigint references arenas(id),is_active boolean not null);
       insert into arena_courts values (7,1,true),(8,1,false),(9,2,true);
       create table arena_admins(arena_id bigint,user_id uuid);
@@ -50,6 +50,7 @@ test('tablets bind to one active court, retain identity during suspension and lo
     await db.exec(await read('076_authorized_kiosk_devices.sql'))
     await db.exec(await read('080_court_bound_kiosks.sql'))
     await db.exec(await read('081_remote_device_pairing.sql'))
+    await db.exec(await read('097_qr_court_cross_country.sql'))
     await db.exec(await read('083_kiosk_screen_preview.sql'))
     await db.exec(await read('084_device_telemetry.sql'))
     const previousMatch = '00000000-0000-0000-0000-000000000021'
@@ -163,11 +164,18 @@ test('tablets bind to one active court, retain identity during suspension and lo
     await db.query("select create_qr_court_match_with_settings($1,1,2,3,4,'Ignored','token','classic','standard','full_set',7)", [qrId])
     await db.exec('reset role')
     assert.equal((await db.query('select court_id from live_matches where id=$1', [qrId])).rows[0].court_id, 7)
-    const wrongCountry = '00000000-0000-0000-0000-000000000032'
+    const nlPlayersAtSkCourt = '00000000-0000-0000-0000-000000000032'
     await db.exec('set role anon')
-    await assert.rejects(db.query("select create_qr_court_match_with_settings($1,99,2,3,4,'Ignored','token','classic','standard','full_set',7)", [wrongCountry]), /krajiny/)
+    await db.query("select create_qr_court_match_with_settings($1,99,2,3,4,'Ignored','token','classic','standard','full_set',7)", [nlPlayersAtSkCourt])
     await db.exec('reset role')
-    assert.equal((await db.query('select count(*)::int as n from live_matches where id=$1', [wrongCountry])).rows[0].n, 0)
+    assert.deepEqual((await db.query('select country_code,court_id from live_matches where id=$1', [nlPlayersAtSkCourt])).rows[0],
+      { country_code: 'NL', court_id: 7 })
+    await db.exec('set role anon')
+    const skPlayersAtNlCourt = '00000000-0000-0000-0000-000000000033'
+    await db.query("select create_qr_court_match_with_settings($1,1,2,3,4,'Ignored','token','classic','standard','full_set',9)", [skPlayersAtNlCourt])
+    await db.exec('reset role')
+    assert.deepEqual((await db.query('select country_code,court_id from live_matches where id=$1', [skPlayersAtNlCourt])).rows[0],
+      { country_code: 'SK', court_id: 9 })
   } finally { await db.close() }
 })
 

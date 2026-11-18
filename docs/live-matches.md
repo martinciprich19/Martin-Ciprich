@@ -78,6 +78,7 @@ fetcher for the string SWR key `arenas`: SWR passes that key as the first argume
 which would incorrectly filter `country_code` by the literal value `arenas`.
 
 After migrations through 095, apply `scripts/096_qr_cross_country_arenas.sql`
-in Supabase before deploying this QR arena behavior. It exempts only QR venues
-from the league-country check and links registered QR results to their source
-live match; mixed-league players and non-QR arena checks remain rejected.
+and then `scripts/097_qr_court_cross_country.sql` in Supabase before deploying
+this QR arena behavior. They allow any active arena for free and court-paired
+QR matches, link registered QR results to their source live match, and preserve
+the players' league. Mixed-league players and non-QR arena checks remain rejected.

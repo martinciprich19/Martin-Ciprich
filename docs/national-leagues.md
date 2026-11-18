@@ -17,9 +17,11 @@ does not apply SQL to Supabase.
 
 To allow QR matches to use active arenas in another country, apply
 [096_qr_cross_country_arenas.sql](../scripts/096_qr_cross_country_arenas.sql)
-after the already deployed migrations through 095, then deploy the updated app.
-This exception is limited to QR venues: the roster and official result still
-belong to the players' shared membership league.
+after the already deployed migrations through 095, then apply
+[097_qr_court_cross_country.sql](../scripts/097_qr_court_cross_country.sql)
+and deploy the updated app. Both free QR setup and court-paired QR setup allow
+any active arena, while the roster and official result remain in the players'
+shared membership league.
 
 ## Country, language and membership
 
