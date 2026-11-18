@@ -1,8 +1,8 @@
 'use client'
 
-import { useCallback, useEffect, useId, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Camera, Check, ChevronDown, MapPin, ScanQrCode } from 'lucide-react'
+import { ArrowLeft, Camera, Check, ScanQrCode } from 'lucide-react'
 import type QrScanner from 'qr-scanner'
 import { useLanguage } from '@/components/language-provider'
 import { useLeague } from '@/components/league-provider'
@@ -10,7 +10,6 @@ import { createClient } from '@/lib/supabase/client'
 import { getErrorMessage } from '@/lib/errors'
 import { getRivaProfilePath } from '@/lib/riva-qr'
 import { fetchArenas } from '@/lib/arenas'
-import { filterArenas } from '@/lib/arena-search'
 import useSWR from 'swr'
 import { createQrDeviceToken, saveQrDeviceToken } from '@/lib/qr-match-device'
 import { getQrScanRegion, QR_VIEWFINDER_RATIO } from '@/lib/qr-scan-region'
@@ -45,13 +44,8 @@ export function RivaQrScanner({ onClose, kioskMode = false, courtId = null }: { 
   const deviceTokenRef = useRef<string | null>(null)
   const [players, setPlayers] = useState<QrRoster>([null, null, null, null])
   const [lastScannedPlayer, setLastScannedPlayer] = useState<ScannedPlayer | null>(null)
-  const [arena, setArena] = useState('')
+  const [selectedArenaId, setSelectedArenaId] = useState('')
   const { data: arenas = [], error: arenasError, isLoading: arenasLoading, mutate: reloadArenas } = useSWR(leagueLoading ? null : ['arenas', country], ([, selectedCountry]) => fetchArenas(selectedCountry))
-  const [arenaListOpen, setArenaListOpen] = useState(false)
-  const [activeArena, setActiveArena] = useState(-1)
-  const arenaInputRef = useRef<HTMLInputElement>(null)
-  const arenaListId = useId()
-  const visibleArenas = filterArenas(arenas, arena)
   const arenaRef = useRef('')
   const [setupReady, setSetupReady] = useState(false)
   const [isChecking, setIsChecking] = useState(false)
@@ -71,21 +65,10 @@ export function RivaQrScanner({ onClose, kioskMode = false, courtId = null }: { 
   }, [arenasError])
 
   useEffect(() => {
-    if (activeArena >= 0) document.getElementById(`${arenaListId}-${activeArena}`)?.scrollIntoView({ block: 'nearest' })
-  }, [activeArena, arenaListId])
-
-  useEffect(() => {
     if (!lastScannedPlayer) return
     const timer = window.setTimeout(() => setLastScannedPlayer(null), 900)
     return () => window.clearTimeout(timer)
   }, [lastScannedPlayer])
-
-  function chooseArena(name: string) {
-    setArena(name)
-    setArenaListOpen(false)
-    setActiveArena(-1)
-    arenaInputRef.current?.focus()
-  }
 
   async function startSetup(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -93,8 +76,9 @@ export function RivaQrScanner({ onClose, kioskMode = false, courtId = null }: { 
     setIsChecking(true)
     setError('')
     try {
-      if (!arena.trim()) throw new Error(t('Vyplň názov arény.', 'Enter the arena name.'))
-      arenaRef.current = arena.trim()
+      const selectedArena = arenas.find((item) => item.id === selectedArenaId)
+      if (!selectedArena) throw new Error(t('Vyber arénu zo zoznamu svojej ligy.', 'Select an arena from your league list.'))
+      arenaRef.current = selectedArena.name
       liveMatchIdRef.current = crypto.randomUUID()
       deviceTokenRef.current = createQrDeviceToken()
       saveQrDeviceToken(liveMatchIdRef.current, deviceTokenRef.current)
@@ -270,49 +254,18 @@ export function RivaQrScanner({ onClose, kioskMode = false, courtId = null }: { 
         <h1 className="mt-4 text-2xl font-black">{t('QR ligový zápas', 'QR league match')}</h1>
         <p className="mt-3 text-sm leading-6 text-app-fg/55">{t('Prihlásenie na tomto zariadení nie je potrebné. Naskenujte QR kódy štyroch hráčov v poradí podľa miest. Skóre ovláda zariadenie, ktoré zápas vytvorí. Výsledok a ELO sa uložia pri ukončení zápasu alebo spustení ďalšieho. Dovtedy možno vrátiť víťazný bod; potvrdenia hráčov nie sú potrebné.', 'No login is needed on this device. Scan four players in slot order. The creating device controls the score. The result and ELO are saved when ending the match or starting the next one. Until then, the winning point can be undone; player confirmations are not required.')}</p>
         {!setupReady ? <form onSubmit={startSetup} className="mt-5 space-y-3">
-          <div onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) { setArenaListOpen(false); setActiveArena(-1) } }}>
-            <label htmlFor={`${arenaListId}-input`} className="block text-sm">{t('Aréna / kurt', 'Arena / court')}</label>
-            <div className="relative mt-2">
-              <input id={`${arenaListId}-input`} ref={arenaInputRef} required value={arena}
-                role="combobox" aria-autocomplete="list" aria-expanded={arenaListOpen}
-                aria-controls={arenaListId} aria-activedescendant={arenaListOpen && activeArena >= 0 ? `${arenaListId}-${activeArena}` : undefined}
-                aria-describedby={`${arenaListId}-help`} autoComplete="off"
-                placeholder={t('Vyber arénu alebo napíš názov či mesto', 'Choose an arena or type a name or city')}
-                onFocus={() => setArenaListOpen(true)}
-                onChange={(event) => { setArena(event.target.value); setArenaListOpen(true); setActiveArena(-1) }}
-                onKeyDown={(event) => {
-                  if (event.key === 'Escape') { event.preventDefault(); setArenaListOpen(false); setActiveArena(-1) }
-                  else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-                    event.preventDefault()
-                    setArenaListOpen(true)
-                    if (visibleArenas.length) setActiveArena((current) => event.key === 'ArrowDown'
-                      ? (current + 1) % visibleArenas.length
-                      : (current <= 0 ? visibleArenas.length - 1 : current - 1))
-                  } else if (event.key === 'Enter' && arenaListOpen && activeArena >= 0 && visibleArenas[activeArena]) {
-                    event.preventDefault()
-                    chooseArena(visibleArenas[activeArena].name)
-                  }
-                }}
-                disabled={isChecking} className="min-h-12 w-full rounded-xl border border-app-line/20 bg-black/20 pl-3 pr-12 outline-none focus:border-[#a8e63c]" />
-              <button type="button" disabled={isChecking} aria-label={t('Zobraziť zoznam arén', 'Show arena list')} aria-expanded={arenaListOpen} aria-controls={arenaListId}
-                onClick={() => { setArenaListOpen((open) => !open); setActiveArena(-1) }}
-                className="absolute inset-y-0 right-0 flex w-12 items-center justify-center text-app-fg/65 hover:text-app-accent"><ChevronDown size={18} aria-hidden="true" /></button>
-            </div>
-            {arenaListOpen ? <div className="mt-2 rounded-xl border border-app-line/15 bg-app-ink p-1">
-              <ul id={arenaListId} role="listbox" aria-label={t('Arény', 'Arenas')} className="max-h-60 overflow-y-auto">
-                {visibleArenas.map((item, index) => <li id={`${arenaListId}-${index}`} key={item.id} role="option" aria-selected={activeArena === index}
-                  onMouseDown={(event) => event.preventDefault()} onClick={() => chooseArena(item.name)}
-                  className={`flex cursor-pointer items-start gap-3 rounded-lg px-3 py-3 text-sm hover:bg-app-overlay/5 ${activeArena === index ? 'bg-[#a8e63c]/10 text-app-accent' : ''}`}>
-                  <MapPin size={16} className="mt-0.5 shrink-0 text-app-accent" aria-hidden="true" />
-                  <span><span className="block font-bold">{item.name}</span><span className="mt-1 block text-xs text-app-fg/50">{[item.city, item.address].filter(Boolean).join(' · ')}</span></span>
-                </li>)}
-              </ul>
-              {arenasLoading ? <p role="status" className="p-3 text-xs text-app-fg/60">{t('Načítavam arény…', 'Loading arenas…')}</p> : !arenasError && visibleArenas.length === 0 ? <p role="status" className="p-3 text-xs text-app-fg/60">{t('Žiadna zhoda. Môžeš použiť vlastný názov arény.', 'No matches. You can use your own arena name.')}</p> : null}
-            </div> : null}
-            <p id={`${arenaListId}-help`} className="mt-2 text-xs text-app-fg/45">{t('Vyber zo zoznamu alebo zadaj vlastnú arénu. Hľadanie funguje aj bez diakritiky.', 'Select from the list or enter your own arena. Search also works without accents.')}</p>
-            {arenasError ? <div role="alert" className="mt-2 text-xs text-app-amber-200">{t('Zoznam arén sa nepodarilo načítať. Vlastný názov môžeš zadať aj tak.', 'The arena list could not be loaded. You can still enter your own name.')} <button type="button" onClick={() => void reloadArenas()} className="underline">{t('Skúsiť znova', 'Retry')}</button></div> : null}
-          </div>
-          <button type="submit" disabled={isChecking} className="min-h-12 rounded-xl bg-[#a8e63c] px-5 font-bold text-[#061016]">{isChecking ? t('Pripravujem skener…', 'Preparing scanner…') : t('Začať skenovanie', 'Start scanning')}</button>
+          <label htmlFor="qr-match-arena" className="block text-sm">{t('Aréna / kurt', 'Arena / court')}</label>
+          <select id="qr-match-arena" required value={selectedArenaId} onChange={(event) => setSelectedArenaId(event.target.value)}
+            disabled={isChecking || leagueLoading || arenasLoading || Boolean(arenasError) || arenas.length === 0}
+            className="mt-2 min-h-12 w-full rounded-xl border border-app-line/20 bg-app-court px-3 outline-none focus:border-[#a8e63c] disabled:opacity-60">
+            <option value="">{t('Vyber arénu svojej ligy', 'Select an arena in your league')}</option>
+            {arenas.map((item) => <option key={item.id} value={item.id}>{item.name}{item.city ? ` · ${item.city}` : ''}</option>)}
+          </select>
+          {arenasLoading || leagueLoading ? <p role="status" className="mt-2 text-xs text-app-fg/50">{t('Načítavam arény…', 'Loading arenas…')}</p>
+            : arenasError ? <div role="alert" className="mt-2 text-xs text-app-amber-200">{t('Zoznam arén sa nepodarilo načítať.', 'Could not load the arena list.')} <button type="button" onClick={() => void reloadArenas()} className="underline">{t('Skúsiť znova', 'Retry')}</button></div>
+              : arenas.length === 0 ? <p role="status" className="mt-2 text-xs text-app-amber-200">{t('Pre túto ligu zatiaľ nie sú dostupné aktívne arény.', 'There are no active arenas available for this league yet.')}</p>
+                : <p className="mt-2 text-xs text-app-fg/45">{t('Zobrazujú sa iba aktívne arény národnej ligy zvolenej na kiosku.', 'Only active arenas in the kiosk’s selected national league are shown.')}</p>}
+          <button type="submit" disabled={isChecking || leagueLoading || arenasLoading || Boolean(arenasError) || arenas.length === 0 || !selectedArenaId} className="min-h-12 rounded-xl bg-[#a8e63c] px-5 font-bold text-[#061016] disabled:cursor-not-allowed disabled:opacity-50">{isChecking ? t('Pripravujem skener…', 'Preparing scanner…') : t('Začať skenovanie', 'Start scanning')}</button>
         </form> : <>
           <div className="mt-5 grid grid-cols-2 gap-3">
             {slots.map((slot, index) => <div key={index} className={`min-w-0 rounded-xl border p-3 transition-colors duration-300 motion-reduce:transition-none ${index === activeSlot ? 'border-[#a8e63c] bg-[#a8e63c]/10' : players[index] ? 'border-[#a8e63c]/35 bg-[#a8e63c]/5' : 'border-app-line/15'}`}>

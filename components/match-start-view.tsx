@@ -42,7 +42,7 @@ export function MatchStartView({ kioskMode = false }: { kioskMode?: boolean }) {
     router.replace(kioskMode ? `/match?mode=kiosk${courtId ? `&courtId=${courtId}` : ''}` : '/match')
   }, [courtId, kioskMode, router])
 
-  useKioskInactivity(matchId === null && (isScanning || choosingRules || isCreating), resetKioskFlow)
+  useKioskInactivity(matchId === null && !isScanning && (choosingRules || isCreating), resetKioskFlow)
 
   async function startQuickGame(settings: MatchSettings) {
     if (creatingRef.current || leagueLoading) return

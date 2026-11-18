@@ -4,7 +4,7 @@ The global dashboard is available at `/super-admin`. The page verifies the authe
 
 ## Database setup
 
-Apply `scripts/079_super_admin_console.sql` in the Supabase SQL Editor after the app's arena, kiosk, and notification migrations (including `071_arena_admin_access.sql`, `076_authorized_kiosk_devices.sql`, `078_live_match_push_notifications.sql`, and `066_repair_activity_notifications.sql`). Migration 079 checks that the current arena schema uses the bigint arena IDs required by migration 071.
+Apply `scripts/079_super_admin_console.sql` in the Supabase SQL Editor after the app's arena, kiosk, and notification migrations (including `071_arena_admin_access.sql`, `076_authorized_kiosk_devices.sql`, `078_live_match_push_notifications.sql`, and `066_repair_activity_notifications.sql`). Migration 079 checks that the current arena schema uses the bigint arena IDs required by migration 071. Apply `scripts/095_country_scoped_announcements.sql` after 079. Existing installations that already applied the old 079 migration should first apply `scripts/094_repair_super_admin_announcement_id.sql`, then 095.
 
 Grant the role only to the trusted platform owner, using the Supabase SQL Editor with the owner's actual login email:
 
@@ -35,7 +35,7 @@ Verify the update affected exactly the intended account. The user must sign out 
   device-reported and carry the server's last-seen timestamp, not a security
   attestation. RLS restricts reads to the appropriate arena manager/Super Admin.
 - With migrations 080 and 081, use **Kurty a priradenie tabletu → Tablety a monitory kurtov** to claim a target device's one-time code from the admin device. Select its court and role (tablet or scoreboard); no admin login on the target is required. The same controls are available to assigned Arena Admins; the Android app retains native clicker input. See [tablet setup](./riva-android-app.md#assign-this-android-installation-to-a-court).
-- Send a global in-app announcement. If the existing `notifications` database webhook and push configuration are active, it also sends a push to users who opted in.
+- Send a global in-app announcement to all players or target only Slovakia or the Netherlands by the country saved in each player's profile. Enter the content in the selected audience's language; the app does not automatically translate it. Existing `notifications` webhook and push configuration respects the same country audience.
 - Review an append-only audit log for Super Admin actions.
 - With migration 085 (after 079 and 072), **Statistiky zapasov** counts live
   matches by court and arena over rolling 24-hour, 7-day, one-month and one-year

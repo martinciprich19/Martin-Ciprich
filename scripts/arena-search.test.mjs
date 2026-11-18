@@ -43,6 +43,15 @@ test('QR arena fetcher uses the selected country, not the SWR key or all countri
   const parent = readFileSync(new URL('../components/match-start-view.tsx', import.meta.url), 'utf8')
   assert.match(parent, /<RivaQrScanner key=\{country\}/)
 })
+test('QR match setup requires selecting an active arena from the current league', () => {
+  const source = readFileSync(new URL('../components/riva-qr-scanner.tsx', import.meta.url), 'utf8')
+  assert.match(source, /<select id="qr-match-arena" required value=\{selectedArenaId\}/)
+  assert.match(source, /arenas\.map\(\(item\) => <option key=\{item\.id\} value=\{item\.id\}\>/)
+  assert.match(source, /const selectedArena = arenas\.find\(\(item\) => item\.id === selectedArenaId\)/)
+  assert.match(source, /arenaRef\.current = selectedArena\.name/)
+  assert.match(source, /arenas\.length === 0 \|\| !selectedArenaId/)
+  assert.doesNotMatch(source, /Vyber zo zoznamu alebo zadaj vlastnú arénu/)
+})
 test('arena search lists all arenas and matches names, cities and addresses without accents', () => {
   assert.deepEqual(filterArenas(arenas, ''), arenas)
   assert.deepEqual(filterArenas(arenas, '  ZILIN  '), [arenas[0]])

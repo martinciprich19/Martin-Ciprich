@@ -1116,8 +1116,13 @@ const MatchesView = memo(function MatchesView({ initialArena, modalOpen, setModa
   }
   return <div className="mx-auto max-w-[1120px]">
     <p className="text-xs font-bold uppercase tracking-[0.22em] text-app-league">RIVA /</p>
-    <h1 className="mt-2 text-3xl font-black">Výsledky</h1>
-    <p className="mt-2 text-sm text-app-fg/45">Spravuj výsledky, schválenia a zápasovú históriu.</p>
+    <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+      <div>
+        <h1 className="mt-2 text-3xl font-black">Výsledky</h1>
+        <p className="mt-2 text-sm text-app-fg/45">Spravuj výsledky, schválenia a zápasovú históriu.</p>
+      </div>
+      <button type="button" onClick={() => setModalOpen(true)} className="inline-flex items-center gap-2 self-start rounded-lg bg-[#ccff00] px-4 py-2.5 text-xs font-black text-[#10150d] sm:self-auto">Zadať výsledok</button>
+    </div>
     {resultError ? <p role="alert" className="mt-4 text-sm text-app-red-300">{resultError}</p> : null}
     {isLoading || currentProfileId === null ? <p role="status" className="py-10 text-sm text-app-fg/50">Načítavam zápasy…</p>
       : resultsError ? <p role="alert" className="py-6 text-sm text-app-red-300">{getErrorMessage(resultsError, 'Zápasy sa nepodarilo načítať.')}</p>

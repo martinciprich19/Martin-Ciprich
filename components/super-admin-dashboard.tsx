@@ -8,6 +8,7 @@ import { ArenaSettlements } from '@/components/arena-settlements'
 import { DeviceReloadControl } from '@/components/device-reload-control'
 import { SuperAdminElo } from '@/components/super-admin-elo'
 import { createClient } from '@/lib/supabase/client'
+import { getErrorMessage } from '@/lib/errors'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useState, type FormEvent, type ReactNode } from 'react'
@@ -98,7 +99,7 @@ export function SuperAdminDashboard({ arenas, devices, managers, audit }: Props)
       setNotice(successMessage)
       router.refresh()
     } catch (reason) {
-      const message = reason instanceof Error ? reason.message : 'Požiadavku sa nepodarilo vykonať.'
+      const message = getErrorMessage(reason, 'Požiadavku sa nepodarilo vykonať.')
       console.error('Super Admin action failed:', reason)
       setError(message)
     } finally {
@@ -342,22 +343,40 @@ function SystemAnnouncements({ busy, runAction }: {
 }) {
   const [title, setTitle] = useState('')
   const [body, setBody] = useState('')
+  const [countryCode, setCountryCode] = useState<'ALL' | 'SK' | 'NL'>('ALL')
   return (
     <div className="grid gap-5 lg:grid-cols-2">
       <Panel title="Oznámenie hráčom" eyebrow="GLOBÁLNA SPRÁVA" icon={<BellRing size={17} />}>
-        <p className="mb-4 text-sm leading-6 text-app-fg/55">Oznámenie sa uloží medzi globálne notifikácie. Push sa odošle len vtedy, ak je nakonfigurovaný existujúci webhook a hráči majú povolené push notifikácie.</p>
+        <p className="mb-4 text-sm leading-6 text-app-fg/55">Vyber ligu príjemcov a zadaj oznámenie v jej jazyku. Výber sa riadi krajinou uloženou v profile hráča. Push sa odošle len vtedy, ak je nakonfigurovaný existujúci webhook a hráči majú povolené push notifikácie.</p>
         <form onSubmit={(event) => {
           event.preventDefault()
           void runAction(async () => {
-            const { error } = await createClient().rpc('super_admin_send_announcement', { p_title: title.trim(), p_body: body.trim() })
+            const { error } = await createClient().rpc('super_admin_send_announcement', {
+              p_title: title.trim(),
+              p_body: body.trim(),
+              p_country_code: countryCode === 'ALL' ? null : countryCode,
+            })
+            if (error?.code === 'PGRST202') {
+              throw new Error('Supabase API nevidí aktuálnu funkciu na odoslanie oznámenia. V SQL Editore spusti scripts/095_country_scoped_announcements.sql a potom stránku obnov.')
+            }
             if (error) throw error
             setTitle('')
             setBody('')
           }, 'Oznámenie bolo odoslané.')
         }} className="space-y-3">
+          <Field label="Príjemcovia">
+            <select value={countryCode} onChange={(event) => {
+              const value = event.target.value
+              setCountryCode(value === 'SK' || value === 'NL' ? value : 'ALL')
+            }} className={inputClass}>
+              <option value="ALL">Všetci hráči (SK + NL)</option>
+              <option value="SK">Slovenská liga</option>
+              <option value="NL">Holandská liga</option>
+            </select>
+          </Field>
           <Field label="Nadpis"><input required maxLength={120} value={title} onChange={(event) => setTitle(event.target.value)} className={inputClass} /></Field>
           <Field label="Správa"><textarea required maxLength={1000} rows={5} value={body} onChange={(event) => setBody(event.target.value)} className={`${inputClass} resize-y`} /></Field>
-          <button type="submit" disabled={busy} className={primaryButton}><BellRing size={16} />Odoslať všetkým</button>
+          <button type="submit" disabled={busy} className={primaryButton}><BellRing size={16} />{countryCode === 'ALL' ? 'Odoslať všetkým' : `Odoslať: ${countryCode === 'SK' ? 'Slovensko' : 'Holandsko'}`}</button>
         </form>
       </Panel>
       <Panel title="Globálne nastavenia" eyebrow="ĎALŠIA FÁZA" icon={<Shield size={17} />}>

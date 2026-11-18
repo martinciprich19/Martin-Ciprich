@@ -70,6 +70,7 @@ drop policy if exists "notifications_read_global" on public.notifications;
 create policy "notifications_read_global" on public.notifications
   for select to authenticated using (user_id is null);
 grant select on public.notifications to authenticated;
+alter table public.notifications add column if not exists country_code text;
 
 create or replace function public.record_super_admin_action(
   p_action text,
@@ -345,14 +346,18 @@ $$;
 revoke all on function public.super_admin_revoke_kiosk_device(uuid) from public, anon;
 grant execute on function public.super_admin_revoke_kiosk_device(uuid) to authenticated;
 
-create or replace function public.super_admin_send_announcement(p_title text, p_body text)
-returns uuid
+create or replace function public.super_admin_send_announcement(
+  p_title text,
+  p_body text,
+  p_country_code text default null
+)
+returns text
 language plpgsql
 security definer
 set search_path = ''
 as $$
 declare
-  notification_id uuid;
+  notification_id text;
 begin
   if auth.uid() is null or not public.is_super_admin() then
     raise exception 'Super Admin access required' using errcode = '42501';
@@ -362,20 +367,24 @@ begin
     raise exception 'Announcement title/body is required and must be within its length limit'
       using errcode = '22023';
   end if;
+  if p_country_code is not null and p_country_code not in ('SK', 'NL') then
+    raise exception 'Announcement country must be SK, NL or null for all players'
+      using errcode = '22023';
+  end if;
 
-  insert into public.notifications (user_id, type, title, body, message, is_read)
-  values (null, 'system_announcement', trim(p_title), trim(p_body), trim(p_body), false)
-  returning id into notification_id;
+  insert into public.notifications (user_id, type, title, body, message, is_read, country_code)
+  values (null, 'system_announcement', trim(p_title), trim(p_body), trim(p_body), false, p_country_code)
+  returning id::text into notification_id;
   perform public.record_super_admin_action(
     'announcement.sent', 'notification', notification_id::text,
-    jsonb_build_object('title', trim(p_title))
+    jsonb_build_object('title', trim(p_title), 'country_code', p_country_code)
   );
   return notification_id;
 end;
 $$;
 
-revoke all on function public.super_admin_send_announcement(text, text) from public, anon;
-grant execute on function public.super_admin_send_announcement(text, text) to authenticated;
+revoke all on function public.super_admin_send_announcement(text, text, text) from public, anon;
+grant execute on function public.super_admin_send_announcement(text, text, text) to authenticated;
 
 create index if not exists super_admin_audit_log_created_idx
   on public.super_admin_audit_log (created_at desc);

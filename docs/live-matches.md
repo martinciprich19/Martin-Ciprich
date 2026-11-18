@@ -16,6 +16,12 @@ Apply `scripts/067_public_live_matches.sql` in the Supabase SQL Editor after the
 
 Quick games without an arena and QR matches whose arena name is not registered remain visible, but have no region/arena filter value. Populate `arenas.region` for partner arenas in Supabase to make regional filtering available for older arena records.
 
+QR league match setup requires selecting an active arena from the current kiosk
+league; arbitrary arena names are not accepted. The arena directory is filtered
+by the selected national league, so classify Dutch venues with the correct
+country before use (see [national-leagues.md](./national-leagues.md) and
+`scripts/070_classify_existing_arenas.sql` for the reviewed Flevopadel venue).
+
 ## National-league backend
 
 After the already-applied `068_national_leagues.sql`, apply the **entire**

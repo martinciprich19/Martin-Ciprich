@@ -9,15 +9,17 @@ test('live match never installs the selection inactivity redirect', () => {
   assert.doesNotMatch(source, /useKioskInactivity/)
   assert.match(source, /onClick=\{resetKiosk\}/)
   const parent = readFileSync(new URL('../components/match-start-view.tsx', import.meta.url), 'utf8')
-  assert.match(parent, /useKioskInactivity\(matchId === null && \(isScanning \|\| choosingRules \|\| isCreating\), resetKioskFlow\)/)
+  assert.match(parent, /useKioskInactivity\(matchId === null && !isScanning && \(choosingRules \|\| isCreating\), resetKioskFlow\)/)
   const condition = parent.match(/useKioskInactivity\((.+), resetKioskFlow\)/)?.[1]
   assert.ok(condition)
-  for (const isScanning of [false, true]) {
-    for (const choosingRules of [false, true]) {
-      for (const isCreating of [false, true]) {
-        assert.equal(vm.runInNewContext(condition, {
-          matchId: 'active-match', isScanning, choosingRules, isCreating,
-        }), false)
+  for (const matchId of [null, 'active-match']) {
+    for (const isScanning of [false, true]) {
+      for (const choosingRules of [false, true]) {
+        for (const isCreating of [false, true]) {
+          assert.equal(vm.runInNewContext(condition, {
+            matchId, isScanning, choosingRules, isCreating,
+          }), matchId === null && !isScanning && (choosingRules || isCreating))
+        }
       }
     }
   }
