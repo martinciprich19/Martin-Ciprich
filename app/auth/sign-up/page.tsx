@@ -98,7 +98,7 @@ export default function SignUpPage() {
       // Require explicit OTP verification before the user can continue in the app.
       if (!data.session || !data.user?.email_confirmed_at) {
         if (data.session) await supabase.auth.signOut({ scope: 'local' })
-        router.replace(`/auth/verify?email=${encodeURIComponent(email)}`)
+        router.replace(`/auth/verify?email=${encodeURIComponent(email)}&sent=1`)
         return
       }
 

@@ -1,11 +1,12 @@
 import { randomBytes } from 'node:crypto'
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { isAllowedRequestOrigin } from '@/lib/request-origin'
 
 export const runtime = 'nodejs'
 
 export async function POST(request: Request) {
-  if (request.headers.get('origin') !== new URL(request.url).origin) {
+  if (!isAllowedRequestOrigin(request, true)) {
     return NextResponse.json({ error: 'Nepovolený pôvod požiadavky.' }, { status: 403 })
   }
   let input: unknown

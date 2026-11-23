@@ -1,11 +1,12 @@
 import { createClient } from '@supabase/supabase-js'
 import { randomBytes, createHmac } from 'node:crypto'
 import { NextResponse, type NextRequest } from 'next/server'
+import { isAllowedRequestOrigin } from '@/lib/request-origin'
 
 export const runtime = 'nodejs'
 
 export async function POST(request: NextRequest) {
-  if (request.headers.get('origin') !== new URL(request.url).origin) {
+  if (!isAllowedRequestOrigin(request, true)) {
     return NextResponse.json({ error: 'Nepovolený pôvod požiadavky.' }, { status: 403 })
   }
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY

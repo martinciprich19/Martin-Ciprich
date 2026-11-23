@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { stripTypeScriptTypes } from 'node:module'
 import test from 'node:test'
+import { isAllowedRequestOrigin } from '../lib/request-origin.ts'
 
 test('connection state uses exact 90-second threshold and unknown is not offline', async () => {
   const source = stripTypeScriptTypes(await readFile(new URL('../lib/device-telemetry.ts', import.meta.url), 'utf8')).replace(/\bexport /g, '')
@@ -18,10 +19,10 @@ test('heartbeat endpoint requires device identity and validates all telemetry fi
     .replace(/^import .*$/gm, '').replace(/\bexport /g, '')
   const calls = []
   let failure = null
-  const POST = new Function('NextResponse', 'createClient', 'process', 'console', `${source};return POST`)(
+  const POST = new Function('NextResponse', 'createClient', 'process', 'console', 'isAllowedRequestOrigin', `${source};return POST`)(
     { json: Response.json },
     () => ({ rpc: async (name, args) => { calls.push({ name, args }); return { error: failure } } }),
-    { env: { NEXT_PUBLIC_SUPABASE_URL: 'https://db.test', NEXT_PUBLIC_SUPABASE_ANON_KEY: 'test' } }, { error() {} },
+    { env: { NEXT_PUBLIC_SUPABASE_URL: 'https://db.test', NEXT_PUBLIC_SUPABASE_ANON_KEY: 'test' } }, { error() {} }, isAllowedRequestOrigin,
   )
   function request(headers = {}, token = 'a'.repeat(64)) {
     const r = new Request('https://riva.test/api/device-heartbeat', { method: 'POST', headers })
@@ -41,6 +42,7 @@ test('heartbeat endpoint requires device identity and validates all telemetry fi
   ]) assert.equal((await POST(request(headers))).status, 400)
   assert.equal(calls.length, 0)
   assert.equal((await POST(request({ origin: 'https://other.test', 'x-riva-source': 'browser' }))).status, 403)
+  assert.equal((await POST(request({ host: 'localhost:3000', origin: 'https://localhost:3000', 'x-riva-source': 'browser' }))).status, 200)
   const result = await POST(request({ 'x-riva-source': 'android', 'x-riva-battery': '0', 'x-riva-charging': 'false', 'x-riva-version': '1.11' }))
   assert.equal(result.status, 200)
   assert.equal(result.headers.get('Cache-Control'), 'no-store')

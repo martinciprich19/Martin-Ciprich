@@ -2,12 +2,15 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
+import useSWR from 'swr'
 import { ArrowRight, MapPin, Radio, RefreshCw } from 'lucide-react'
 import { useLanguage } from '@/components/language-provider'
 import { useLeague } from '@/components/league-provider'
 import { uiTranslations } from '@/lib/i18n/ui-translations'
 import { createClient } from '@/lib/supabase/client'
-import type { CountryCode } from '@/lib/countries'
+import { fetchArenas } from '@/lib/arenas'
+import { arenasForRegion, matchInRegion } from '@/lib/live-match-filters'
+import { subdivisionCode, type CountryCode } from '@/lib/countries'
 
 type LiveMatch = {
   country_code: CountryCode
@@ -47,6 +50,10 @@ function CountryLiveMatchesView() {
   const [isLoading, setIsLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [loadError, setLoadError] = useState(false)
+  const { data: allArenas = [], error: arenasError, isLoading: arenasLoading, mutate: reloadArenas } = useSWR(
+    ['arenas', country],
+    () => fetchArenas(country),
+  )
 
   const loadMatches = useCallback(async (background = false, isActive: () => boolean = () => true) => {
     if (background) setIsRefreshing(true)
@@ -80,13 +87,11 @@ function CountryLiveMatchesView() {
     }
   }, [loadMatches])
 
-  const arenas = useMemo(() => {
-    const filtered = selectedRegion === ALL_REGIONS ? matches : matches.filter((match) => match.region === selectedRegion)
-    return [...new Map(filtered.filter((match) => match.arena_id !== null && match.arena_name).map((match) => [String(match.arena_id), match.arena_name as string])).entries()]
-      .sort((a, b) => a[1].localeCompare(b[1]))
-  }, [matches, selectedRegion])
+  const region = selectedRegion === ALL_REGIONS ? null : selectedRegion
+  const subdivision = region === null ? null : subdivisionCode(country, region)
+  const arenas = useMemo(() => arenasForRegion(allArenas, region, subdivision), [allArenas, region, subdivision])
   const visibleMatches = matches.filter((match) =>
-    (selectedRegion === ALL_REGIONS || match.region === selectedRegion) &&
+    matchInRegion(match, allArenas, region, subdivision) &&
     (selectedArena === ALL_ARENAS || String(match.arena_id) === selectedArena))
 
   return (
@@ -107,16 +112,18 @@ function CountryLiveMatchesView() {
         </label>
         <label>
           <span className="mb-1.5 block text-xs font-semibold text-app-fg/65">{t('Aréna', 'Arena')}</span>
-          <select value={selectedArena} onChange={(event) => setSelectedArena(event.target.value)} className="w-full rounded-xl border border-app-line/10 bg-app-panel px-4 py-3 text-sm text-app-fg outline-none focus:border-[#a8e63c]">
+          <select value={selectedArena} onChange={(event) => setSelectedArena(event.target.value)} disabled={arenasLoading || Boolean(arenasError)} className="w-full rounded-xl border border-app-line/10 bg-app-panel px-4 py-3 text-sm text-app-fg outline-none focus:border-[#a8e63c] disabled:opacity-50">
             <option value={ALL_ARENAS}>{t('Všetky arény', 'All arenas')}</option>
-            {arenas.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+            {arenas.map((arena) => <option key={arena.id} value={arena.id}>{arena.name}{arena.city ? ` – ${arena.city}` : ''}</option>)}
           </select>
         </label>
       </div>
 
+      {arenasError ? <p role="alert" className="mt-3 text-sm text-app-red-300">{t('Arény sa nepodarilo načítať. Skús obnoviť stránku.', 'Could not load arenas. Try refreshing the page.')}</p> : null}
+
       <div className="mt-5 flex flex-wrap items-center justify-between gap-3 text-xs text-app-fg/45">
         <p>{t('Počet zápasov', 'Matches')}: <strong className="text-app-fg">{visibleMatches.length}</strong></p>
-        <button type="button" onClick={() => void loadMatches(true)} disabled={isRefreshing} className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-app-line/10 px-3 py-2 font-semibold text-app-fg/70 transition hover:border-app-line/30 disabled:opacity-50">
+        <button type="button" onClick={() => { void loadMatches(true); void reloadArenas().catch((error: unknown) => console.error('Obnovenie arén zlyhalo:', error)) }} disabled={isRefreshing} className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-app-line/10 px-3 py-2 font-semibold text-app-fg/70 transition hover:border-app-line/30 disabled:opacity-50">
           <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} aria-hidden="true" />{t('Obnoviť', 'Refresh')}
         </button>
       </div>

@@ -1,10 +1,10 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { isAllowedRequestOrigin } from '@/lib/request-origin'
 
 export async function POST(request: NextRequest) {
   const headers = { 'Cache-Control': 'no-store' }
-  const origin = request.headers.get('origin')
-  if (origin && origin !== request.nextUrl.origin) return NextResponse.json({ error: 'Nepovolený pôvod.' }, { status: 403, headers })
+  if (!isAllowedRequestOrigin(request)) return NextResponse.json({ error: 'Nepovolený pôvod.' }, { status: 403, headers })
   const token = request.cookies.get('riva-kiosk-device')?.value
   if (!token) return NextResponse.json({ paired: false }, { headers })
   if (!/^[a-f0-9]{64}$/.test(token)) return NextResponse.json({ error: 'Neplatné zariadenie.' }, { status: 401, headers })

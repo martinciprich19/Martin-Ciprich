@@ -13,11 +13,13 @@ export type Arena = {
   isHomeClub?: boolean
   country_code: CountryCode
   subdivision_code: string | null
+  region?: string | null
 }
 
 type ArenaRow = {
   country_code: CountryCode
   subdivision_code: string | null
+  region: string | null
   id: string | number
   name: string | null
   address: string | null
@@ -40,13 +42,14 @@ function fromRow(row: ArenaRow): Arena {
     openingHoursNote: row.opening_hours_note ?? '',
     country_code: row.country_code,
     subdivision_code: row.subdivision_code,
+    region: row.region,
   }
 }
 
 export async function fetchArenas(country?: CountryCode): Promise<Arena[]> {
   let query = createClient()
     .from('arenas')
-    .select('id, country_code, subdivision_code, name, address, city, courts_count, opening_hours_weekday, opening_hours_weekend, opening_hours_note')
+    .select('id, country_code, subdivision_code, region, name, address, city, courts_count, opening_hours_weekday, opening_hours_weekend, opening_hours_note')
     .eq('is_active', true)
   if (country) query = query.eq('country_code', country)
   const { data, error } = await query

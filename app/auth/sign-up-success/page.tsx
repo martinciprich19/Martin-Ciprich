@@ -27,7 +27,7 @@ function SignUpSuccessContent() {
         <li>{t('• Odkaz otvor najlepšie v tom istom prehliadači, v ktorom si sa registroval.')}</li>
       </ul>
       {email && <ResendVerificationButton email={email} className="mt-5" />}
-      <Link href={email ? `/auth/verify?email=${encodeURIComponent(email)}` : '/auth/verify'} className="mt-4 inline-flex w-full justify-center rounded-lg border border-[#b5ef33]/40 px-5 py-3 text-xs font-black uppercase text-app-lime hover:bg-[#b5ef33]/10">
+      <Link href={email ? `/auth/verify?email=${encodeURIComponent(email)}&sent=1` : '/auth/verify'} className="mt-4 inline-flex w-full justify-center rounded-lg border border-[#b5ef33]/40 px-5 py-3 text-xs font-black uppercase text-app-lime hover:bg-[#b5ef33]/10">
         {t('Zadať overovací kód')}
       </Link>
       <Link href={email ? `/auth/login?email=${encodeURIComponent(email)}` : '/auth/login'} className="mt-4 inline-flex w-full justify-center rounded-lg bg-[#b5ef33] px-5 py-3 text-xs font-black uppercase text-[#061016] hover:bg-[#a2db25]">

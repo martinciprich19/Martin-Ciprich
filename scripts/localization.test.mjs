@@ -93,6 +93,11 @@ test('Dutch covers exact signup vocabulary, including conditional labels and val
 })
 
 test('Dutch translates auth recovery, scoring, errors and parameterized strings', () => {
+  assert.equal(provider.translate('en', 'Overovací kód sme odoslali na tvoju e-mailovú adresu:'), 'We sent a verification code to your email address:')
+  assert.equal(provider.translate('nl', 'Overovací kód sme odoslali na tvoju e-mailovú adresu:'), 'We hebben een verificatiecode naar je e-mailadres gestuurd:')
+  assert.equal(provider.translate('nl', 'Nový overovací kód bol odoslaný na e-mailovú adresu {email}.'), 'Er is een nieuwe verificatiecode verstuurd naar het e-mailadres {email}.')
+  assert.equal(provider.translate('en', 'Zmeniť e-mailovú adresu'), 'Change email address')
+  assert.equal(provider.translate('nl', 'Zadaj číselný kód z overovacieho e-mailu.'), 'Voer de cijfercode uit de verificatiemail in.')
   assert.equal(provider.translate('nl', 'Toto heslo ste použili v minulosti, zadajte nové.'), 'Je hebt dit wachtwoord eerder gebruikt. Kies een nieuw wachtwoord.')
   assert.equal(provider.translate('nl', 'Výhoda'), 'Voordeel')
   assert.equal(provider.translate('nl', 'Body vyhraté na podaní'), 'Gewonnen servicepunten')

@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises'
 import { randomBytes, createHmac } from 'node:crypto'
 import { stripTypeScriptTypes } from 'node:module'
 import test from 'node:test'
+import { isAllowedRequestOrigin } from '../lib/request-origin.ts'
 
 test('pairing API keeps tokens private, checks origin and promotes only a confirmed target installation', async () => {
   const source = stripTypeScriptTypes(await readFile(new URL('../app/api/device-pair/route.ts', import.meta.url), 'utf8'))
@@ -20,8 +21,8 @@ test('pairing API keeps tokens private, checks origin and promotes only a confir
     calls.push({ name, args, key })
     return { data: name === 'create_device_pairing_request' ? new Date(Date.now() + 600000).toISOString() : paired, error: failure }
   } })
-  const { POST, GET } = new Function('createClient','randomBytes','createHmac','NextResponse','process','console',
-    `${source};return {POST,GET}`)(createClient, randomBytes, createHmac, NextResponse, { env }, { error() {} })
+  const { POST, GET } = new Function('createClient','randomBytes','createHmac','NextResponse','process','console','isAllowedRequestOrigin',
+    `${source};return {POST,GET}`)(createClient, randomBytes, createHmac, NextResponse, { env }, { error() {} }, isAllowedRequestOrigin)
   const request = (method, origin = 'https://riva.test', token = null) => {
     const r = new Request('https://riva.test/api/device-pair', { method, headers: { origin, 'x-forwarded-for': '127.0.0.1' } })
     r.nextUrl = new URL(r.url)

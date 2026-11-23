@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises'
 import { stripTypeScriptTypes } from 'node:module'
 import { randomBytes } from 'node:crypto'
 import test from 'node:test'
+import { isAllowedRequestOrigin } from '../lib/request-origin.ts'
 import { PGlite } from '@electric-sql/pglite'
 
 const read = file => readFile(new URL(file, import.meta.url), 'utf8')
@@ -176,8 +177,8 @@ test('device API requires manager authorization and issues only private installa
     response.cookies = { values: [], set: (...args) => response.cookies.values.push(args) }
     return response
   } }
-  const post = new Function('randomBytes','NextResponse','createClient',`${source};return POST`)(
-    randomBytes,NextResponse,async () => client)
+  const post = new Function('randomBytes','NextResponse','createClient','isAllowedRequestOrigin',`${source};return POST`)(
+    randomBytes,NextResponse,async () => client,isAllowedRequestOrigin)
   const request = (origin = 'https://riva.test') => new Request('https://riva.test/api/kiosk-device', {
     method:'POST',headers:{ origin,'content-type':'application/json' },
     body:JSON.stringify({ arenaId:'1',courtId:'7',name:'Tablet' }),

@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient as createDatabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
+import { isAllowedRequestOrigin } from '@/lib/request-origin'
 
 export const runtime = 'nodejs'
 function database() {
@@ -36,8 +37,7 @@ export async function GET(request: NextRequest) {
   }
 }
 export async function POST(request: NextRequest) {
-  const origin = request.headers.get('origin')
-  if (origin && origin !== request.nextUrl.origin) return NextResponse.json({ error: 'Nepovolený pôvod požiadavky.' }, { status: 403 })
+  if (!isAllowedRequestOrigin(request)) return NextResponse.json({ error: 'Nepovolený pôvod požiadavky.' }, { status: 403 })
   const token = request.cookies.get('riva-kiosk-device')?.value
   if (!token || !/^[a-f0-9]{64}$/.test(token)) return NextResponse.json({ error: 'Neautorizované zariadenie.' }, { status: 401 })
   if (request.headers.get('content-type') !== 'image/jpeg'

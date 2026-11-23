@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { stripTypeScriptTypes } from 'node:module'
 import test from 'node:test'
+import { isAllowedRequestOrigin } from '../lib/request-origin.ts'
 
 test('screen preview API protects admin reads and validates device uploads', async () => {
   const code = stripTypeScriptTypes(await readFile(new URL('../app/api/kiosk-preview/route.ts', import.meta.url), 'utf8'))
@@ -13,9 +14,9 @@ test('screen preview API protects admin reads and validates device uploads', asy
     auth: { getUser: async () => ({ data: { user }, error: null }) },
     rpc: async (name, args) => { calls.push({ name, args }); return { data: name === 'kiosk_preview_requested' ? true : [], error: rpcError } },
   }
-  const { GET, POST } = new Function('NextResponse', 'createDatabaseClient', 'createClient', 'process', 'Buffer', 'console',
+  const { GET, POST } = new Function('NextResponse', 'createDatabaseClient', 'createClient', 'process', 'Buffer', 'console', 'isAllowedRequestOrigin',
     `${code};return {GET,POST}`)({ json: Response.json }, () => db, async () => db,
-    { env: { NEXT_PUBLIC_SUPABASE_URL: 'https://db.test', NEXT_PUBLIC_SUPABASE_ANON_KEY: 'test' } }, Buffer, { error() {} })
+    { env: { NEXT_PUBLIC_SUPABASE_URL: 'https://db.test', NEXT_PUBLIC_SUPABASE_ANON_KEY: 'test' } }, Buffer, { error() {} }, isAllowedRequestOrigin)
   const request = (method = 'GET', query = '', token = null, body = null, origin = null) => {
     const r = new Request(`https://riva.test/api/kiosk-preview${query}`, {
       method, ...(body ? { body } : {}),

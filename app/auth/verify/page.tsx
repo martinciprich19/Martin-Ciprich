@@ -23,7 +23,9 @@ function VerifyForm() {
   const { t } = useLanguage()
   const searchParams = useSearchParams()
   const router = useRouter()
-  const [email, setEmail] = useState(searchParams.get('email')?.trim() ?? '')
+  const initialEmail = searchParams.get('email')?.trim() ?? ''
+  const [email, setEmail] = useState(initialEmail)
+  const [editingEmail, setEditingEmail] = useState(!initialEmail)
   const [token, setToken] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -89,7 +91,7 @@ function VerifyForm() {
       })
       if (resendError) throw resendError
 
-      setResendMessage({ type: 'success', text: 'Nový overovací kód bol odoslaný na {email}.', email: address })
+      setResendMessage({ type: 'success', text: 'Nový overovací kód bol odoslaný na e-mailovú adresu {email}.', email: address })
       setCountdown(RESEND_COOLDOWN_SECONDS)
     } catch (err: unknown) {
       const message = getErrorMessage(err, 'Nový overovací kód sa nepodarilo odoslať.')
@@ -107,8 +109,16 @@ function VerifyForm() {
           <RivaLogo />
         </div>
         <h1 className="mb-3 text-center text-xl font-bold sm:text-2xl">{t('OVERENIE ÚČTU')}</h1>
+        {!editingEmail && email ? (
+          <p role="status" className="mb-3 text-center text-sm leading-6 text-app-lime">
+            {searchParams.get('sent') === '1' && email === initialEmail
+              ? t('Overovací kód sme odoslali na tvoju e-mailovú adresu:')
+              : t('Overuješ účet s e-mailovou adresou:')}{' '}
+            <strong className="break-all" translate="no">{email}</strong>
+          </p>
+        ) : null}
         <p className="mb-6 text-center text-sm leading-6 text-app-fg/60">
-          {t('Zadaj e-mail a číselný kód z overovacej správy.')}
+          {editingEmail ? t('Zadaj e-mail a číselný kód z overovacej správy.') : t('Zadaj číselný kód z overovacieho e-mailu.')}
         </p>
 
         {error && (
@@ -118,7 +128,7 @@ function VerifyForm() {
         )}
 
         <form onSubmit={handleVerify} className="space-y-4">
-          <div>
+          {editingEmail ? <div>
             <label htmlFor="verify-email" className="text-sm text-gray-400">{t('E-mail')}</label>
             <input
               id="verify-email"
@@ -127,11 +137,15 @@ function VerifyForm() {
               autoCapitalize="none"
               required
               value={email}
-              onChange={(event) => setEmail(event.target.value)}
+              onChange={(event) => { setEmail(event.target.value); setResendMessage(null) }}
               className="mt-1 w-full rounded-lg border border-app-line/10 bg-app-ink px-4 py-2.5 text-app-fg focus:border-green-400 focus:outline-none"
               placeholder={t('vas@email.sk')}
             />
-          </div>
+          </div> : <div className="text-center">
+            <button type="button" onClick={() => setEditingEmail(true)} className="text-xs text-app-fg/60 underline hover:text-app-fg">
+              {t('Zmeniť e-mailovú adresu')}
+            </button>
+          </div>}
 
           <div>
             <label htmlFor="verify-token" className="text-sm text-gray-400">{t('Overovací kód')}</label>

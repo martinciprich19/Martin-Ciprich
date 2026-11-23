@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises'
 import { stripTypeScriptTypes } from 'node:module'
 import vm from 'node:vm'
 import test from 'node:test'
+import { isAllowedRequestOrigin } from '../lib/request-origin.ts'
 import * as jsxRuntime from 'react/jsx-runtime'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { loadBindings, transform } from 'next/dist/build/swc/index.js'
@@ -142,9 +143,9 @@ test('reload API validates origin, device token and acknowledgement without expo
     .replace(/^import .*$/gm,'').replace(/\bexport /g,'')
   const calls=[]
   let failure=null
-  const POST=new Function('NextResponse','createClient','process','console',`${source};return POST`)(
+  const POST=new Function('NextResponse','createClient','process','console','isAllowedRequestOrigin',`${source};return POST`)(
     {json:Response.json},()=>({rpc:async(name,args)=>{calls.push({name,args});return {data:null,error:failure}}}),
-    {env:{NEXT_PUBLIC_SUPABASE_URL:'https://db.test',NEXT_PUBLIC_SUPABASE_ANON_KEY:'test'}},{error(){}},
+    {env:{NEXT_PUBLIC_SUPABASE_URL:'https://db.test',NEXT_PUBLIC_SUPABASE_ANON_KEY:'test'}},{error(){}},isAllowedRequestOrigin,
   )
   function request(headers={},token='a'.repeat(64)){
     const r=new Request('https://riva.test/api/device-reload',{method:'POST',headers})
@@ -152,6 +153,7 @@ test('reload API validates origin, device token and acknowledgement without expo
     return r
   }
   assert.equal((await POST(request({origin:'https://other.test'}))).status,403)
+  assert.deepEqual(await (await POST(request({host:'localhost:3000',origin:'https://localhost:3000'},null))).json(),{paired:false})
   assert.deepEqual(await (await POST(request({},null))).json(),{paired:false})
   assert.equal((await POST(request({},'bad'))).status,401)
   assert.equal((await POST(request({'x-riva-reload-ack':'bad'}))).status,400)
