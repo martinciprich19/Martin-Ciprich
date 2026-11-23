@@ -238,6 +238,7 @@ export const dutchVocabulary: Record<string, string> = {
   'Dominant hand:': 'Voorkeurshand:', 'Home arena:': 'Thuisclub:',
   'Automatically based on the most visited club': 'Automatisch op basis van de meest bezochte club',
   'Enlarge profile photo': 'Profielfoto vergroten', 'Profile photo': 'Profielfoto', 'Select arena': 'Kies een club', 'Enter match': 'Wedstrijd invoeren',
+  'Delete photo': 'Foto verwijderen', 'Deleting photo…': 'Foto verwijderen…', 'Are you sure you want to delete your profile photo?': 'Weet je zeker dat je je profielfoto wilt verwijderen?',
   'Could not save the home arena.': 'De thuisclub kon niet worden opgeslagen.', 'Could not save the dominant hand.': 'De voorkeurshand kon niet worden opgeslagen.',
   'RIVA / RANKINGS': 'RIVA / RANGLIJSTEN', 'Players ranked by ELO and the arenas they visit.': 'Spelers gerangschikt op ELO en de clubs die ze bezoeken.',
   'National ranking': 'Landelijke ranglijst', 'Regional ranking': 'Regionale ranglijst', 'Arena ranking': 'Clubranglijst',

@@ -138,6 +138,8 @@ export default function ProfilePage() {
   const [isArenaManager, setIsArenaManager] = useState(false)
   const [isSuperAdmin, setIsSuperAdmin] = useState(false)
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
+  const [avatarBusy, setAvatarBusy] = useState(false)
+  const avatarOperation = useRef(false)
   const [qrProfileLoading, setQrProfileLoading] = useState(true)
   const [qrProfileError, setQrProfileError] = useState<string | null>(null)
   const [gender, setGender] = useState<Gender | null>(null)
@@ -496,7 +498,9 @@ export default function ProfilePage() {
 
   async function handleAvatarChange(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]
-    if (!file) return
+    if (!file || avatarOperation.current) return
+    avatarOperation.current = true
+    setAvatarBusy(true)
     try {
       const nextAvatarUrl = await saveProfileAvatar(file)
       setAvatarUrl(nextAvatarUrl)
@@ -505,10 +509,17 @@ export default function ProfilePage() {
       const message = getErrorMessage(error, 'Profilovú fotku sa nepodarilo uložiť.')
       console.error('Uloženie profilovej fotky zlyhalo:', message)
       window.alert(message)
+    } finally {
+      avatarOperation.current = false
+      setAvatarBusy(false)
+      if (avatarInputRef.current) avatarInputRef.current.value = ''
     }
   }
 
   async function removeAvatar() {
+    if (avatarOperation.current || !window.confirm(t('Naozaj chceš odstrániť profilovú fotografiu?', 'Are you sure you want to delete your profile photo?'))) return
+    avatarOperation.current = true
+    setAvatarBusy(true)
     try {
       await removeProfileAvatar()
       setAvatarUrl(null)
@@ -518,6 +529,9 @@ export default function ProfilePage() {
       const message = getErrorMessage(error, 'Profilovú fotku sa nepodarilo odstrániť.')
       console.error('Odstránenie profilovej fotky zlyhalo:', message)
       window.alert(message)
+    } finally {
+      avatarOperation.current = false
+      setAvatarBusy(false)
     }
   }
 
@@ -586,7 +600,7 @@ export default function ProfilePage() {
                 {unreadAlertCount > 0 && !communicationAlertsSeen ? <span aria-live="polite" className={`absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-black text-app-fg ${incomingPairInvitations.length ? 'animate-pulse' : ''}`}>{unreadAlertCount > 9 ? '9+' : unreadAlertCount}</span> : null}
               </button>
               <div className="hidden h-7 w-px bg-app-overlay/10 sm:block" />
-              <div className="flex items-center gap-2"><AvatarPreview src={avatarUrl} initials={player.username.slice(0, 2)} size="sm" /><span className="hidden text-sm font-semibold sm:block">{player.username}</span></div>
+              <div className="flex items-center gap-2"><AvatarPreview src={avatarUrl} initials={player.username.slice(0, 2)} size="sm" onRemove={removeAvatar} busy={avatarBusy} /><span className="hidden text-sm font-semibold sm:block">{player.username}</span></div>
             </div>
           </header>
           <div className="flex justify-end px-4 pt-3 lg:hidden"><LeagueSelector /></div>
@@ -603,7 +617,7 @@ export default function ProfilePage() {
             </div>
 
             <PlayerQrCard profileId={player.profile_id} name={overviewName} isLoading={qrProfileLoading} error={qrProfileError} />
-            <section id="profile" className="mt-8 flex flex-col gap-5 rounded-2xl border border-app-line/[0.08] bg-app-surface p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6"><div className="flex items-center gap-4"><AvatarPreview src={avatarUrl} initials={player.username.slice(0, 1)} /><div><p className="text-[10px] font-bold uppercase tracking-[0.18em] text-app-fg/35">Môj profil</p><p className="mt-1 font-bold">{player.username}</p><p className="mt-1 text-xs text-app-fg/40">{player.region} · {player.level}</p></div></div></section>
+            <section id="profile" className="mt-8 flex flex-col gap-5 rounded-2xl border border-app-line/[0.08] bg-app-surface p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6"><div className="flex items-center gap-4"><AvatarPreview src={avatarUrl} initials={player.username.slice(0, 1)} onRemove={removeAvatar} busy={avatarBusy} /><div><p className="text-[10px] font-bold uppercase tracking-[0.18em] text-app-fg/35">Môj profil</p><p className="mt-1 font-bold">{player.username}</p><p className="mt-1 text-xs text-app-fg/40">{player.region} · {player.level}</p></div></div></section>
 
             <div className="mt-6 grid gap-3 md:mt-9 md:grid-cols-2 md:gap-4 xl:grid-cols-4">
               <StatCard label={t('ELO rating', 'ELO rating')} value={overviewLoading ? '–' : `${overview?.elo ?? 1000}`} suffix="ELO" detail={t('Tvoje aktuálne hodnotenie', 'Your current rating')} icon={<Crosshair size={19} />} />
@@ -1204,8 +1218,8 @@ const ProfileView = memo(function ProfileView({ player, phone, avatarUrl, avatar
   const homeVenueDetail = !player.home_venue_id && player.auto_venue_id ? 'Automaticky podľa najnavštevovanejšieho klubu' : undefined
 
   return <div className="mx-auto max-w-[1120px]">
-    <div className="mb-8 flex items-end justify-between"><div><p className="text-xs font-bold uppercase tracking-[0.22em] text-app-league">RIVA /</p><h1 className="mt-2 text-3xl font-black">Môj profil</h1></div><div className="hidden items-center gap-3 sm:flex"><div className="text-right"><p className="font-bold">{player.username}</p><p className="text-xs text-app-fg/45">{player.region}</p></div><AvatarPreview src={avatarUrl} initials={player.username.slice(0, 1)} /></div></div>
-    <section className="rounded-2xl border border-app-line/[0.08] bg-app-surface p-6 sm:p-10"><div className="flex flex-col gap-6 sm:flex-row sm:items-center"><div className="relative"><AvatarPreview src={avatarUrl} initials={player.username.slice(0, 1)} size="lg" /><label htmlFor="profile-avatar-upload" className="absolute -bottom-2 -right-2 flex h-12 w-12 cursor-pointer items-center justify-center rounded-xl bg-[var(--profile-avatar-color,#ccff00)] text-xl font-black text-[#10150d]">⌾</label></div><div className="flex-1"><h2 className="text-4xl font-black">{player.username}</h2><p className="mt-1 text-lg text-app-fg/45">{player.email}</p><div className="mt-4 flex flex-wrap gap-2"><span className="rounded-lg bg-[var(--profile-avatar-color,#ccff00)] px-3 py-2 text-xs font-black text-[#10150d]">{player.region}</span><span className="rounded-lg bg-app-selected px-3 py-2 text-xs font-bold">{player.level}</span><span className="rounded-lg border border-[var(--profile-avatar-color,#ccff00)] bg-app-overlay/5 px-3 py-2 text-xs font-bold text-[var(--profile-avatar-color,#ccff00)]">{matchStats.elo} ELO</span></div></div></div></section>
+    <div className="mb-8 flex items-end justify-between"><div><p className="text-xs font-bold uppercase tracking-[0.22em] text-app-league">RIVA /</p><h1 className="mt-2 text-3xl font-black">Môj profil</h1></div><div className="hidden items-center gap-3 sm:flex"><div className="text-right"><p className="font-bold">{player.username}</p><p className="text-xs text-app-fg/45">{player.region}</p></div><AvatarPreview src={avatarUrl} initials={player.username.slice(0, 1)} onRemove={removeAvatar} /></div></div>
+    <section className="rounded-2xl border border-app-line/[0.08] bg-app-surface p-6 sm:p-10"><div className="flex flex-col gap-6 sm:flex-row sm:items-center"><div className="relative"><AvatarPreview src={avatarUrl} initials={player.username.slice(0, 1)} size="lg" onRemove={removeAvatar} /><label htmlFor="profile-avatar-upload" className="absolute -bottom-2 -right-2 flex h-12 w-12 cursor-pointer items-center justify-center rounded-xl bg-[var(--profile-avatar-color,#ccff00)] text-xl font-black text-[#10150d]">⌾</label></div><div className="flex-1"><h2 className="text-4xl font-black">{player.username}</h2><p className="mt-1 text-lg text-app-fg/45">{player.email}</p><div className="mt-4 flex flex-wrap gap-2"><span className="rounded-lg bg-[var(--profile-avatar-color,#ccff00)] px-3 py-2 text-xs font-black text-[#10150d]">{player.region}</span><span className="rounded-lg bg-app-selected px-3 py-2 text-xs font-bold">{player.level}</span><span className="rounded-lg border border-[var(--profile-avatar-color,#ccff00)] bg-app-overlay/5 px-3 py-2 text-xs font-bold text-[var(--profile-avatar-color,#ccff00)]">{matchStats.elo} ELO</span></div></div></div></section>
     <section className="mt-6 rounded-xl border border-app-line/[0.08] bg-app-surface p-5"><h2 className="text-sm font-bold">{t('Profilový popis', 'About me')}</h2><p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-app-fg/65">{profile?.bio.trim() || t('Bio zatiaľ nie je vyplnené.', 'No Bio added yet.')}</p></section><input ref={avatarInputRef} id="profile-avatar-upload" type="file" accept="image/*" onChange={handleAvatarChange} className="sr-only" />
     <div className="mt-8 grid gap-6 lg:grid-cols-2"><InfoCard title="Osobné údaje"><InfoRow label="Meno:" value={player.username} /><InfoRow label={profileCountry === 'NL' ? t('Provincia:') : t('Kraj:')} value={player.region} /><InfoRow label="Úroveň:" value={player.level} /><HomeArenaInfoRow email={player.email} arenas={arenas} homeVenueId={player.home_venue_id} autoVenueId={player.auto_venue_id} /><DominantHandInfoRow email={player.email} value={player.dominant_hand} /><InfoRow label="Telefón:" value={phone || 'Neuvedené'} /><InfoRow label="Dátum registrácie:" value={player.created_at ? new Intl.DateTimeFormat(language === 'nl' ? 'nl-NL' : language === 'en' ? 'en-GB' : 'sk-SK', { day: 'numeric', month: 'long', year: 'numeric' }).format(new Date(player.created_at)) : 'Neuvedené'} /></InfoCard><InfoCard title="Štatistiky ELO"><InfoRow label="Aktuálne ELO:" value={`${player.elo} ELO`} highlight /><InfoRow label="ELO od registrácie:" value={`${player.career_elo} ELO`} /><InfoRow label="Najvyššie ELO:" value={`${player.highest_elo} ELO`} /><InfoRow label="Aktuálna sezóna:" value={formatSeason(player.elo_season_start, language)} /><InfoRow label={profileCountry === 'NL' ? t('Provinčná pozícia:', 'Province ranking:') : t('Krajská pozícia:', 'Regional ranking:')} value={rankingValue(positions?.regional)} /><InfoRow label={t('Národná pozícia:', 'National ranking:')} value={rankingValue(positions?.national)} /></InfoCard></div>
     <div className="mt-8"><h2 className="text-xl font-black">Štatistiky zápasov</h2></div>
@@ -1462,9 +1476,12 @@ function HomeArenaInfoRow({ email, arenas, homeVenueId, autoVenueId }: { email: 
 
 const InfoRow = memo(function InfoRow({ label, value, highlight, detail }: { label: string; value: string; highlight?: boolean; detail?: string }) { return <div className="flex items-center justify-between gap-4 border-b border-app-line/[0.06] py-4 text-sm"><span className="shrink-0 text-app-fg/55">{label}</span><span className="text-right"><span className={highlight ? 'font-bold text-app-league' : 'font-bold'}>{value}</span>{detail ? <span className="mt-1 block text-[10px] leading-relaxed text-app-fg/40">{detail}</span> : null}</span></div> })
 
-const AvatarPreview = memo(function AvatarPreview({ src, initials, size = 'md' }: { src: string | null; initials: string; size?: 'sm' | 'md' | 'lg' }) {
+const AvatarPreview = memo(function AvatarPreview({ src, initials, size = 'md', onRemove, busy = false }: { src: string | null; initials: string; size?: 'sm' | 'md' | 'lg'; onRemove?: () => void | Promise<void>; busy?: boolean }) {
   const sizeClass = size === 'sm' ? 'h-9 w-9 text-xs' : size === 'lg' ? 'h-40 w-40 text-7xl' : 'h-16 w-16 text-lg'
   const [zoomed, setZoomed] = useState(false)
+  const [removing, setRemoving] = useState(false)
+  const { t } = useLanguage()
+  useEffect(() => { if (!src) setZoomed(false) }, [src])
   useEffect(() => {
     if (!zoomed) return
     const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') setZoomed(false) }
@@ -1473,9 +1490,12 @@ const AvatarPreview = memo(function AvatarPreview({ src, initials, size = 'md' }
   }, [zoomed])
   return src ? <>
     <button type="button" onClick={() => setZoomed(true)} aria-label="Zväčšiť profilovú fotografiu" className="shrink-0 cursor-zoom-in rounded-full ring-2 ring-[var(--profile-avatar-color,#ccff00)]"><img src={src} alt="Profilová fotografia" className={`${sizeClass} rounded-full object-cover`} /></button>
-    {zoomed ? <div role="dialog" aria-modal="true" aria-label="Profilová fotografia" onClick={() => setZoomed(false)} className="fixed inset-0 z-[60] flex cursor-zoom-out items-center justify-center bg-black/85 p-4">
+    {zoomed ? <div role="dialog" aria-modal="true" aria-label={t('Profilová fotografia', 'Profile photo')} onClick={() => setZoomed(false)} className="fixed inset-0 z-[60] flex cursor-zoom-out items-center justify-center bg-black/85 p-4">
       <button type="button" onClick={() => setZoomed(false)} aria-label="Zavrieť" className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-app-overlay/10 text-app-fg hover:bg-app-overlay/20"><X size={20} /></button>
-      <img src={src} alt="Profilová fotografia" onClick={(event) => event.stopPropagation()} className="max-h-[85vh] max-w-[90vw] cursor-default rounded-2xl object-contain shadow-2xl" />
+      <div onClick={(event) => event.stopPropagation()} className="flex max-h-[90vh] max-w-[90vw] cursor-default flex-col items-center gap-3">
+        <img src={src} alt={t('Profilová fotografia', 'Profile photo')} className="min-h-0 max-h-[78vh] max-w-full rounded-2xl object-contain shadow-2xl" />
+        {onRemove ? <button type="button" disabled={busy || removing} onClick={async () => { setRemoving(true); try { await onRemove() } finally { setRemoving(false) } }} className="flex items-center gap-2 rounded-xl bg-red-700 px-4 py-2 text-sm font-bold text-white hover:bg-red-600 disabled:opacity-50"><Trash2 size={16} />{removing ? t('Odstraňujem fotografiu…', 'Deleting photo…') : t('Odstrániť fotografiu', 'Delete photo')}</button> : null}
+      </div>
     </div> : null}
   </> : <div className={`${sizeClass} flex items-center justify-center rounded-full bg-[var(--profile-avatar-color,#ccff00)] font-black text-[#10150d]`}>{initials}</div>
 })
