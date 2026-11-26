@@ -351,10 +351,10 @@ main:has(.live-court) > section { padding: 0; }
   .live-court.live-court-viewer .court-teams { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
-.live-court .court-teams article[data-team="TEAM_A"] > p:first-of-type,
-.live-court .court-teams article[data-team="TEAM_A"] .court-players { grid-column: 2; }
-.live-court .court-teams article[data-team="TEAM_A"] .court-points-label,
-.live-court .court-teams article[data-team="TEAM_A"] > button { grid-column: 1; }
+.live-court .court-teams article:first-child > p:first-of-type,
+.live-court .court-teams article:first-child .court-players { grid-column: 2; }
+.live-court .court-teams article:first-child .court-points-label,
+.live-court .court-teams article:first-child > button { grid-column: 1; }
 
 .live-court.court-finished .court-results {
   flex: 1;

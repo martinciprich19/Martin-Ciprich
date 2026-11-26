@@ -502,9 +502,10 @@ export default function ProfilePage() {
     avatarOperation.current = true
     setAvatarBusy(true)
     try {
-      const nextAvatarUrl = await saveProfileAvatar(file)
-      setAvatarUrl(nextAvatarUrl)
+      const { url, cleanupWarning } = await saveProfileAvatar(file)
+      setAvatarUrl(url)
       window.dispatchEvent(new Event('spl-avatar-updated'))
+      if (cleanupWarning) window.alert(t('Nová fotografia bola uložená, ale predchádzajúcu sa nepodarilo odstrániť z úložiska. Kontaktuj správcu.', 'The new photo was saved, but the previous photo could not be removed from storage. Contact an administrator.'))
     } catch (error: unknown) {
       const message = getErrorMessage(error, 'Profilovú fotku sa nepodarilo uložiť.')
       console.error('Uloženie profilovej fotky zlyhalo:', message)

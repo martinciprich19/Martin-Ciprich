@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { undoSavedPoint } from '../lib/live-match-scoring.ts'
 import { awardLivePoint, removeLastTeamPoint, resetLiveGame, getPointAnnouncement, getMatchWinner, getWinnerAnnouncement, isPointAnnouncement, rotateServer, rotateServingPlayer, isTiebreak, tiebreakServer, parsePointHistory, parseTiebreakScore } from '../lib/live-match-scoring.ts'
+import { orderMatchTeams } from '../lib/match-team-order.ts'
 
 const initial = {
   team_a_game_score: 0, team_b_game_score: 0,
@@ -20,6 +21,72 @@ const initial = {
   started_at: null, finished_at: null,
   completed_sets: [],
 }
+
+test('per-game serving stays with one player through deuce and rotates for the next game', () => {
+  for (const team of ['TEAM_A', 'TEAM_B']) {
+    let score = { ...initial, serve_rotation: 'per_game', scoring_type: 'advantage', serving_team: team }
+    for (const winner of ['TEAM_A', 'TEAM_A', 'TEAM_A', 'TEAM_B', 'TEAM_B', 'TEAM_B', 'TEAM_A', 'TEAM_B', 'TEAM_A']) {
+      score = awardLivePoint(score, winner)
+      assert.equal(score.serving_team, team)
+      assert.equal(score.serving_player, 1)
+    }
+    const finished = awardLivePoint(score, 'TEAM_A')
+    assert.deepEqual({ serving_team: finished.serving_team, serving_player: finished.serving_player },
+      rotateServer({ serving_team: team, serving_player: 1 }))
+    const statsKey = team === 'TEAM_A' ? 'team_a_player1_serve_points_won' : 'team_b_player1_serve_points_lost'
+    assert.ok(finished[statsKey] > 0)
+  }
+})
+
+test('per-game rotation survives saved undo and preserves tiebreak service order', () => {
+  let score = { ...initial, serve_rotation: 'per_game', point_history: [], point_history_complete: true,
+    set_statistics: [], advantage_team: null, tiebreak_score: null,
+    service_game_statistics: { team_a_won: 0, team_a_lost: 0, team_b_won: 0, team_b_lost: 0 } }
+  const states = [score]
+  for (let point = 0; point < 4; point++) {
+    score = awardLivePoint(score, 'TEAM_A', '2026-11-03T00:00:00.000Z')
+    states.push(score)
+  }
+  assert.deepEqual(undoSavedPoint(JSON.parse(JSON.stringify(score))), states[3])
+  let tie = { ...initial, serve_rotation: 'per_game', team_a_games: 6, team_b_games: 6,
+    tiebreak_score: { a: 0, b: 0, first_team: 'TEAM_A', first_player: 1 } }
+  const expected = [['TEAM_A', 1], ['TEAM_B', 1], ['TEAM_B', 1], ['TEAM_A', 2], ['TEAM_A', 2], ['TEAM_B', 2]]
+  for (const server of expected) {
+    assert.deepEqual([tie.serving_team, tie.serving_player], server)
+    tie = awardLivePoint(tie, 'TEAM_A')
+  }
+})
+
+test('per-game mode rotates all four servers by game and keeps legacy per-point behavior', () => {
+  let score = { ...initial, serve_rotation: 'per_game' }
+  for (const [team, player] of [['TEAM_A', 1], ['TEAM_B', 1], ['TEAM_A', 2], ['TEAM_B', 2]]) {
+    for (let point = 0; point < 4; point++) {
+      assert.deepEqual([score.serving_team, score.serving_player], [team, player])
+      score = awardLivePoint(score, 'TEAM_A')
+    }
+  }
+  assert.deepEqual([score.serving_team, score.serving_player], ['TEAM_A', 1])
+  assert.equal(awardLivePoint({ ...initial, serve_rotation: 'per_point' }, 'TEAM_A').serving_player, 2)
+})
+
+test('kiosk team order follows completed sets, reload and set-point correction', () => {
+  let score = { ...initial, point_history: [], point_history_complete: true, set_statistics: [],
+    advantage_team: null, tiebreak_score: null,
+    service_game_statistics: { team_a_won: 0, team_a_lost: 0, team_b_won: 0, team_b_lost: 0 } }
+  const teamA = { team: 'TEAM_A' }
+  const teamB = { team: 'TEAM_B' }
+  const order = (value, kiosk = true) => orderMatchTeams(teamA, teamB, kiosk, value)
+  assert.deepEqual(order(score), [teamA, teamB])
+  for (let point = 0; point < 23; point++) score = awardLivePoint(score, 'TEAM_A')
+  assert.deepEqual(order(score), [teamA, teamB])
+  score = awardLivePoint(score, 'TEAM_A')
+  assert.deepEqual(order(score), [teamB, teamA])
+  assert.deepEqual(order(JSON.parse(JSON.stringify(score))), [teamB, teamA])
+  assert.deepEqual(order(score, false), [teamA, teamB])
+  assert.deepEqual(order(undoSavedPoint(JSON.parse(JSON.stringify(score)))), [teamA, teamB])
+  for (let point = 0; point < 24; point++) score = awardLivePoint(score, 'TEAM_B')
+  assert.deepEqual(order(score), [teamA, teamB])
+})
 
 test('saved-point undo survives reload and repeated corrections across a game boundary', () => {
   const before = { ...initial, advantage_team: null, tiebreak_score: null,

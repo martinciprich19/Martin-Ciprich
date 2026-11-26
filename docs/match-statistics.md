@@ -1,6 +1,24 @@
 # Finished-match statistics
 
+## Serving rotation
+
+Apply [104_live_match_serve_rotation.sql](../scripts/104_live_match_serve_rotation.sql)
+after migrations 077 and 097, before deploying the client. Before a quick, QR or
+PIN match, players can choose one server for the whole game (the default) or the
+previous teammate-per-point rotation. In either mode, tiebreaks use one serve
+followed by blocks of two. In whole-game mode manual server selection is disabled
+after a game starts, and service statistics use the actual server. The rule is
+stored with the match, used by undo/replay and inherited by rematches. Existing
+matches retain the previous per-point behavior.
+
 ## Bluetooth HID clickers during play
+
+On the kiosk match screen, the two teams and their game/set totals swap display
+sides after each completed set. The order is derived from the saved set score, so
+it survives reloads and resuming a match and reverses if a set-ending point is
+undone. This changes presentation only: player identities, scoring, serving and
+clicker assignments remain tied to their original teams. Other match views retain
+their original team order.
 
 After reloading an active match, **Späť** can remove the last persisted point
 when no in-memory undo snapshot remains. The team-specific **Odobrať bod tímu 1/2**

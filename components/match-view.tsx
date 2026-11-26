@@ -20,12 +20,14 @@ import { PauseMatchDialog } from '@/components/pause-match-dialog'
 import { createMatchClickerHandler, type ClickerInputStatus } from '@/lib/match-clicker'
 import { isCountryCode, type CountryCode } from '@/lib/countries'
 import { FullyClickerBridge } from '@/components/fully-clicker-bridge'
+import { orderMatchTeams } from '@/lib/match-team-order'
 
 type MatchRow = LiveScore & {
   country_code: CountryCode
   scoring_type: 'golden_point' | 'advantage'
   set_format: 'standard' | 'pro_set' | 'seven_games_no_tiebreak'
   third_set_format: 'full_set' | 'super_tiebreak'
+  serve_rotation: 'per_game' | 'per_point'
   advantage_team: Team | null
   id: string | number
   challenge_id: string | null
@@ -54,7 +56,7 @@ const REMATCH_PAIRINGS = [
   [0, 3, 1, 2],
 ] as const
 
-const MATCH_COLUMNS = 'id, result_finalized_at, ended_early_at, challenge_id, team_a_player1_name, team_a_player2_name, team_b_player1_name, team_b_player2_name, team_a_game_score, team_b_game_score, team_a_games, team_b_games, team_a_sets, team_b_sets, serving_team, serving_player, initial_server_chosen, is_pin_activated, team_a_player1_serve_points_won, team_a_player1_serve_points_lost, team_a_player2_serve_points_won, team_a_player2_serve_points_lost, team_b_player1_serve_points_won, team_b_player1_serve_points_lost, team_b_player2_serve_points_won, team_b_player2_serve_points_lost, team_a_total_points_won, team_b_total_points_won, streak_team, current_point_streak, team_a_longest_point_streak, team_b_longest_point_streak, team_a_break_points, team_a_break_points_converted, team_a_break_points_missed, team_b_break_points, team_b_break_points_converted, team_b_break_points_missed, started_at, finished_at, completed_sets, statistics_complete, qr_created_by, official_result_id, set_statistics, set_format, third_set_format, point_history, point_history_complete, paused_at, paused_seconds'
+const MATCH_COLUMNS = 'id, result_finalized_at, ended_early_at, challenge_id, team_a_player1_name, team_a_player2_name, team_b_player1_name, team_b_player2_name, team_a_game_score, team_b_game_score, team_a_games, team_b_games, team_a_sets, team_b_sets, serving_team, serving_player, initial_server_chosen, is_pin_activated, team_a_player1_serve_points_won, team_a_player1_serve_points_lost, team_a_player2_serve_points_won, team_a_player2_serve_points_lost, team_b_player1_serve_points_won, team_b_player1_serve_points_lost, team_b_player2_serve_points_won, team_b_player2_serve_points_lost, team_a_total_points_won, team_b_total_points_won, streak_team, current_point_streak, team_a_longest_point_streak, team_b_longest_point_streak, team_a_break_points, team_a_break_points_converted, team_a_break_points_missed, team_b_break_points, team_b_break_points_converted, team_b_break_points_missed, started_at, finished_at, completed_sets, statistics_complete, qr_created_by, official_result_id, set_statistics, set_format, third_set_format, serve_rotation, point_history, point_history_complete, paused_at, paused_seconds'
 
 function toCounter(value: unknown): number {
   if (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0) return value
@@ -91,6 +93,7 @@ function normalizeMatch(row: Record<string, unknown>): MatchRow {
   const scoringType = row.scoring_type ?? 'golden_point'
   const setFormat = row.set_format ?? 'standard'
   const thirdSetFormat = row.third_set_format ?? 'super_tiebreak'
+  const serveRotation = row.serve_rotation
   if (servingTeam !== null && servingTeam !== 'TEAM_A' && servingTeam !== 'TEAM_B') {
     throw new Error('Zápas obsahuje neplatný tím podávajúceho.')
   }
@@ -138,6 +141,9 @@ function normalizeMatch(row: Record<string, unknown>): MatchRow {
   if (thirdSetFormat !== 'full_set' && thirdSetFormat !== 'super_tiebreak') {
     throw new Error('Chýba formát tretieho setu. Spusti SQL migráciu 057.')
   }
+  if (serveRotation !== 'per_game' && serveRotation !== 'per_point') {
+    throw new Error('Chýba pravidlo podania. Spusti SQL migráciu 104.')
+  }
   if (row.advantage_team !== null && row.advantage_team !== 'TEAM_A' && row.advantage_team !== 'TEAM_B') {
     throw new Error('Neplatný stav výhody. Spusti SQL migráciu 055.')
   }
@@ -155,6 +161,7 @@ function normalizeMatch(row: Record<string, unknown>): MatchRow {
     scoring_type: scoringType,
     set_format: setFormat,
     third_set_format: thirdSetFormat,
+    serve_rotation: serveRotation,
     advantage_team: row.advantage_team,
     id: row.id,
     qr_created_by: row.qr_created_by === null ? null : String(row.qr_created_by),
@@ -212,6 +219,7 @@ function snapshot(match: MatchRow): MatchSnapshot {
     scoring_type: match.scoring_type,
     set_format: match.set_format,
     third_set_format: match.third_set_format,
+    serve_rotation: match.serve_rotation,
     advantage_team: match.advantage_team,
     team_a_game_score: match.team_a_game_score,
     team_b_game_score: match.team_b_game_score,
@@ -650,6 +658,7 @@ export function MatchView({ matchId, kioskMode = false, viewerMode = false, cour
         .eq('scoring_type', current.scoring_type)
         .eq('set_format', current.set_format)
         .eq('third_set_format', current.third_set_format)
+        .eq('serve_rotation', current.serve_rotation)
         .filter('advantage_team', current.advantage_team === null ? 'is' : 'eq', current.advantage_team ?? 'null')
         .filter('tiebreak_score', current.tiebreak_score == null ? 'is' : 'eq', current.tiebreak_score == null ? 'null' : JSON.stringify(current.tiebreak_score))
         .eq('set_statistics', JSON.stringify(current.set_statistics))
@@ -935,7 +944,7 @@ export function MatchView({ matchId, kioskMode = false, viewerMode = false, cour
 
   function selectServer(team: Team, player: 1 | 2) {
     const current = matchRef.current
-    if (viewerMode || !canEditRef.current || !current || writeInFlightRef.current || getMatchWinner(current) || isTiebreak(current) || (current.challenge_id !== null && !current.is_pin_activated)) return
+    if (viewerMode || !canEditRef.current || !current || writeInFlightRef.current || getMatchWinner(current) || isTiebreak(current) || (current.serve_rotation === 'per_game' && current.team_a_game_score + current.team_b_game_score > 0) || (current.challenge_id !== null && !current.is_pin_activated)) return
     if (current.initial_server_chosen) historyRef.current.push(snapshot(current))
     persist({ serving_team: team, serving_player: player, initial_server_chosen: true })
     announce(`Podáva Tím ${team === 'TEAM_A' ? 1 : 2}, hráč ${player}.`, `Team ${team === 'TEAM_A' ? 1 : 2}, player ${player} serves.`)
@@ -965,6 +974,11 @@ export function MatchView({ matchId, kioskMode = false, viewerMode = false, cour
   const resultActionsDisabled = isSaving || isStartingNext
   const tie = isTiebreak(match) ? getTiebreakScore(match) : null
   const superTie = isSuperTiebreak(match)
+  const displayTeams = orderMatchTeams(
+    { team: 'TEAM_A' as const, label: t('Tím 1', 'Team 1'), players: [match.team_a_player1_name, match.team_a_player2_name], score: tie ? tie.a : match.team_a_game_score, games: match.team_a_games, sets: match.team_a_sets },
+    { team: 'TEAM_B' as const, label: t('Tím 2', 'Team 2'), players: [match.team_b_player1_name, match.team_b_player2_name], score: tie ? tie.b : match.team_b_game_score, games: match.team_b_games, sets: match.team_b_sets },
+    kioskMode && !viewerMode, match,
+  )
   const durationEnd = match.finished_at ? Date.parse(match.finished_at) : match.paused_at ? Date.parse(match.paused_at) : clockNow
   const durationSeconds = match.started_at && durationEnd !== null
     ? Math.floor((durationEnd - Date.parse(match.started_at)) / 1000 - match.paused_seconds)
@@ -1136,6 +1150,7 @@ export function MatchView({ matchId, kioskMode = false, viewerMode = false, cour
         <p className="mt-3 text-sm text-app-fg/55">Sleduj skóre naživo a ovládaj ho priamo z kurtu.</p>
         <p className="mt-3 flex flex-wrap justify-center gap-2 text-xs text-app-fg/60">
           <span className="rounded-full border border-app-line/10 px-3 py-1">{match.scoring_type === 'advantage' ? t('Klasické výhody (Ad)', 'Classic advantage (Ad)') : t('Zlatá loptička (Punto de Oro)', 'Golden point (Punto de Oro)')}</span>
+          <span className="rounded-full border border-app-line/10 px-3 py-1">{match.serve_rotation === 'per_game' ? t('Podanie: jeden hráč celý gem', 'Serve: one player per game') : t('Podanie: striedanie po bode', 'Serve: alternate each point')}</span>
           <span className="rounded-full border border-app-line/10 px-3 py-1">{match.set_format === 'pro_set'
             ? t('Historický Pro-Set · tajbrejk za 8:8', 'Legacy Pro-Set · tiebreak at 8:8')
             : match.set_format === 'seven_games_no_tiebreak'
@@ -1168,18 +1183,15 @@ export function MatchView({ matchId, kioskMode = false, viewerMode = false, cour
       {loginNotice}
 
       <div className="court-summary mt-6 grid grid-cols-2 gap-4 rounded-2xl border border-app-line/10 bg-app-court/90 p-5 text-center">
-        <div><p className="text-sm text-app-fg/60">{t('Gemy v aktuálnom sete', 'Games in current set')}</p><p className="mt-2 text-3xl font-black">{match.team_a_games} – {match.team_b_games}</p></div>
-        <div><p className="text-sm text-app-fg/60">{t('Sety', 'Sets')}</p><p className="mt-2 text-3xl font-black">{match.team_a_sets} – {match.team_b_sets}</p></div>
+        <div><p className="text-sm text-app-fg/60">{t('Gemy v aktuálnom sete', 'Games in current set')}</p><p className="mt-2 text-3xl font-black">{displayTeams[0].games} – {displayTeams[1].games}</p></div>
+        <div><p className="text-sm text-app-fg/60">{t('Sety', 'Sets')}</p><p className="mt-2 text-3xl font-black">{displayTeams[0].sets} – {displayTeams[1].sets}</p></div>
         <div><p className="text-sm text-app-fg/60">{t('Trvanie zápasu', 'Match duration')}</p><p className="mt-2 text-3xl font-black" aria-live="off">{durationLabel}</p></div>
         <div><p className="text-sm text-app-fg/60">{match.streak_team ? t(`Séria bodov – Tím ${match.streak_team === 'TEAM_A' ? '1' : '2'}`, `Point streak – Team ${match.streak_team === 'TEAM_A' ? '1' : '2'}`) : t('Séria bodov', 'Point streak')}</p><p className="mt-2 text-3xl font-black">{match.current_point_streak}</p></div>
       </div>
       <p className="mt-2 text-center text-xs text-app-fg/45">{t('Pri 6:6 tajbrejk do 7 bodov s rozdielom 2.', 'At 6:6, tiebreak to 7 points, win by 2.')}</p>
 
       <div className="court-teams mt-8 grid gap-4 md:grid-cols-2">
-        {([
-          { team: 'TEAM_A', label: t('Tím 1', 'Team 1'), players: [match.team_a_player1_name, match.team_a_player2_name], score: tie ? tie.a : match.team_a_game_score },
-          { team: 'TEAM_B', label: t('Tím 2', 'Team 2'), players: [match.team_b_player1_name, match.team_b_player2_name], score: tie ? tie.b : match.team_b_game_score },
-        ] as const).map(({ team, label, players, score }) => {
+        {displayTeams.map(({ team, label, players, score }) => {
           const serving = match.serving_team === team
           return (
             <article key={team} data-team={team} className={`relative overflow-hidden rounded-3xl border bg-app-court/90 p-6 transition sm:p-9 ${pointFlash === team ? 'ring-4 ring-[#a8e63c] ring-inset' : ''} ${serving ? 'border-[#a8e63c]/70 shadow-[0_0_35px_rgba(168,230,60,0.15)]' : 'border-app-line/10'}`}>
@@ -1191,7 +1203,7 @@ export function MatchView({ matchId, kioskMode = false, viewerMode = false, cour
                   const playerServing = serving && match.serving_player === playerNumber
                   return (
                     <button key={playerNumber} type="button"
-                      disabled={!canEdit || isSaving || Boolean(tie) || (match.challenge_id !== null && !match.is_pin_activated)}
+                      disabled={!canEdit || isSaving || Boolean(tie) || (match.serve_rotation === 'per_game' && match.team_a_game_score + match.team_b_game_score > 0) || (match.challenge_id !== null && !match.is_pin_activated)}
                       onClick={() => selectServer(team, playerNumber)}
                       aria-pressed={playerServing}
                       aria-label={`${t('Nastaviť podanie', 'Set server')}: ${label}, ${t('Hráč', 'Player')} ${playerNumber}`}

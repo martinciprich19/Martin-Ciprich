@@ -89,18 +89,18 @@ export function KioskView() {
           p_scoring_type: settings.scoring_type,
           p_set_format: settings.set_format,
           p_third_set_format: settings.third_set_format,
+          p_serve_rotation: settings.serve_rotation,
         })
         : await createClient().rpc('activate_live_match_pin_for_court', {
           p_match_pin: value,
           p_scoring_type: settings.scoring_type,
           p_set_format: settings.set_format,
           p_third_set_format: settings.third_set_format,
+          p_serve_rotation: settings.serve_rotation,
           p_court_id: courtId,
         })
       if (rpcError?.code === 'PGRST202') {
-        throw new Error(courtId === null
-          ? 'V Supabase spusti SQL migráciu 057 pre nastavenia zápasu.'
-          : 'V Supabase spusti SQL migráciu 072 pre obrazovky kurtov.')
+        throw new Error('V Supabase spusti SQL migráciu 104 pre nastavenie podania.')
       }
       if (rpcError) throw rpcError
       if (typeof data !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(data)) {

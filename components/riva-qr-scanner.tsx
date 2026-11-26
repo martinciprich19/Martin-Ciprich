@@ -104,6 +104,7 @@ export function RivaQrScanner({ onClose, kioskMode = false, courtId = null }: { 
         p_scoring_type: settings.scoring_type,
         p_set_format: settings.set_format,
         p_third_set_format: settings.third_set_format,
+        p_serve_rotation: settings.serve_rotation,
         p_live_match_id: liveMatchIdRef.current,
         p_team_a_player1_id: roster[0].id,
         p_team_a_player2_id: roster[1].id,
@@ -113,9 +114,7 @@ export function RivaQrScanner({ onClose, kioskMode = false, courtId = null }: { 
         p_device_token: deviceTokenRef.current,
       })
       if (creationError?.code === 'PGRST202') {
-        throw new Error(courtId
-          ? tRef.current('V Supabase spusti SQL migráciu 081 pre QR zápas na priradenom kurte.', 'Apply SQL migration 081 for a QR match on the assigned court.')
-          : tRef.current('V Supabase spusti SQL migráciu 057 pre nastavenia zápasu.', 'Apply SQL migration 057 in Supabase for match settings.'))
+        throw new Error(tRef.current('V Supabase spusti SQL migráciu 104 pre nastavenie podania.', 'Apply SQL migration 104 in Supabase for serving settings.'))
       }
       if (creationError) throw creationError
       if (typeof data !== 'string' || !/^[0-9a-f-]{36}$/i.test(data)) {

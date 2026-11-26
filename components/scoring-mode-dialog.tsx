@@ -18,6 +18,7 @@ export function ScoringModeDialog({ onConfirm, onCancel, busy, error, children }
     scoring_type: 'golden_point',
     set_format: 'standard',
     third_set_format: 'super_tiebreak',
+    serve_rotation: 'per_game',
   })
 
   useEffect(() => {
@@ -29,11 +30,25 @@ export function ScoringModeDialog({ onConfirm, onCancel, busy, error, children }
   return (
     <dialog ref={dialogRef} aria-labelledby={titleId}
       onCancel={(event) => { event.preventDefault(); if (!busy) onCancel() }}
-      className="m-auto w-[calc(100%_-_2rem)] max-w-lg rounded-3xl border border-app-line/15 bg-app-court p-6 text-app-fg shadow-2xl backdrop:bg-black/75">
+      className="m-auto max-h-[calc(100dvh_-_2rem)] w-[calc(100%_-_2rem)] max-w-lg overflow-y-auto rounded-3xl border border-app-line/15 bg-app-court p-6 text-app-fg shadow-2xl backdrop:bg-black/75">
       <form onSubmit={(event) => { event.preventDefault(); if (!busy) onConfirm(settings) }}>
         <h2 id={titleId} className="text-2xl font-black">{t('Nastavenia zápasu', 'Match settings')}</h2>
         <p className="mt-2 text-sm text-app-fg/60">{t('Vyber pravidlá pred začiatkom zápasu.', 'Choose the rules before starting the match.')}</p>
         {children}
+        <fieldset disabled={busy} className="mt-5 space-y-3">
+          <legend className="mb-2 text-sm font-bold">{t('Striedanie podania', 'Serving rotation')}</legend>
+          {(['per_game', 'per_point'] as const).map((value) => (
+            <label key={value} className={`flex cursor-pointer gap-3 rounded-xl border p-3 ${settings.serve_rotation === value ? 'border-[#a8e63c] bg-[#a8e63c]/10' : 'border-app-line/15'}`}>
+              <input type="radio" name="serve-rotation" value={value} checked={settings.serve_rotation === value} onChange={() => setSettings((current) => ({ ...current, serve_rotation: value }))} className="mt-1 accent-[#a8e63c]" />
+              <span><strong className="block">{value === 'per_game' ? t('Jeden hráč celý gem', 'One player per game') : t('Striedanie po každom bode', 'Alternate after each point')}</strong>
+                <span className="mt-1 block text-sm text-app-fg/60">{value === 'per_game'
+                  ? t('Jeden hráč podáva celý gem. Ďalší gem podáva súper.', 'One player serves the entire game. The opponents serve the next game.')
+                  : t('Po každom bode sa striedajú hráči podávajúceho tímu.', 'The serving team’s players alternate after each point.')}</span>
+              </span>
+            </label>
+          ))}
+          <p className="text-sm text-app-fg/60">{t('V tajbrejku sa podanie strieda po prvom bode a potom po dvoch bodoch.', 'In a tiebreak, the server changes after the first point and then every two points.')}</p>
+        </fieldset>
         <fieldset disabled={busy} className="mt-5 space-y-3">
           <legend className="mb-2 text-sm font-bold">{t('Výhody v geme', 'Game scoring')}</legend>
           {(['golden_point', 'advantage'] as const).map((value) => (

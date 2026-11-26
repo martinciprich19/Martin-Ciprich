@@ -91,6 +91,7 @@ export function MatchStatistics({ match, showAvatars = false, avatars, showRules
             ? t('Set do 7 gemov · bez tajbrejku', 'Set to 7 games · no tiebreak')
             : t('Klasický set · tajbrejk za 6:6', 'Standard set · tiebreak at 6:6')}
         {match.set_format !== 'pro_set' ? ` · ${t('3. set', 'Deciding set')}: ${match.third_set_format === 'full_set' ? t('plnohodnotný set', 'full set') : t('Super Tiebreak', 'Super Tiebreak')}` : ''}
+        {' · '}{match.serve_rotation === 'per_game' ? t('Podanie: jeden hráč celý gem', 'Serve: one player per game') : t('Podanie: striedanie po bode', 'Serve: alternate each point')}
       </p> : null}
       <div className="result-stat-filter" role="group" aria-label={t('Vybrať štatistiky zápasu alebo setu', 'Choose match or set statistics')}>
         <button type="button" aria-pressed={selectedSet === null} aria-controls={panelId} onClick={() => setSelectedSet(null)}>{t('Celý zápas', 'Entire match')}</button>

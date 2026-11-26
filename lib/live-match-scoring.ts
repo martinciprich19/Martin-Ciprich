@@ -3,10 +3,12 @@ export type GameScore = 0 | 15 | 30 | 40
 export type ScoringType = 'golden_point' | 'advantage'
 export type SetFormat = 'standard' | 'pro_set' | 'seven_games_no_tiebreak'
 export type ThirdSetFormat = 'full_set' | 'super_tiebreak'
+export type ServeRotation = 'per_game' | 'per_point'
 export type MatchSettings = {
   scoring_type: ScoringType
   set_format: SetFormat
   third_set_format: ThirdSetFormat
+  serve_rotation: ServeRotation
 }
 export type TiebreakScore = { a: number; b: number; first_team: Team; first_player: 1 | 2 }
 export type ServiceGameStatistics = { team_a_won: number; team_a_lost: number; team_b_won: number; team_b_lost: number }
@@ -32,6 +34,7 @@ export type LiveScore = {
   scoring_type?: ScoringType
   set_format?: SetFormat
   third_set_format?: ThirdSetFormat
+  serve_rotation?: ServeRotation
   advantage_team?: Team | null
   tiebreak_score?: TiebreakScore | null
   team_a_game_score: GameScore
@@ -180,6 +183,9 @@ export function parseRecordedMatchStatistics(value: unknown): RecordedMatchStati
   if (row.third_set_format !== undefined && row.third_set_format !== 'full_set' && row.third_set_format !== 'super_tiebreak') {
     throw new Error('Neplatný uložený formát tretieho setu.')
   }
+  if (row.serve_rotation !== undefined && row.serve_rotation !== 'per_game' && row.serve_rotation !== 'per_point') {
+    throw new Error('Neplatné uložené pravidlo podania.')
+  }
   const completedSets: [number, number][] = row.completed_sets.map((set: unknown) => {
     if (!Array.isArray(set) || set.length !== 2 || !set.every((n: unknown) => typeof n === 'number' && Number.isSafeInteger(n) && n >= 0)) throw new Error('Neplatné výsledky setov v štatistikách.')
     return [set[0], set[1]]
@@ -189,6 +195,7 @@ export function parseRecordedMatchStatistics(value: unknown): RecordedMatchStati
     scoring_type: row.scoring_type ?? 'golden_point',
     set_format: row.set_format ?? 'standard',
     third_set_format: row.third_set_format ?? 'full_set',
+    serve_rotation: row.serve_rotation ?? 'per_point',
     advantage_team: null,
     team_a_game_score: 0, team_b_game_score: 0, team_a_games: 0, team_b_games: 0,
     team_a_sets: count('team_a_sets'), team_b_sets: count('team_b_sets'),
@@ -491,11 +498,11 @@ export function awardLivePoint(score: LiveScore, team: Team, pointAt = new Date(
   const points = score[pointKey]
   if (points !== 40) {
     next[pointKey] = points === 0 ? 15 : points === 15 ? 30 : 40
-    return withPointHistory(score, { ...next, ...rotateServingPlayer(score) }, team, pointAt)
+    return withPointHistory(score, score.serve_rotation === 'per_game' ? next : { ...next, ...rotateServingPlayer(score) }, team, pointAt)
   }
   if (!isGamePoint(score, team)) {
     next.advantage_team = score.advantage_team ? null : team
-    return withPointHistory(score, { ...next, ...rotateServingPlayer(score) }, team, pointAt)
+    return withPointHistory(score, score.serve_rotation === 'per_game' ? next : { ...next, ...rotateServingPlayer(score) }, team, pointAt)
   }
   next.advantage_team = null
   next.team_a_game_score = 0
