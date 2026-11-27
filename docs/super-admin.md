@@ -23,6 +23,7 @@ Verify the update affected exactly the intended account. The user must sign out 
 
 ## Available now
 
+- Apply `scripts/107_arena_booking_links.sql` after 079 before deploying the booking-link UI. In **Arény a správcovia**, add an optional HTTPS booking link when creating an arena, or edit/clear it for an existing arena. A link displays **Rezervovať kurt** on the player's arena card and opens the external booking system in a new tab; without one the button is hidden. This link does not check availability or create a reservation in RIVA. Use public booking URLs, not secret API keys.
 - View all arenas, activate/pause them, and create a club.
 - Paused arenas are excluded from player arena searches and selection lists (including registration and home-club selection) on the next data refresh. Admin panels retain access to paused arenas. This visibility change does not itself revoke kiosk authorization or stop an ongoing match.
 - Assign or remove Arena Admin access for an existing Supabase Auth account by email.

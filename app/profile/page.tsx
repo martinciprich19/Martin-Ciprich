@@ -192,6 +192,27 @@ export default function ProfilePage() {
   const { data: incomingFriendRequests = [], mutate: mutateIncomingFriendRequests } = useSWR(player.profile_id !== null ? ['incoming-friend-requests', player.profile_id] : null, ([, id]) => fetchIncomingRequests(id), { refreshInterval: 30000, shouldRetryOnError: false })
   const { data: incomingPairInvitations = [], error: incomingPairInvitationsError, mutate: mutateIncomingPairInvitations } = useSWR(player.profile_id !== null ? ['incoming-pair-invitations', player.profile_id] : null, ([, id]) => fetchIncomingPairInvitations(id), { refreshInterval: 15000, revalidateOnFocus: true, shouldRetryOnError: false })
   const { data: upcomingMatches = [], isLoading: upcomingMatchesLoading, error: upcomingMatchesError, mutate: mutateUpcomingMatches } = useSWR(player.profile_id !== null ? ['upcoming-pair-challenges', player.profile_id] : null, ([, id]) => fetchUpcomingPairChallenges(id), { refreshInterval: 15000, revalidateOnFocus: true, revalidateOnReconnect: true, shouldRetryOnError: false })
+  const upcomingChallengeIds = JSON.stringify(upcomingMatches.map((match) => String(match.id)).sort())
+
+  useEffect(() => {
+    const ids: string[] = JSON.parse(upcomingChallengeIds)
+    if (!ids.length) return
+    const supabase = createClient()
+    const channel = supabase.channel(`upcoming-challenges-${player.profile_id}`)
+    for (const id of ids) {
+      channel.on('postgres_changes', { event: '*', schema: 'public', table: 'live_matches', filter: `challenge_id=eq.${id}` }, () => { void mutateUpcomingMatches() })
+    }
+    channel.subscribe()
+    return () => { void supabase.removeChannel(channel) }
+  }, [player.profile_id, upcomingChallengeIds, mutateUpcomingMatches])
+
+  useEffect(() => {
+    if (!upcomingMatches.length) return
+    const nextExpiry = Math.min(...upcomingMatches.map((match) => Date.parse(match.match_date) + 24 * 60 * 60 * 1000))
+    const delay = Math.min(Math.max(0, nextExpiry - Date.now()), 2_147_483_647)
+    const timer = window.setTimeout(() => { void mutateUpcomingMatches() }, delay)
+    return () => window.clearTimeout(timer)
+  }, [upcomingMatches, mutateUpcomingMatches])
 
   useEffect(() => {
     if (player.profile_id === null) return
@@ -681,7 +702,6 @@ export default function ProfilePage() {
                         <p className="flex items-center gap-2 text-xs text-app-fg/60"><MapPin size={14} className="shrink-0" />{arena ? `${arena.name} · ${arena.city}` : t('Aréna', 'Arena')}</p>
                         <span className="inline-flex items-center gap-1 text-xs font-bold text-app-emerald-300"><Check size={14} />{t('Potvrdené', 'Confirmed')}</span>
                         {match.match_pin && !match.is_pin_activated ? <p className="mt-2 rounded-lg border border-[#ccff00]/20 bg-[#ccff00]/[0.06] px-3 py-2 text-xs font-semibold text-app-league">Váš PIN pre kiosk: <span className="ml-1 font-black tracking-[0.2em]">{match.match_pin}</span></p> : null}
-                        {match.is_pin_activated ? <p className="mt-2 text-xs font-semibold text-app-emerald-300">Zápas bol spustený v kiosku.</p> : null}
                       </li>
                     })}
                   </ul> : <div className="mt-8 flex min-h-[210px] flex-col items-center justify-center rounded-xl border border-dashed border-app-line/10 bg-app-overlay/[0.015] text-center"><div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#ccff00]/10 text-app-league"><Swords size={22} /></div><p className="mt-4 text-sm font-semibold text-app-fg/75">Zatiaľ žiadne naplánované zápasy</p><p className="mt-2 max-w-xs text-xs leading-relaxed text-app-fg/35">Prijmi výzvu od hráča alebo vytvor nový zápas.</p><button type="button" onClick={() => setActiveTab('opponents')} className="mt-5 rounded-lg bg-[#ccff00] px-4 py-2.5 text-xs font-black text-[#10150d] hover:bg-[#d9ff4d]">{t('Nájsť hráčov')}</button></div>}

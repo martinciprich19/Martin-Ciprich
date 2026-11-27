@@ -57,6 +57,8 @@ const pairChallengeStrings: Record<string, string> = {
   'Termín a kurt': 'Date and court',
   'Dátum zápasu': 'Match date',
   'Čas zápasu': 'Match time',
+  'Orientačný čas zápasu': 'Approximate match time',
+  'Vytvorením výzvy sa kurt nerezervuje. Rezerváciu si vybav priamo v aréne.': 'Creating a challenge does not reserve a court. Please book directly with the venue.',
   'Aréna zápasu': 'Match arena',
   'Kurt číslo': 'Court number',
   'Vyber arénu': 'Select an arena',

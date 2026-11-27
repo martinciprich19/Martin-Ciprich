@@ -1,6 +1,6 @@
 # Prebiehajúce zápasy
 
-The `/live-matches` page lists active and paused matches in the RIVA Padel app. It refreshes every 15 seconds and can filter the list by region and arena. Paused matches display an amber "Prerušený zápas" badge instead of the green live badge. Selecting a match opens a read-only spectator view with the players, live score, and match statistics. Score controls remain available only through the regular scoring view.
+The `/live-matches` page lists active and paused matches in the RIVA Padel app. It refreshes every 15 seconds and can filter the list by region, arena and player name. Player search matches part of any of the four names as the user types, ignoring case and diacritics; it combines with the region and arena filters. Paused matches display an amber "Prerušený zápas" badge instead of the green live badge. Selecting a match opens a read-only spectator view with the players, live score, and match statistics. Score controls remain available only through the regular scoring view.
 
 Apply the entire `scripts/074_public_paused_matches.sql` after migrations through
 073, then deploy the updated UI. It replaces the existing country-aware RPC,
@@ -9,6 +9,12 @@ Finished and ended-early matches remain excluded, as do unstarted or
 unactivated official matches. Country and arena filtering remain unchanged.
 No resume PIN, ownership token or pause-email data is exposed or modified.
 After resuming, the next refresh displays the green live badge again.
+
+On the profile overview, upcoming confirmed challenges are removed as soon as
+their kiosk PIN is activated or their linked match has started or ended. An
+unstarted challenge remains visible until exactly 24 hours after its scheduled
+instant. The overview listens for changes to its linked live matches and
+revalidates at the expiry deadline, with a 15-second polling fallback.
 
 ## Database setup
 

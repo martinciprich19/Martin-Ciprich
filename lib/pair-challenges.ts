@@ -100,19 +100,43 @@ export async function fetchPairChallenge(challengeId: string): Promise<PairChall
 export async function fetchUpcomingPairChallenges(userId: string | number): Promise<PairChallenge[]> {
   const profileId = String(userId)
   if (!/^[1-9]\d*$/.test(profileId)) throw new Error('Neplatné ID hráča.')
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
   const { data, error } = await createClient()
     .from('challenges')
     .select(PAIR_CHALLENGE_SELECT)
     .in('status', ['accepted', 'confirmed'])
-    .gte('match_date', new Date().toISOString())
+    .gt('match_date', cutoff)
     .or(`challenger_1_id.eq.${profileId},challenger_2_id.eq.${profileId},challenged_1_id.eq.${profileId},challenged_2_id.eq.${profileId}`)
     .order('match_date', { ascending: true })
   if (error) throw error
-  return attachLiveMatchPins((data ?? []).map((challenge) => ({
+  const challenges = (data ?? []).map((challenge) => ({
     ...challenge,
     match_pin: null,
     is_pin_activated: false,
-  })) as PairChallenge[])
+  })) as PairChallenge[]
+  if (!challenges.length) return []
+
+  const { data: liveMatches, error: liveError } = await createClient()
+    .from('live_matches')
+    .select('challenge_id, match_pin, is_pin_activated, started_at, finished_at, ended_early_at, result_finalized_at, official_result_id')
+    .in('challenge_id', challenges.map((challenge) => challenge.id))
+  if (liveError) throw liveError
+
+  const matches = new Map((liveMatches ?? []).map((match) => [String(match.challenge_id), match]))
+  const now = Date.now()
+  return challenges.flatMap((challenge) => {
+    const date = Date.parse(challenge.match_date)
+    if (!Number.isFinite(date)) throw new Error('Výzva obsahuje neplatný termín zápasu.')
+    const match = matches.get(String(challenge.id))
+    if (date + 24 * 60 * 60 * 1000 <= now
+      || (match && (match.is_pin_activated || match.started_at || match.finished_at
+        || match.ended_early_at || match.result_finalized_at || match.official_result_id))) return []
+    return [{
+      ...challenge,
+      match_pin: match?.match_pin == null ? null : String(match.match_pin),
+      is_pin_activated: false,
+    }]
+  })
 }
 
 export async function respondToPairChallenge(challengeId: string, accept: boolean): Promise<PairChallengeStatus> {

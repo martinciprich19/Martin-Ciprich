@@ -332,10 +332,11 @@ function ChallengeDialog({ userId, target, myPairs, arenas, initialArena, onClos
               <input type="date" required value={date} min={new Date().toISOString().slice(0, 10)} onChange={(event) => setDate(event.target.value)} className={`${inputClass} [color-scheme:dark]`} />
             </label>
             <label>
-              <span className={labelClass}>{t('Čas zápasu')}</span>
+              <span className={labelClass}>{t('Orientačný čas zápasu')}</span>
               <input type="time" required step={900} value={time} onChange={(event) => setTime(event.target.value)} className={`${inputClass} [color-scheme:dark]`} />
             </label>
           </div>
+          <p className="text-xs leading-relaxed text-app-fg/45">{t('Vytvorením výzvy sa kurt nerezervuje. Rezerváciu si vybav priamo v aréne.')}</p>
           <label>
             <span className={labelClass}>{t('Aréna')}</span>
             <select required value={arenaId} onChange={(event) => setArenaId(event.target.value)} className={inputClass}>

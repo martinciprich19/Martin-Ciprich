@@ -3,13 +3,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import useSWR from 'swr'
-import { ArrowRight, MapPin, Radio, RefreshCw } from 'lucide-react'
+import { ArrowLeft, ArrowRight, MapPin, Radio, RefreshCw } from 'lucide-react'
 import { useLanguage } from '@/components/language-provider'
 import { useLeague } from '@/components/league-provider'
 import { uiTranslations } from '@/lib/i18n/ui-translations'
 import { createClient } from '@/lib/supabase/client'
 import { fetchArenas } from '@/lib/arenas'
 import { arenasForRegion, matchInRegion } from '@/lib/live-match-filters'
+import { matchHasPlayerName } from '@/lib/match-players'
 import { subdivisionCode, type CountryCode } from '@/lib/countries'
 
 type LiveMatch = {
@@ -47,6 +48,7 @@ function CountryLiveMatchesView() {
   const [matches, setMatches] = useState<LiveMatch[]>([])
   const [selectedRegion, setSelectedRegion] = useState(ALL_REGIONS)
   const [selectedArena, setSelectedArena] = useState(ALL_ARENAS)
+  const [playerSearch, setPlayerSearch] = useState('')
   const [isLoading, setIsLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [loadError, setLoadError] = useState(false)
@@ -92,10 +94,14 @@ function CountryLiveMatchesView() {
   const arenas = useMemo(() => arenasForRegion(allArenas, region, subdivision), [allArenas, region, subdivision])
   const visibleMatches = matches.filter((match) =>
     matchInRegion(match, allArenas, region, subdivision) &&
-    (selectedArena === ALL_ARENAS || String(match.arena_id) === selectedArena))
+    (selectedArena === ALL_ARENAS || String(match.arena_id) === selectedArena) &&
+    matchHasPlayerName(match, playerSearch))
 
   return (
     <section className="mx-auto max-w-[1120px] py-6">
+      <Link href="/profile?view=overview" className="mb-6 inline-flex min-h-10 items-center gap-2 rounded-lg border border-app-line/15 px-3 py-2 text-sm font-bold text-app-fg/70 transition hover:border-app-league/50 hover:text-app-fg">
+        <ArrowLeft size={16} aria-hidden="true" />{t('Späť na prehľad', 'Back to overview')}
+      </Link>
       <header>
         <p className="text-xs font-bold uppercase tracking-[0.22em] text-app-league">RIVA / LIVE</p>
         <h1 className="mt-2 text-3xl font-black">{t('Prebiehajúce zápasy', 'Live matches')}</h1>
@@ -118,6 +124,11 @@ function CountryLiveMatchesView() {
           </select>
         </label>
       </div>
+
+      <label className="mt-4 block">
+        <span className="mb-1.5 block text-xs font-semibold text-app-fg/65">{t('Hľadať hráča', 'Search player')}</span>
+        <input type="search" value={playerSearch} onChange={(event) => setPlayerSearch(event.target.value)} placeholder={t('Hľadať hráča...', 'Search player...')} className="w-full rounded-xl border border-app-line/10 bg-app-panel px-4 py-3 text-sm text-app-fg outline-none focus:border-[#a8e63c]" />
+      </label>
 
       {arenasError ? <p role="alert" className="mt-3 text-sm text-app-red-300">{t('Arény sa nepodarilo načítať. Skús obnoviť stránku.', 'Could not load arenas. Try refreshing the page.')}</p> : null}
 

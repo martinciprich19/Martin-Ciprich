@@ -9,6 +9,7 @@ import { DeviceReloadControl } from '@/components/device-reload-control'
 import { SuperAdminElo } from '@/components/super-admin-elo'
 import { createClient } from '@/lib/supabase/client'
 import { getErrorMessage } from '@/lib/errors'
+import { isValidBookingUrl } from '@/lib/arenas'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useState, type FormEvent, type ReactNode } from 'react'
@@ -33,6 +34,7 @@ type Arena = {
   countryCode: string
   isActive: boolean
   courtsCount: number
+  bookingUrl: string | null
 }
 
 type Kiosk = {
@@ -202,15 +204,20 @@ function ArenaManagement({ arenas, managers, busy, runAction }: {
   const [countryCode, setCountryCode] = useState('SK')
   const [region, setRegion] = useState('')
   const [courtCount, setCourtCount] = useState('1')
+  const [bookingUrl, setBookingUrl] = useState('')
+  const [bookingUrls, setBookingUrls] = useState<Record<string, string>>({})
   const [managerEmails, setManagerEmails] = useState<Record<string, string>>({})
 
   async function createArena(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const supabase = createClient()
     await runAction(async () => {
-      const { error } = await supabase.rpc('super_admin_create_arena', {
+      const url = bookingUrl.trim()
+      if (url && !isValidBookingUrl(url)) throw new Error('Zadaj platný rezervačný odkaz začínajúci https://.')
+      const { error } = await supabase.rpc('super_admin_create_arena_with_booking', {
         p_name: name.trim(), p_city: city.trim(), p_address: address.trim(),
         p_country_code: countryCode, p_region: region.trim(), p_court_count: Number(courtCount),
+        p_booking_url: url || null,
       })
       if (error) throw error
       setName('')
@@ -218,6 +225,7 @@ function ArenaManagement({ arenas, managers, busy, runAction }: {
       setAddress('')
       setRegion('')
       setCourtCount('1')
+      setBookingUrl('')
     }, 'Aréna bola vytvorená.')
   }
 
@@ -237,6 +245,7 @@ function ArenaManagement({ arenas, managers, busy, runAction }: {
             </Field>
           </div>
           <Field label="Počet kurtov"><input required type="number" min="1" max="100" value={courtCount} onChange={(event) => setCourtCount(event.target.value)} className={inputClass} /></Field>
+          <Field label="Rezervačný odkaz (nepovinné)"><input type="url" maxLength={2048} placeholder="https://..." value={bookingUrl} onChange={(event) => setBookingUrl(event.target.value)} className={inputClass} /></Field>
           <button type="submit" disabled={busy} className={primaryButton}><Plus size={16} />Vytvoriť arénu</button>
         </form>
       </Panel>
@@ -258,6 +267,28 @@ function ArenaManagement({ arenas, managers, busy, runAction }: {
                   {arena.isActive ? 'Pozastaviť' : 'Aktivovať'}
                 </button>
               </div>
+              <form onSubmit={(event) => {
+                event.preventDefault()
+                const url = (bookingUrls[arena.id] ?? arena.bookingUrl ?? '').trim()
+                void runAction(async () => {
+                  if (url && !isValidBookingUrl(url)) throw new Error('Zadaj platný rezervačný odkaz začínajúci https://.')
+                  const { error } = await createClient().rpc('super_admin_set_arena_booking_url', { p_arena_id: Number(arena.id), p_booking_url: url || null })
+                  if (error) throw error
+                  setBookingUrls((current) => {
+                    const next = { ...current }
+                    delete next[arena.id]
+                    return next
+                  })
+                }, 'Rezervačný odkaz bol uložený.')
+              }} className="mt-3">
+                <label className="block text-xs font-bold text-app-fg/70" htmlFor={`booking-url-${arena.id}`}>Rezervačný odkaz</label>
+                <div className="mt-2 flex gap-2">
+                  <input id={`booking-url-${arena.id}`} type="url" maxLength={2048} placeholder="https://..." value={bookingUrls[arena.id] ?? arena.bookingUrl ?? ''}
+                    onChange={(event) => setBookingUrls((current) => ({ ...current, [arena.id]: event.target.value }))} className={`${inputClass} min-w-0 flex-1`} />
+                  <button type="submit" disabled={busy} className="rounded-lg border border-app-line/15 px-3 text-xs font-bold hover:border-app-league/40 disabled:opacity-50">Uložiť</button>
+                </div>
+                <p className="mt-1 text-xs text-app-fg/45">Vymazaním odkazu a uložením skryješ tlačidlo pre hráčov.</p>
+              </form>
               <ul className="mt-3 space-y-2">
                 {managers.filter((manager) => manager.arenaId === arena.id).map((manager) => (
                   <li key={manager.userId} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-app-ink/55 px-3 py-2 text-xs">

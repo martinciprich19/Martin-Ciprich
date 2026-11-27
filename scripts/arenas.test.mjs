@@ -31,7 +31,7 @@ function arenaClient(rows, error = null) {
 }
 
 const rows = [
-  { id: 1, name: 'Active SK', is_active: true, country_code: 'SK', courts_count: 3 },
+  { id: 1, name: 'Active SK', is_active: true, country_code: 'SK', courts_count: 3, booking_url: 'https://booking.example.test/club' },
   { id: 2, name: 'Paused SK', is_active: false, country_code: 'SK', courts_count: 2 },
   { id: 3, name: 'Active NL', is_active: true, country_code: 'NL', courts_count: 4 },
   { id: 4, name: 'Unknown status', is_active: null, country_code: 'SK', courts_count: 1 },
@@ -44,7 +44,14 @@ test('player arena lists exclude paused arenas even when database permissions re
   const sk = await fetchArenas('SK')
   assert.deepEqual(sk.map((arena) => arena.id), ['1'])
   assert.equal(sk[0].courtsCount, 3)
+  assert.equal(sk[0].bookingUrl, 'https://booking.example.test/club')
   assert.deepEqual((await fetchArenas('NL')).map((arena) => arena.id), ['3'])
+})
+
+test('only valid HTTPS booking links can be used', () => {
+  const isValidBookingUrl = new Function(`${source}; return isValidBookingUrl`)()
+  for (const value of ['https://example.test/booking?court=1', 'HTTPS://example.test/']) assert.equal(isValidBookingUrl(value), true)
+  for (const value of ['javascript:alert(1)', 'http://example.test', 'https://user:pass@example.test', 'https:example.test', 'https://example.test\\@evil.test', 'https://']) assert.equal(isValidBookingUrl(value), false)
 })
 
 test('pausing and reactivating an arena changes the next player query without affecting other arenas', async () => {

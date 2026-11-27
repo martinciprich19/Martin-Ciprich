@@ -9,6 +9,16 @@ type PlayerOption = { id: number | string; full_name: string }
 
 export const normalizePlayerName = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('sk').trim()
 
+export function matchHasPlayerName(
+  match: { team_a_player1_name: string | null; team_a_player2_name: string | null; team_b_player1_name: string | null; team_b_player2_name: string | null },
+  search: string,
+): boolean {
+  const query = normalizePlayerName(search)
+  if (!query) return true
+  return [match.team_a_player1_name, match.team_a_player2_name, match.team_b_player1_name, match.team_b_player2_name]
+    .some((name) => name !== null && normalizePlayerName(name).includes(query))
+}
+
 export const DUPLICATE_PLAYER_ERROR = 'Tento hráč je už vybraný v inom slote.'
 
 export function validateMatchPlayers(slots: MatchPlayerSlots, players: PlayerOption[]) {

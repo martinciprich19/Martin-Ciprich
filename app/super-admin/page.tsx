@@ -10,6 +10,7 @@ type ArenaRow = {
   country_code: string | null
   is_active: boolean
   courts_count: number | null
+  booking_url: string | null
 }
 
 type KioskRow = {
@@ -55,7 +56,7 @@ export default async function SuperAdminPage() {
 
   const [arenaResult, deviceResult, managerResult, auditResult] = await Promise.all([
     supabase.from('arenas')
-      .select('id, name, city, address, country_code, is_active, courts_count')
+      .select('id, name, city, address, country_code, is_active, courts_count, booking_url')
       .order('name'),
     supabase.from('arena_kiosk_devices')
       .select('id, arena_id, court_id, device_role, name, created_at, revoked_at')
@@ -87,6 +88,7 @@ export default async function SuperAdminPage() {
     countryCode: arena.country_code ?? '',
     isActive: arena.is_active,
     courtsCount: Number(arena.courts_count ?? 0),
+    bookingUrl: arena.booking_url,
   }))
   const devices = ((deviceResult.data ?? []) as KioskRow[]).map((device) => ({
     id: device.id,

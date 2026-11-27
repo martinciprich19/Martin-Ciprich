@@ -87,3 +87,9 @@ test('notification opens the selected challenge detail', async () => {
   assert.match(source, /setDetailChallengeId\(notification\.challenge_id\)/)
   assert.match(source, /<ChallengeDetailModal challengeId=\{detailChallengeId\}/)
 })
+
+test('challenge form labels the proposed time and explains that no court is reserved', async () => {
+  const source = await readFile(new URL('../components/pair-challenge-view.tsx', import.meta.url), 'utf8')
+  assert.match(source, /t\('Orientačný čas zápasu'\)[\s\S]*?<input type="time" required/)
+  assert.match(source, /Vytvorením výzvy sa kurt nerezervuje\. Rezerváciu si vybav priamo v aréne\./)
+})

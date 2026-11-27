@@ -114,6 +114,7 @@ function ArenaCard({ arena, onChallenge, onMatch, onSetHome }: { arena: Arena; o
       </section>
 
       <div className="mt-auto grid gap-2 pt-5">
+        {arena.bookingUrl ? <a href={arena.bookingUrl} target="_blank" rel="noopener noreferrer" className="rounded-lg border border-[#ccff00]/50 py-2.5 text-center text-xs font-black text-app-league hover:bg-[#ccff00]/10">{t('Rezervovať kurt')}</a> : null}
         <button type="button" onClick={() => onChallenge(arena)} className="rounded-lg bg-[#ccff00] py-2.5 text-xs font-black text-[#10150d]">{t('Vytvoriť výzvu tu')}</button>
         <div className="grid grid-cols-2 gap-2">
           <button type="button" onClick={() => onMatch(arena)} className="rounded-lg border border-app-line/10 py-2.5 text-[11px] font-bold text-app-fg/70 hover:border-[#ccff00]/50">{t('Zadať zápas')}</button>

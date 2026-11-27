@@ -1,4 +1,6 @@
 export const sharedDutch: Record<string, string> = {
+  'Orientačný čas zápasu': 'Geschatte wedstrijdtijd',
+  'Vytvorením výzvy sa kurt nerezervuje. Rezerváciu si vybav priamo v aréne.': 'Een uitdaging aanmaken reserveert geen baan. Reserveer rechtstreeks bij de locatie.',
   'Načítavam PIN…': 'Pincode wordt geladen…',
   'PIN sa nepodarilo načítať.': 'De pincode kon niet worden geladen.',
   'PIN do zápasu': 'Wedstrijdpincode',
