@@ -1,3 +1,8 @@
+export function getRivaPairId(value: string): string | null {
+  const match = value.trim().match(/^riva:pair:([1-9]\d*|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i)
+  return match ? match[1].toLowerCase() : null
+}
+
 export function getRivaProfilePath(value: string, origin: string): string {
   const text = value.trim()
   const playerId = text.match(/^(?:riva[:/]players?[:/]|riva:)?([1-9]\d*)$/i)?.[1]

@@ -640,3 +640,15 @@ are not inferred or displayed.
 
 Validate calculations with `node --test scripts/match-statistics.test.mjs
 scripts/live-match-scoring.test.mjs`; use the production build to check the UI.
+# Shared pair QR codes
+
+Apply `scripts/108_pair_qr.sql` after the existing pairs and QR match migrations,
+then deploy the updated web app used by the kiosk. Each pair member can open
+the shared code under **Moje dvojice**. Scanning it during QR match setup adds
+both players to the first completely empty team. If either player is already
+assigned, or neither team is completely empty, no slots are changed. Undo removes
+both players added by the scan. A dissolved pair's code no longer resolves.
+
+Like the existing individual QR and manual player search, this code identifies
+players; it is not proof of identity or consent and does not replace the PIN for
+an existing challenge. Anyone who obtains a code can present it at a kiosk.

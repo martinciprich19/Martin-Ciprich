@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { getRivaProfilePath } from '../lib/riva-qr.ts'
+import { getRivaPairId, getRivaProfilePath } from '../lib/riva-qr.ts'
+
+test('pair codes accept only explicit numeric or UUID pair identifiers', () => {
+  assert.equal(getRivaPairId(' RIVA:PAIR:123 '), '123')
+  assert.equal(getRivaPairId('riva:pair:123e4567-e89b-12d3-a456-426614174000'), '123e4567-e89b-12d3-a456-426614174000')
+  for (const value of ['123', 'riva:pair:0', 'riva:pair:123/extra', 'riva:pair:javascript:alert(1)', '/players/123']) assert.equal(getRivaPairId(value), null)
+})
 
 test('profile URLs and player identifiers always resolve to a local player profile', () => {
   const origin = 'https://riva.example'

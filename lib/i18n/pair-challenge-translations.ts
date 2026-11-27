@@ -1,4 +1,13 @@
 const pairChallengeStrings: Record<string, string> = {
+  'Spoločný QR kód dvojice': 'Shared pair QR code',
+  'Spoločný QR kód na spoločné prihlásenie oboch hráčov do zápasu na kiosku.': 'Shared QR code for adding both players to a match at the kiosk.',
+  'QR kód dvojice': 'Pair QR code',
+  'Spoločný QR kód dvojice pridá oboch hráčov do jedného voľného tímu.': 'A shared pair QR code adds both players to one empty team.',
+  'Hráč z dvojice je už v zápase.': 'A player from this pair is already in the match.',
+  'Pre dvojicu musí byť voľný celý tím.': 'A whole team must be empty for the pair.',
+  'Dvojica z QR kódu sa nenašla alebo už neexistuje.': 'The pair in the QR code was not found or no longer exists.',
+  'Odobrať posledné pridanie': 'Undo last addition',
+  'V Supabase spusti SQL migráciu 108 pre QR kódy dvojíc.': 'Apply SQL migration 108 in Supabase for pair QR codes.',
   'Dvojice': 'Pairs',
   'DVOJICE': 'PAIRS',
   'Pridať dvojicu': 'Add a pair',

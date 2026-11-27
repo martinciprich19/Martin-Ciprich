@@ -5,6 +5,7 @@ import useSWR from 'swr'
 import { ArrowLeft, Plus, Search, Swords, Trash2, Users, X } from 'lucide-react'
 import { useLanguage } from '@/components/language-provider'
 import { useLeague } from '@/components/league-provider'
+import { PairQrButton } from '@/components/pair-qr-button'
 import { deletePair, fetchPairs, sendPairInvitation, type PlayerPair } from '@/lib/pairs'
 import { fetchFriends } from '@/lib/friendships'
 import { fetchLeaguePlayers } from '@/lib/players'
@@ -126,6 +127,7 @@ function CountryPairsView({ currentPlayerId, onChallenge, onBack, initialInviteO
           </div>
           {isOwnPair ? <div className="flex shrink-0 flex-col items-end gap-2">
             <span className="text-xs font-bold text-app-league">{t('Vaša dvojica')}</span>
+            <PairQrButton pairId={pair.id} names={`${pair.player_1.full_name} & ${pair.player_2.full_name}`} />
             <button type="button" onClick={() => { setDeleteError(''); setFeedback(''); setPairToDelete(pair) }} className="inline-flex items-center gap-1.5 rounded-lg border border-red-400/30 px-3 py-2 text-xs font-bold text-app-red-300 transition hover:bg-red-400/10"><Trash2 size={14} />{t('Zrušiť dvojicu', 'Dissolve pair')}</button>
           </div> : <button type="button" onClick={() => onChallenge(pair)} className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-[#ccff00]/25 px-3 py-2 text-xs font-bold text-app-league hover:bg-[#ccff00]/10"><Swords size={14} />{t('Vyzvať')}</button>}
         </li>

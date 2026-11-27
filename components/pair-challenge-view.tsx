@@ -5,6 +5,7 @@ import useSWR from 'swr'
 import { Calendar, Check, MapPin, Send, Swords, Trash2, Users, X } from 'lucide-react'
 import { useLanguage } from '@/components/language-provider'
 import { useLeague } from '@/components/league-provider'
+import { PairQrButton } from '@/components/pair-qr-button'
 import { createClient } from '@/lib/supabase/client'
 import type { Arena } from '@/lib/arenas'
 import { getErrorMessage } from '@/lib/errors'
@@ -183,7 +184,7 @@ function CountryPairChallengeView({ userId, arenas, initialArena, onOpenPairs, i
               ))}
             </div>
             {showMyPairs
-              ? <button type="button" onClick={() => { setDeleteError(''); setFeedback(null); setPairToDelete(pair) }} className="mt-4 inline-flex items-center justify-center gap-2 rounded-lg border border-red-400/30 px-4 py-3 text-xs font-black text-app-red-300 transition hover:bg-red-400/10"><Trash2 size={15} />{t('Odstrániť dvojicu')}</button>
+              ? <div className="mt-4 grid gap-2"><PairQrButton pairId={pair.id} names={`${pair.player_1.full_name} & ${pair.player_2.full_name}`} /><button type="button" onClick={() => { setDeleteError(''); setFeedback(null); setPairToDelete(pair) }} className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-400/30 px-4 py-3 text-xs font-black text-app-red-300 transition hover:bg-red-400/10"><Trash2 size={15} />{t('Odstrániť dvojicu')}</button></div>
               : <button type="button" disabled={!myPairs.length} onClick={() => { setFeedback(null); setTarget(pair) }} className="mt-4 inline-flex items-center justify-center gap-2 rounded-lg bg-[#ccff00] px-4 py-3 text-xs font-black text-[#10150d] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"><Swords size={15} />{t('Vyzvať dvojicu')}</button>}
           </li>
         ))}

@@ -8,7 +8,7 @@ import { useLanguage } from '@/components/language-provider'
 import { useLeague } from '@/components/league-provider'
 import { createClient } from '@/lib/supabase/client'
 import { getErrorMessage } from '@/lib/errors'
-import { getRivaProfilePath } from '@/lib/riva-qr'
+import { getRivaPairId, getRivaProfilePath } from '@/lib/riva-qr'
 import { fetchArenas } from '@/lib/arenas'
 import useSWR from 'swr'
 import { createQrDeviceToken, saveQrDeviceToken } from '@/lib/qr-match-device'
@@ -16,7 +16,7 @@ import { getQrScanRegion, QR_VIEWFINDER_RATIO } from '@/lib/qr-scan-region'
 import { ScoringModeDialog } from '@/components/scoring-mode-dialog'
 import type { MatchSettings } from '@/lib/live-match-scoring'
 import { QrPlayerSearch } from '@/components/qr-player-search'
-import { assignQrPlayer, type QrRoster } from '@/lib/qr-roster'
+import { assignQrPair, assignQrPlayer, type QrRoster } from '@/lib/qr-roster'
 import { markKioskActivity } from '@/lib/use-kiosk-inactivity'
 
 type ScannedPlayer = { id: string; name: string }
@@ -37,7 +37,7 @@ export function RivaQrScanner({ onClose, kioskMode = false, courtId = null }: { 
   const viewfinderRef = useRef<HTMLDivElement>(null)
   const scannerRef = useRef<QrScanner | null>(null)
   const playersRef = useRef<QrRoster>([null, null, null, null])
-  const assignmentHistoryRef = useRef<number[]>([])
+  const assignmentHistoryRef = useRef<number[][]>([])
   const processingRef = useRef(false)
   const creationRef = useRef(false)
   const liveMatchIdRef = useRef<string | null>(null)
@@ -136,10 +136,28 @@ export function RivaQrScanner({ onClose, kioskMode = false, courtId = null }: { 
       throw new Error(tRef.current('Tento hráč je už v zápase. Vyber iného hráča.', 'This player is already in the match. Choose another player.'))
     }
     const next = assignQrPlayer(playersRef.current, player, slot)
-    assignmentHistoryRef.current.push(slot)
+    assignmentHistoryRef.current.push([slot])
     playersRef.current = next
     setPlayers(next)
     setLastScannedPlayer(player)
+    markKioskActivity()
+    if (typeof navigator.vibrate === 'function') navigator.vibrate(60)
+    setError('')
+  }, [])
+
+  const addPair = useCallback((pair: [ScannedPlayer, ScannedPlayer]) => {
+    if (creationRef.current || playersRef.current.every(Boolean)) return
+    if (pair[0].id === pair[1].id || pair.some((player) => playersRef.current.some((existing) => existing?.id === player.id))) {
+      throw new Error(tRef.current('Hráč z dvojice je už v zápase.', 'A player from this pair is already in the match.'))
+    }
+    if (!([0, 2].some((index) => !playersRef.current[index] && !playersRef.current[index + 1]))) {
+      throw new Error(tRef.current('Pre dvojicu musí byť voľný celý tím.', 'A whole team must be empty for the pair.'))
+    }
+    const result = assignQrPair(playersRef.current, pair)
+    assignmentHistoryRef.current.push(result.slots)
+    playersRef.current = result.roster
+    setPlayers(result.roster)
+    setLastScannedPlayer(pair[1])
     markKioskActivity()
     if (typeof navigator.vibrate === 'function') navigator.vibrate(60)
     setError('')
@@ -177,6 +195,19 @@ export function RivaQrScanner({ onClose, kioskMode = false, courtId = null }: { 
           setIsResolving(true)
           void (async () => {
             try {
+              const pairId = getRivaPairId(result.data)
+              if (pairId) {
+                const { data, error: lookupError } = await createClient().rpc('get_qr_pair_players', { p_pair_id: pairId })
+                if (lookupError?.code === 'PGRST202') throw new Error(tRef.current('V Supabase spusti SQL migráciu 108 pre QR kódy dvojíc.', 'Apply SQL migration 108 in Supabase for pair QR codes.'))
+                if (lookupError) throw lookupError
+                if (!Array.isArray(data) || data.length !== 2 || data.some((player: unknown) =>
+                  typeof player !== 'object' || player === null || !('id' in player) || !('name' in player) ||
+                  typeof player.id !== 'string' || typeof player.name !== 'string' || !player.name.trim()
+                )) throw new Error(tRef.current('Dvojica z QR kódu sa nenašla alebo už neexistuje.', 'The pair in the QR code was not found or no longer exists.'))
+                if (!isActive) return
+                addPair([{ id: data[0].id, name: data[0].name }, { id: data[1].id, name: data[1].name }])
+                return
+              }
               const id = getRivaProfilePath(result.data, window.location.origin).split('/')[2]
               if (playersRef.current.some((player) => player?.id === id)) {
                 throw new Error(tRef.current('Tento hráč je už v zápase. Naskenuj iného hráča.', 'This player is already in the match. Scan another player.'))
@@ -229,14 +260,14 @@ export function RivaQrScanner({ onClose, kioskMode = false, courtId = null }: { 
       scanner?.destroy()
       if (scannerRef.current === scanner) scannerRef.current = null
     }
-  }, [attempt, setupReady, manualSearch, addPlayer])
+  }, [attempt, setupReady, manualSearch, addPlayer, addPair])
 
   function removeLastPlayer() {
     if (processingRef.current || creationRef.current) return
-    const index = assignmentHistoryRef.current.pop()
-    if (index === undefined) return
+    const indices = assignmentHistoryRef.current.pop()
+    if (indices === undefined) return
     const next: QrRoster = [...playersRef.current]
-    next[index] = null
+    for (const index of indices) next[index] = null
     playersRef.current = next
     setPlayers(next)
     setLastScannedPlayer(null)
@@ -252,6 +283,7 @@ export function RivaQrScanner({ onClose, kioskMode = false, courtId = null }: { 
         <ScanQrCode size={36} className="text-app-violet-200" aria-hidden="true" />
         <h1 className="mt-4 text-2xl font-black">{t('QR ligový zápas', 'QR league match')}</h1>
         <p className="mt-3 text-sm leading-6 text-app-fg/55">{t('Prihlásenie na tomto zariadení nie je potrebné. Naskenujte QR kódy štyroch hráčov v poradí podľa miest. Skóre ovláda zariadenie, ktoré zápas vytvorí. Výsledok a ELO sa uložia pri ukončení zápasu alebo spustení ďalšieho. Dovtedy možno vrátiť víťazný bod; potvrdenia hráčov nie sú potrebné.', 'No login is needed on this device. Scan four players in slot order. The creating device controls the score. The result and ELO are saved when ending the match or starting the next one. Until then, the winning point can be undone; player confirmations are not required.')}</p>
+        <p className="mt-2 text-sm text-app-fg/55">{t('Spoločný QR kód dvojice pridá oboch hráčov do jedného voľného tímu.', 'A shared pair QR code adds both players to one empty team.')}</p>
         {!setupReady ? <form onSubmit={startSetup} className="mt-5 space-y-3">
           <label htmlFor="qr-match-arena" className="block text-sm">{t('Aréna / kurt', 'Arena / court')}</label>
           <select id="qr-match-arena" required value={selectedArenaId} onChange={(event) => setSelectedArenaId(event.target.value)}
@@ -307,7 +339,7 @@ export function RivaQrScanner({ onClose, kioskMode = false, courtId = null }: { 
           </div>
           {!isStarting && !isCreating && !isResolving && !(playerCount === 4 && lastScannedPlayer) ? <div className="mt-4 flex flex-wrap gap-3">
             {playerCount === 4 ? <button type="button" onClick={() => setChoosingRules(true)} className="min-h-11 rounded-xl bg-[#a8e63c] px-4 font-bold text-[#061016]">{t('Vybrať pravidlá a začať', 'Choose rules and start')}</button> : <button type="button" onClick={() => { setManualSlot(null); setAttempt((current) => current + 1) }} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-app-line/15 px-4 text-sm"><Camera size={17} aria-hidden="true" />{t('Skenovať znova', 'Scan again')}</button>}
-            {playerCount > 0 ? <button type="button" onClick={removeLastPlayer} className="min-h-11 rounded-xl border border-app-line/15 px-4 text-sm">{t('Odobrať posledného hráča', 'Remove last player')}</button> : null}
+            {playerCount > 0 ? <button type="button" onClick={removeLastPlayer} className="min-h-11 rounded-xl border border-app-line/15 px-4 text-sm">{t('Odobrať posledné pridanie', 'Undo last addition')}</button> : null}
           </div> : null}
         </>}
         {error ? <p role="alert" className="mt-4 rounded-xl bg-red-400/10 p-3 text-sm text-app-red-200">{error}</p> : null}

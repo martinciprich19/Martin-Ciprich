@@ -1,4 +1,13 @@
 export const sharedDutch: Record<string, string> = {
+  'Spoločný QR kód dvojice': 'Gezamenlijke QR-code van het duo',
+  'Spoločný QR kód na spoločné prihlásenie oboch hráčov do zápasu na kiosku.': 'Gezamenlijke QR-code om beide spelers op de kiosk aan een wedstrijd toe te voegen.',
+  'QR kód dvojice': 'QR-code van het duo',
+  'Spoločný QR kód dvojice pridá oboch hráčov do jedného voľného tímu.': 'De gezamenlijke QR-code voegt beide spelers toe aan één leeg team.',
+  'Hráč z dvojice je už v zápase.': 'Een speler uit dit duo staat al in de wedstrijd.',
+  'Pre dvojicu musí byť voľný celý tím.': 'Voor het duo moet een heel team leeg zijn.',
+  'Dvojica z QR kódu sa nenašla alebo už neexistuje.': 'Het duo uit de QR-code is niet gevonden of bestaat niet meer.',
+  'Odobrať posledné pridanie': 'Laatste toevoeging ongedaan maken',
+  'V Supabase spusti SQL migráciu 108 pre QR kódy dvojíc.': 'Voer SQL-migratie 108 in Supabase uit voor QR-codes van duo’s.',
   'Orientačný čas zápasu': 'Geschatte wedstrijdtijd',
   'Vytvorením výzvy sa kurt nerezervuje. Rezerváciu si vybav priamo v aréne.': 'Een uitdaging aanmaken reserveert geen baan. Reserveer rechtstreeks bij de locatie.',
   'Načítavam PIN…': 'Pincode wordt geladen…',
