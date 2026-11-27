@@ -27,6 +27,29 @@ export type PairChallenge = {
 
 const PAIR_CHALLENGE_SELECT = 'id, country_code, challenger_1_id, challenger_2_id, challenged_1_id, challenged_2_id, arena_id, match_date, status, challenger_2_accepted, challenged_1_accepted, challenged_2_accepted, challenger_1:proffiles!challenges_challenger_1_id_fkey(full_name), challenger_2:proffiles!challenges_challenger_2_id_fkey(full_name), challenged_1:proffiles!challenges_challenged_1_id_fkey(full_name), challenged_2:proffiles!challenges_challenged_2_id_fkey(full_name)'
 
+export type ChallengeDetails = {
+  challenge: Omit<PairChallenge, 'match_pin' | 'is_pin_activated'>
+  arena: { name: string | null; city: string | null; address: string | null } | null
+}
+
+export async function fetchChallengeDetails(challengeId: string): Promise<ChallengeDetails> {
+  const supabase = createClient()
+  const { data, error } = await supabase.from('challenges')
+    .select(PAIR_CHALLENGE_SELECT)
+    .eq('id', challengeId)
+    .single()
+  if (error) throw error
+
+  const challenge = data as ChallengeDetails['challenge']
+  if (!challenge.arena_id) return { challenge, arena: null }
+  const { data: arena, error: arenaError } = await supabase.from('arenas')
+    .select('name, city, address')
+    .eq('id', challenge.arena_id)
+    .maybeSingle()
+  if (arenaError) throw arenaError
+  return { challenge, arena }
+}
+
 async function attachLiveMatchPins(challenges: PairChallenge[]): Promise<PairChallenge[]> {
   if (!challenges.length) return challenges
   const { data, error } = await createClient()

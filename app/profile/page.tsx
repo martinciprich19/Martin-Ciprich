@@ -70,6 +70,8 @@ import { RecentFormCard } from '@/components/recent-form-card'
 import { PlayerQrCard } from '@/components/player-qr-card'
 import { MatchDetailModal, matchDetailKey } from '@/components/match-detail-modal'
 import { MatchDetailButton } from '@/components/match-detail-button'
+import { ChallengeDetailModal } from '@/components/challenge-detail-modal'
+import { ChallengePin } from '@/components/challenge-pin'
 import { fetchNotifications, markNotificationRead, type LeagueNotification } from '@/lib/notifications'
 import { fetchUnreadMessagesBySender } from '@/lib/messages'
 import { FriendsChat } from '@/components/friends-chat'
@@ -243,7 +245,14 @@ export default function ProfilePage() {
   const unreadAlertCount = unreadCommunicationCount + unreadOtherNotificationCount
   const [messagesCategory, setMessagesCategory] = useState<'direct' | 'notifications'>('direct')
   const [communicationAlertsSeen, setCommunicationAlertsSeen] = useState(false)
+  const [notificationReadError, setNotificationReadError] = useState(false)
+  const [markingNotifications, setMarkingNotifications] = useState(false)
+  const markingNotificationsRef = useRef(false)
+  const attemptedNotificationBatch = useRef('')
   const previousUnreadAlertCount = useRef(0)
+  const showAlertBadge = unreadAlertCount > 0 && !communicationAlertsSeen
+    && !(activeTab === 'messages' && messagesCategory === 'notifications')
+  const unreadNotificationBatch = JSON.stringify([player.profile_id, notifications.filter((notification) => !notification.read).map((notification) => notification.id).sort()])
   const overviewName = player.username || overview?.displayName || 'Hráč'
   const memberSince = overview?.memberSince ? new Intl.DateTimeFormat(language === 'nl' ? 'nl-NL' : language === 'en' ? 'en-GB' : 'sk-SK', { month: 'long', year: 'numeric' }).format(new Date(overview.memberSince)) : null
 
@@ -255,6 +264,39 @@ export default function ProfilePage() {
   useEffect(() => {
     if (activeTab === 'messages' && messagesCategory === 'notifications') setCommunicationAlertsSeen(true)
   }, [activeTab, messagesCategory])
+
+  const markAllNotificationsRead = useCallback(async () => {
+    if (markingNotificationsRef.current || player.profile_id === null) return
+    markingNotificationsRef.current = true
+    setMarkingNotifications(true)
+    setNotificationReadError(false)
+    try {
+      await mutateNotifications((current) => current?.map((notification) => ({ ...notification, read: true })), { revalidate: false })
+      const { error } = await createClient().rpc('mark_notifications_as_read')
+      if (error) throw error
+      await mutateNotifications()
+    } catch (error) {
+      console.error('Notifikácie sa nepodarilo označiť ako prečítané:', error)
+      setNotificationReadError(true)
+      try {
+        await mutateNotifications()
+      } catch (refreshError) {
+        console.error('Obnovenie notifikácií zlyhalo:', refreshError)
+      }
+    } finally {
+      markingNotificationsRef.current = false
+      setMarkingNotifications(false)
+    }
+  }, [mutateNotifications, player.profile_id])
+
+  useEffect(() => {
+    if (activeTab === 'messages' && messagesCategory === 'notifications'
+      && notifications.some((notification) => !notification.read)
+      && !markingNotifications && !notificationReadError && attemptedNotificationBatch.current !== unreadNotificationBatch) {
+      attemptedNotificationBatch.current = unreadNotificationBatch
+      void markAllNotificationsRead()
+    }
+  }, [activeTab, messagesCategory, notifications, markingNotifications, notificationReadError, markAllNotificationsRead, unreadNotificationBatch])
 
   useEffect(() => {
     const refreshProfile = () => {
@@ -293,14 +335,7 @@ export default function ProfilePage() {
 
   function openNotifications() {
     setCommunicationAlertsSeen(true)
-    void mutateNotifications((current) => current?.map((notification) => ({ ...notification, read: true })), { revalidate: false })
-    void createClient().rpc('mark_notifications_as_read').then(({ error }) => {
-      if (error) {
-        console.error('Notifikácie sa nepodarilo označiť ako prečítané:', error.message)
-        return
-      }
-      void mutateNotifications()
-    })
+    void markAllNotificationsRead()
 
     const unreadNotification = notifications.find((notification) => !notification.read)
     const messageNotificationTypes = ['message', 'new_message', 'direct_message']
@@ -596,9 +631,9 @@ export default function ProfilePage() {
             <div className="ml-auto flex items-center gap-2 md:gap-4">
               <PageReloadButton />
               <InstallAppButton compact />
-              <button type="button" onClick={openNotifications} className={`relative flex h-11 w-11 items-center justify-center rounded-full border md:h-9 md:w-9 border-app-line/10 bg-app-overlay/[0.04] transition-colors hover:text-app-fg ${activeTab === 'messages' && messagesCategory === 'notifications' ? 'text-app-league' : 'text-app-fg/55'}`} aria-label={unreadAlertCount > 0 ? t(`Správy a notifikácie, ${unreadAlertCount} neprečítané`, `Messages and notifications, ${unreadAlertCount} unread`) : t('Správy a notifikácie', 'Messages and notifications')} title={t('Správy a notifikácie', 'Messages and notifications')}>
+              <button type="button" onClick={openNotifications} className={`relative flex h-11 w-11 items-center justify-center rounded-full border md:h-9 md:w-9 border-app-line/10 bg-app-overlay/[0.04] transition-colors hover:text-app-fg ${activeTab === 'messages' && messagesCategory === 'notifications' ? 'text-app-league' : 'text-app-fg/55'}`} aria-label={showAlertBadge ? t(`Správy a notifikácie, ${unreadAlertCount} neprečítané`, `Messages and notifications, ${unreadAlertCount} unread`) : t('Správy a notifikácie', 'Messages and notifications')} title={t('Správy a notifikácie', 'Messages and notifications')}>
                 <Bell size={18} />
-                {unreadAlertCount > 0 && !communicationAlertsSeen ? <span aria-live="polite" className={`absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-black text-app-fg ${incomingPairInvitations.length ? 'animate-pulse' : ''}`}>{unreadAlertCount > 9 ? '9+' : unreadAlertCount}</span> : null}
+                {showAlertBadge ? <span aria-live="polite" className={`absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-black text-app-fg ${incomingPairInvitations.length ? 'animate-pulse' : ''}`}>{unreadAlertCount > 9 ? '9+' : unreadAlertCount}</span> : null}
               </button>
               <div className="hidden h-7 w-px bg-app-overlay/10 sm:block" />
               <div className="flex items-center gap-2"><AvatarPreview src={avatarUrl} initials={player.username.slice(0, 2)} size="sm" onRemove={removeAvatar} busy={avatarBusy} /><span className="hidden text-sm font-semibold sm:block">{player.username}</span></div>
@@ -608,10 +643,11 @@ export default function ProfilePage() {
 
           <div className="px-4 md:px-8 lg:px-10">
             <PushNotificationSettings visible={activeTab === 'overview' || (activeTab === 'settings' && settingsSection === 'notifications')} pushAllowed={settings.pushAlerts} onEnabled={() => setSettings((current) => ({ ...current, pushAlerts: true }))} />
+            {notificationReadError ? <p role="alert" className="mt-3 text-sm text-app-red-300">{t('Notifikácie sa nepodarilo označiť ako prečítané.', 'Could not mark notifications as read.')} <button type="button" disabled={markingNotifications} onClick={() => void markAllNotificationsRead()} className="font-bold underline">{t('Skúsiť znova', 'Try again')}</button></p> : null}
           </div>
           <div key={activeTab} className={bottomNavigationTab === activeTab ? 'profile-bottom-screen-enter' : undefined} onAnimationEnd={(event) => { if (event.target === event.currentTarget) setBottomNavigationTab(null) }}>
           <div className="mx-auto max-w-[1280px] px-4 pb-28 pt-6 md:px-8 md:py-8 lg:px-10 lg:py-10">
-            {activeTab === 'rankings' ? <RankingsView onMessage={(opponent) => openConversation(opponent)} /> : activeTab === 'tournaments' ? <TournamentsView /> : activeTab === 'opponents' ? <FindPlayersView currentPlayerId={player.profile_id === null ? undefined : String(player.profile_id)} currentPlayerAvatarUrl={avatarUrl} defaultRegion={player.region} onMessage={(opponent) => openConversation(opponent)} /> : activeTab === 'settings' ? <SettingsView language={language} setLanguage={setLanguage} t={t} onSaveEmail={(email) => setPlayer((current) => ({ ...current, email }))} settings={settings} setSettings={setSettings} section={settingsSection} setSection={setSettingsSection} arenas={arenas} toast={settingsToast} setToast={setSettingsToast} deleteModalOpen={deleteModalOpen} setDeleteModalOpen={setDeleteModalOpen} /> : activeTab === 'messages' ?             <MessagesView onOpenResults={() => setActiveTab('matches')} category={messagesCategory} setCategory={setMessagesCategory} notifications={notifications} pairInvitations={incomingPairInvitations} pairInvitationsError={incomingPairInvitationsError} onMarkRead={markRead} myProfileId={player.profile_id} activeFriendId={activeConversationId} setActiveFriendId={setActiveConversationId} onChallenge={(friend) => { setChallengeForm((current) => ({ ...current, opponentId: friend.id, opponentName: friend.name })); setChallengeModalOpen(true); setActiveTab('challenges') }} /> : activeTab === 'arenas' ? <ArenasView arenas={visibleArenas} totalCount={arenas.length} isLoading={arenasLoading} loadError={Boolean(arenasError)} isAdmin={isLeagueAdmin} region={arenaRegion} setRegion={setArenaRegion} search={arenaSearch} setSearch={setArenaSearch} onChallenge={openArenaChallenge} onMatch={openArenaMatch} onSetHome={setHomeArena} onSaved={(saved) => { setArenas((current) => [...current.filter((item) => item.id !== saved.id), saved].sort((a, b) => a.name.localeCompare(b.name))); void mutateArenas() }} onDeleted={(id) => { setArenas((current) => current.filter((item) => item.id !== id)); void mutateArenas() }} /> : activeTab === 'matches' ? <MatchesView matches={matchRecords} setMatches={setMatchRecords} initialArena={matchArena} modalOpen={matchModalOpen} setModalOpen={setMatchModalOpen} onMatchSaved={() => mutateProfileMatches()} onOpenMatch={setDetailMatchId} /> : activeTab === 'challenges' ? showPairsView ? <PairsView currentPlayerId={player.profile_id === null ? null : String(player.profile_id)} onBack={() => setShowPairsView(false)} onChallenge={(pair: PlayerPair) => { setChallengeTargetPair({ player1Id: pair.player_1_id, player1Name: pair.player_1.full_name, player2Id: pair.player_2_id, player2Name: pair.player_2.full_name }); setShowPairsView(false) }} /> : <PairChallengeView userId={player.profile_id === null ? '' : String(player.profile_id)} userName={player.username} arenas={arenas} initialArena={challengeForm.arena} onOpenPairs={() => setShowPairsView(true)} initialChallengedPair={challengeTargetPair} onInitialPairApplied={setChallengeTargetPair} /> : activeTab === 'profile' ? <ProfileView player={player} phone={settings.phone} avatarUrl={avatarUrl} avatarInputRef={avatarInputRef} handleAvatarChange={handleAvatarChange} removeAvatar={removeAvatar} matches={matches} profileMatches={profileMatches} profileMatchesLoading={profileMatchesLoading} profileMatchesError={profileMatchesError} matchStats={matchStats} matchModalOpen={matchModalOpen} setMatchModalOpen={setMatchModalOpen} matchForm={matchForm} setMatchForm={setMatchForm} submitMatch={submitMatch} approveMatch={approveMatch} onOpenMatch={setDetailMatchId} /> : <>
+            {activeTab === 'rankings' ? <RankingsView onMessage={(opponent) => openConversation(opponent)} /> : activeTab === 'tournaments' ? <TournamentsView /> : activeTab === 'opponents' ? <FindPlayersView currentPlayerId={player.profile_id === null ? undefined : String(player.profile_id)} currentPlayerAvatarUrl={avatarUrl} defaultRegion={player.region} onMessage={(opponent) => openConversation(opponent)} /> : activeTab === 'settings' ? <SettingsView language={language} setLanguage={setLanguage} t={t} onSaveEmail={(email) => setPlayer((current) => ({ ...current, email }))} settings={settings} setSettings={setSettings} section={settingsSection} setSection={setSettingsSection} arenas={arenas} toast={settingsToast} setToast={setSettingsToast} deleteModalOpen={deleteModalOpen} setDeleteModalOpen={setDeleteModalOpen} /> : activeTab === 'messages' ?             <MessagesView onOpenResults={() => setActiveTab('matches')} category={messagesCategory} setCategory={setMessagesCategory} notifications={notifications} pairInvitations={incomingPairInvitations} pairInvitationsError={incomingPairInvitationsError} onMarkRead={markRead} myProfileId={player.profile_id} activeFriendId={activeConversationId} setActiveFriendId={setActiveConversationId} onChallenge={(friend) => { setChallengeForm((current) => ({ ...current, opponentId: friend.id, opponentName: friend.name })); setChallengeModalOpen(true); setActiveTab('challenges') }} /> : activeTab === 'arenas' ? <ArenasView arenas={visibleArenas} totalCount={arenas.length} isLoading={arenasLoading} loadError={Boolean(arenasError)} isAdmin={isLeagueAdmin} region={arenaRegion} setRegion={setArenaRegion} search={arenaSearch} setSearch={setArenaSearch} onChallenge={openArenaChallenge} onMatch={openArenaMatch} onSetHome={setHomeArena} onSaved={(saved) => { setArenas((current) => [...current.filter((item) => item.id !== saved.id), saved].sort((a, b) => a.name.localeCompare(b.name))); void mutateArenas() }} onDeleted={(id) => { setArenas((current) => current.filter((item) => item.id !== id)); void mutateArenas() }} /> : activeTab === 'matches' ? <MatchesView matches={matchRecords} setMatches={setMatchRecords} initialArena={matchArena} modalOpen={matchModalOpen} setModalOpen={setMatchModalOpen} onMatchSaved={() => mutateProfileMatches()} onOpenMatch={setDetailMatchId} /> : activeTab === 'challenges' ? showPairsView ? <PairsView initialInviteOpen currentPlayerId={player.profile_id === null ? null : String(player.profile_id)} onBack={() => setShowPairsView(false)} onChallenge={(pair: PlayerPair) => { setChallengeTargetPair({ player1Id: pair.player_1_id, player1Name: pair.player_1.full_name, player2Id: pair.player_2_id, player2Name: pair.player_2.full_name }); setShowPairsView(false) }} /> : <PairChallengeView userId={player.profile_id === null ? '' : String(player.profile_id)} userName={player.username} arenas={arenas} initialArena={challengeForm.arena} onOpenPairs={() => setShowPairsView(true)} initialChallengedPair={challengeTargetPair} onInitialPairApplied={setChallengeTargetPair} /> : activeTab === 'profile' ? <ProfileView player={player} phone={settings.phone} avatarUrl={avatarUrl} avatarInputRef={avatarInputRef} handleAvatarChange={handleAvatarChange} removeAvatar={removeAvatar} matches={matches} profileMatches={profileMatches} profileMatchesLoading={profileMatchesLoading} profileMatchesError={profileMatchesError} matchStats={matchStats} matchModalOpen={matchModalOpen} setMatchModalOpen={setMatchModalOpen} matchForm={matchForm} setMatchForm={setMatchForm} submitMatch={submitMatch} approveMatch={approveMatch} onOpenMatch={setDetailMatchId} /> : <>
             <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
               <div><p className="text-xs font-bold uppercase tracking-[0.22em] text-app-league">{t('Vitaj späť v RIVA Padel', 'Welcome back to RIVA Padel')}</p><h1 className="mt-3 text-2xl font-black tracking-tight md:text-4xl">{t('Ahoj', 'Hi')}, {overviewName}! <span aria-hidden="true">👋</span></h1><div className="mt-3 flex flex-wrap items-center gap-2">{memberSince ? <p className="text-sm text-app-fg/45">{t('Členom od', 'Member since')}: {memberSince}</p> : null}{player.region ? <span className="rounded-full border border-[#ccff00]/25 bg-[#ccff00]/10 px-3 py-1 text-[11px] font-semibold text-app-league">{player.region}</span> : null}{player.level ? <span className="rounded-full border border-app-line/10 bg-app-overlay/[0.05] px-3 py-1 text-[11px] font-semibold text-app-fg/65">{player.level}</span> : null}</div></div>
               <button type="button" onClick={() => setActiveTab('matches')} className="group inline-flex items-center gap-2 self-start rounded-lg border border-spl-border bg-slate-800/90 px-4 py-2.5 text-xs font-bold text-app-fg/65 hover:border-[#ccff00]/50 hover:text-app-fg sm:self-auto">{t('Zobraziť moje zápasy', 'View my matches')} <span className="transition-colors group-hover:text-app-league">&gt;</span></button>
@@ -829,6 +865,7 @@ const MessagesView = memo(function MessagesView({ category, setCategory, notific
   const { language, t } = useLanguage()
   const { mutate: mutateCache } = useSWRConfig()
   const [respondingChallengeId, setRespondingChallengeId] = useState<string | null>(null)
+  const [detailChallengeId, setDetailChallengeId] = useState<string | null>(null)
   const [challengeResponseError, setChallengeResponseError] = useState<{ id: string; message: string } | null>(null)
   const [respondingInvitationId, setRespondingInvitationId] = useState<string | null>(null)
   const [pairInvitationError, setPairInvitationError] = useState('')
@@ -852,6 +889,7 @@ const MessagesView = memo(function MessagesView({ category, setCategory, notific
     setRespondingChallengeId(notification.challenge_id)
     setChallengeResponseError(null)
     try {
+      let completedChallenge = false
       if (accept) {
         const { data, error } = await createClient().rpc('accept_challenge', {
           p_challenge_id: notification.challenge_id,
@@ -861,7 +899,7 @@ const MessagesView = memo(function MessagesView({ category, setCategory, notific
           console.error('Chyba pri potvrdzovaní výzvy:', error)
           throw error
         }
-        console.log(data)
+        completedChallenge = data === 'accepted'
       } else {
         await respondToPairChallenge(notification.challenge_id, false)
       }
@@ -874,6 +912,19 @@ const MessagesView = memo(function MessagesView({ category, setCategory, notific
         mutateCache(['pair-challenges', String(myProfileId)]),
       ])
       window.dispatchEvent(new Event('communications-updated'))
+      if (completedChallenge) {
+        try {
+          const response = await fetch('/api/challenge-pin-email', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ challengeId: notification.challenge_id }),
+          })
+          if (!response.ok) throw new Error(t('Výzva je potvrdená a PIN je uložený, ale e-maily sa nepodarilo odoslať. Otvor nové upozornenie a skús ich odoslať znova.', 'The challenge is confirmed and the PIN is saved, but emails could not be sent. Open the new notification and retry.'))
+        } catch (emailError) {
+          const message = getErrorMessage(emailError, t('PIN je uložený, ale e-maily sa nepodarilo odoslať.', 'The PIN is saved, but emails could not be sent.'))
+          console.error('Odoslanie PIN-u výzvy zlyhalo:', emailError)
+          setChallengeResponseError({ id: notification.id, message })
+        }
+      }
     } catch (error: unknown) {
       const message = getErrorMessage(error, 'Na výzvu sa nepodarilo odpovedať.')
       console.error('Odpoveď na výzvu zlyhala:', message)
@@ -946,8 +997,9 @@ const MessagesView = memo(function MessagesView({ category, setCategory, notific
     ) : (
       <ul className="mt-6 flex flex-col gap-3">
         {notifications.map((notification) => {
-          const isChallengeNotification = ['challenge_request', 'pair_challenge', 'challenge'].includes(notification.type) || Boolean(notification.challenge_id)
+          const isChallengeNotification = ['challenge_request', 'pair_challenge', 'challenge', 'challenge_match_ready'].includes(notification.type)
           const isPairChallenge = isChallengeNotification && Boolean(notification.challenge_id)
+          const isChallengeRequest = isPairChallenge && notification.type !== 'challenge_match_ready'
           const hasNotificationAction = isChallengeNotification || ['match_result', 'match_finished'].includes(notification.type)
           const isResponding = respondingChallengeId === notification.challenge_id
           const actionTaken = notification.challengeResponse
@@ -964,22 +1016,25 @@ const MessagesView = memo(function MessagesView({ category, setCategory, notific
               <time dateTime={notification.createdAt} className="shrink-0 text-xs text-app-fg/40">{dateFormatter.format(new Date(notification.createdAt))}</time>
             </div>
             {notification.body ? <p className="mt-1 text-sm leading-relaxed text-app-fg/50">{notification.body}</p> : null}
+            {notification.type === 'challenge_match_ready' && notification.challenge_id ? <ChallengePin challengeId={notification.challenge_id} /> : null}
             {['match_result', 'match_finished'].includes(notification.type) && notification.matchId ? <button type="button" onClick={(event) => { event.stopPropagation(); onMarkRead(notification.id); onOpenResults() }} className="mt-3 inline-flex min-h-10 items-center rounded-lg bg-[#ccff00] px-3 py-2 text-xs font-black text-[#10150d]">{notification.type === 'match_finished' ? t('Otvoriť výsledky', 'Open results') : t('Otvoriť výsledky a potvrdiť', 'Open results and confirm')}</button> : null}
+            {isPairChallenge ? <button type="button" onClick={() => setDetailChallengeId(notification.challenge_id)} className="mt-3 inline-flex min-h-10 items-center rounded-lg border border-[#ccff00]/30 px-3 py-2 text-xs font-bold text-app-league hover:bg-[#ccff00]/10">{t('Detail výzvy', 'Challenge details')}</button> : null}
             {isChallengeNotification && !notification.challenge_id ? <p role="alert" className="mt-3 text-xs text-app-amber-300">Notifikácii chýba ID výzvy, preto na ňu nemožno odpovedať.</p> : null}
-            {isPairChallenge && (actionTaken === 'confirmed' || actionTaken === 'declined') ? <p role="status" className={`mt-4 inline-flex items-center gap-1.5 rounded-md px-3 py-2 text-xs font-bold ${actionTaken === 'confirmed' ? 'bg-emerald-400/10 text-app-emerald-300' : 'bg-red-400/10 text-app-red-300'}`}>
+            {isChallengeRequest && (actionTaken === 'confirmed' || actionTaken === 'declined') ? <p role="status" className={`mt-4 inline-flex items-center gap-1.5 rounded-md px-3 py-2 text-xs font-bold ${actionTaken === 'confirmed' ? 'bg-emerald-400/10 text-app-emerald-300' : 'bg-red-400/10 text-app-red-300'}`}>
               {actionTaken === 'confirmed' ? <Check size={14} /> : <X size={14} />}
               {actionTaken === 'confirmed' ? t('Potvrdené', 'Confirmed') : t('Odmietnuté', 'Declined')}
-            </p> : isPairChallenge && actionTaken === 'pending' ? <div className="relative z-10 mt-4 flex gap-2">
+            </p> : isChallengeRequest && actionTaken === 'pending' ? <div className="relative z-10 mt-4 flex gap-2">
               <button type="button" disabled={myProfileId === null || isResponding} onClick={(event) => { event.stopPropagation(); void answerPairChallenge(notification, true) }} className="inline-flex items-center gap-1.5 rounded-lg bg-[#ccff00] px-3 py-2 text-xs font-black text-[#10150d] disabled:cursor-wait disabled:opacity-50"><Check size={14} />{isResponding ? 'Spracúvam…' : 'Potvrdiť účasť'}</button>
               <button type="button" disabled={myProfileId === null || isResponding} onClick={(event) => { event.stopPropagation(); void answerPairChallenge(notification, false) }} className="inline-flex items-center gap-1.5 rounded-lg border border-app-line/10 px-3 py-2 text-xs font-bold text-app-fg/70 disabled:cursor-wait disabled:opacity-50"><X size={14} />Odmietnuť</button>
             </div> : null}
-            {isPairChallenge && actionTaken === 'cancelled' ? <p role="status" className="mt-3 text-xs text-app-fg/50">{t('Výzva bola zrušená.', 'Challenge cancelled.')}</p> : null}
-            {isPairChallenge && actionTaken === 'unavailable' ? <p role="status" className="mt-3 text-xs text-app-amber-300">{t('Výzva nie je dostupná na potvrdenie.', 'Challenge is not available for confirmation.')}</p> : null}
+            {isChallengeRequest && actionTaken === 'cancelled' ? <p role="status" className="mt-3 text-xs text-app-fg/50">{t('Výzva bola zrušená.', 'Challenge cancelled.')}</p> : null}
+            {isChallengeRequest && actionTaken === 'unavailable' ? <p role="status" className="mt-3 text-xs text-app-amber-300">{t('Výzva nie je dostupná na potvrdenie.', 'Challenge is not available for confirmation.')}</p> : null}
             {challengeResponseError?.id === notification.id ? <p role="alert" className="mt-3 text-xs text-app-red-300">{challengeResponseError.message}</p> : null}
           </li>
         })}
       </ul>
     ) : <FriendsChat myProfileId={myProfileId} activeFriendId={activeFriendId} setActiveFriendId={setActiveFriendId} onChallenge={onChallenge} />}
+    {detailChallengeId ? <ChallengeDetailModal challengeId={detailChallengeId} onClose={() => setDetailChallengeId(null)} /> : null}
   </div>
 })
 

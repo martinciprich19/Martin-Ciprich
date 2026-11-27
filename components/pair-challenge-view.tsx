@@ -132,7 +132,7 @@ function CountryPairChallengeView({ userId, arenas, initialArena, onOpenPairs, i
         </div>
         <div className="flex flex-wrap gap-3">
           <button type="button" aria-pressed={showMyPairs} onClick={() => { setShowMyPairs((current) => !current); setFeedback(null) }} className="inline-flex items-center gap-2 rounded-lg border border-[#ccff00]/30 px-4 py-2.5 text-sm font-bold text-app-league transition hover:bg-[#ccff00]/10"><Users size={16} />{t(showMyPairs ? 'Súperiace dvojice' : 'Moje dvojice')}</button>
-          <button type="button" onClick={onOpenPairs} className="inline-flex items-center gap-2 rounded-lg border border-[#ccff00]/30 px-4 py-2.5 text-sm font-bold text-app-league transition hover:bg-[#ccff00]/10"><Users size={16} />{t('Pridať dvojicu')}</button>
+          <button type="button" onClick={onOpenPairs} disabled={!userId} className="inline-flex items-center gap-2 rounded-lg border border-[#ccff00]/30 px-4 py-2.5 text-sm font-bold text-app-league transition hover:bg-[#ccff00]/10 disabled:cursor-not-allowed disabled:opacity-50"><Users size={16} />{t('Pridať dvojicu')}</button>
         </div>
       </header>
 

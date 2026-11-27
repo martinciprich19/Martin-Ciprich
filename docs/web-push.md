@@ -113,6 +113,51 @@ The migration installs `notify_friend_request`, `notify_chat_message`,
 custom notification-writing triggers were installed outside this repository,
 remove those redundant triggers before enabling the new ones.
 
+For the numeric challenge/arena schema, apply
+[105_challenge_notification_duplicates.sql](../scripts/105_challenge_notification_duplicates.sql)
+after 066 and 069. It removes the identified legacy
+`handle_new_challenge_notification` trigger and replaces the numeric
+`create_challenge` function that inserted a second set of notifications.
+Each invited player then receives one linked notification. It removes only
+recognizable historical duplicates when a matching canonical notification exists;
+unlinked alerts that cannot be matched unambiguously are retained. The migration
+stops if the expected numeric function or the canonical insert trigger is missing.
+Previously delivered push messages cannot be recalled. Challenge notifications
+with a valid link expose a detail view of both pairs, player profiles, time and
+venue; unavailable details show an error and retry.
+
+### Confirmed challenge PINs and emails
+
+Deploy the application changes **before** running
+[106_challenge_pin_delivery.sql](../scripts/106_challenge_pin_delivery.sql),
+after 042, 066, 069 and 105. The migration targets the numeric challenge schema
+and verifies the installed acceptance functions. It makes the numeric
+`accept_challenge` call the authenticated, row-locked
+`respond_to_pair_challenge` workflow that creates the live match and PIN.
+Future challenges already marked `confirmed` by all four participants with no
+live match are repaired once; older or incomplete challenges are not modified.
+
+Each participant receives a separate `challenge_match_ready` notification
+linked to the challenge. Its text does not contain the PIN; the app retrieves
+it through a participant-authorized RPC and shows it in the notification and
+challenge detail. One private email job per participant is recorded in the same
+transaction. The authenticated notification INSERT webhook (`/api/send-push`)
+submits each PIN email even when the recipient has no push device or has
+disabled challenge push; the last confirming player's browser also attempts
+dispatch. A challenge push opt-out still suppresses the push itself.
+
+The server needs `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`,
+`RESEND_API_KEY`, and `MATCH_EMAIL_FROM` with a verified sender domain.
+The existing notification webhook and `PUSH_WEBHOOK_SECRET` must be configured
+for background delivery independent of the confirming browser. No scheduler is
+assumed: if both webhook and browser delivery fail, unsent jobs remain pending.
+Any participant can use **Retry pending emails** on the PIN notification or
+detail. Failed attempts are logged without losing the PIN, and successfully
+submitted jobs are not resent; Resend idempotency keys protect retries within
+the provider's idempotency window. Resend acceptance does not guarantee inbox
+delivery. Test with four real participant accounts, and check webhook/server
+logs and Resend delivery status if email does not arrive.
+
 ### Checking automatic activity notifications
 
 1. Deploy the updated app. Keep the existing single INSERT webhook on
@@ -250,3 +295,11 @@ Creating `user_push_tokens` alone is insufficient: migration 049 also installs
 return `PUSH_SCHEMA_MISSING`. Registration derives the auth UUID on the server;
 test reservation reads only that authenticated user's tokens. No local
 notification is reported as a successful Firebase delivery.
+# In-app notification badge
+
+Opening the bell or the league notifications tab marks the player's notifications
+as read, including applicable announcements, using `mark_notifications_as_read`.
+The bell badge is hidden while the notifications tab is open; new notifications
+are marked as read there as well. If the update fails, an error and retry button
+are shown. Chat messages and pending invitations retain their separate unread or
+pending state and are not accepted or read merely by opening notifications.

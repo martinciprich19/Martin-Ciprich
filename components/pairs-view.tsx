@@ -12,20 +12,20 @@ import { getErrorMessage } from '@/lib/errors'
 
 const fieldClass = 'w-full rounded-lg border border-app-line/10 bg-app-canvas px-3 py-2.5 text-sm text-app-fg outline-none focus:border-[#ccff00]'
 
-type PairsViewProps = { currentPlayerId: string | null; onChallenge: (pair: PlayerPair) => void; onBack: () => void }
+type PairsViewProps = { currentPlayerId: string | null; onChallenge: (pair: PlayerPair) => void; onBack: () => void; initialInviteOpen?: boolean }
 
 export function PairsView(props: PairsViewProps) {
   const { country, isLoading } = useLeague()
   return isLoading ? null : <CountryPairsView key={country} {...props} />
 }
 
-function CountryPairsView({ currentPlayerId, onChallenge, onBack }: PairsViewProps) {
+function CountryPairsView({ currentPlayerId, onChallenge, onBack, initialInviteOpen = false }: PairsViewProps) {
   const { t } = useLanguage()
   const { country, regions } = useLeague()
   const pairs = useSWR(['league-pairs', country], () => fetchPairs(country))
   const players = useSWR(['league-players', country], () => fetchLeaguePlayers(country))
   const friends = useSWR(currentPlayerId ? ['friends', currentPlayerId] : null, ([, id]) => fetchFriends(id))
-  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [isModalOpen, setIsModalOpen] = useState(initialInviteOpen && currentPlayerId !== null)
   const [friendId, setFriendId] = useState('')
   const [search, setSearch] = useState('')
   const [regionFilter, setRegionFilter] = useState('')

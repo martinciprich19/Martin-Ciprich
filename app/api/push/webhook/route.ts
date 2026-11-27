@@ -1,6 +1,7 @@
 import { timingSafeEqual } from 'node:crypto'
 import { NextResponse } from 'next/server'
 import { createPushAdminClient, deliverPush } from '@/lib/firebase-admin'
+import { dispatchChallengePinEmails } from '@/lib/challenge-pin-dispatch'
 
 export const runtime = 'nodejs'
 
@@ -29,6 +30,22 @@ export async function POST(request: Request) {
     // Never trust webhook-supplied recipients or content; read the stored event.
     const { data: row, error: rowError } = await supabase.from('notifications').select('*').eq('id', id).single()
     if (rowError) throw rowError
+    let emailFailed = false
+    if (row.type === 'challenge_match_ready') {
+      if (row.challenge_id == null || row.user_id == null) throw new Error('Challenge notification is missing its recipient or challenge.')
+      try {
+        await dispatchChallengePinEmails(String(row.challenge_id), String(row.user_id))
+      } catch (error) {
+        emailFailed = true
+        console.error('Challenge PIN email delivery failed:', error)
+      }
+      const { data: profile, error: profileError } = await supabase.from('proffiles')
+        .select('settings').eq('id', row.user_id).single()
+      if (profileError) throw profileError
+      if (profile?.settings?.emailChallenges === false) {
+        return NextResponse.json({ sent: 0, failed: 0, emailFailed }, { status: emailFailed ? 502 : 200 })
+      }
+    }
     if (row.type === 'match_result' && row.match_id) {
       const { data: finished, error: finishedError } = await supabase.from('notifications')
         .select('id').eq('type', 'match_finished').eq('match_id', row.match_id).limit(1)
@@ -44,7 +61,7 @@ export async function POST(request: Request) {
       tokens.push(...data)
       if (data.length < 1000) break
     }
-    if (!tokens.length) return NextResponse.json({ sent: 0, failed: 0 })
+    if (!tokens.length) return NextResponse.json({ sent: 0, failed: 0, emailFailed }, { status: emailFailed ? 502 : 200 })
     const titles: Record<string, string> = {
       friend_request: 'Žiadosť o priateľstvo',
       pair_invitation: 'Pozvanie do dvojice',
@@ -64,7 +81,7 @@ export async function POST(request: Request) {
       body: String(row.message ?? row.body ?? '').slice(0, 500),
       id: `notification-${id}`,
     })
-    return NextResponse.json(result, { status: result.failed ? 502 : 200 })
+    return NextResponse.json(emailFailed ? { ...result, emailFailed } : result, { status: result.failed || emailFailed ? 502 : 200 })
   } catch (error) {
     console.error('Push webhook failed:', error)
     return NextResponse.json({ error: 'Push delivery failed' }, { status: 503 })

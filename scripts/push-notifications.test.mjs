@@ -262,6 +262,9 @@ test('send-push exposes the same authenticated and validated webhook handler', a
 
 test('webhook rejects unauthorized/invalid events and uses stored content and recipients', async () => {
   let delivered
+  let emailDispatch
+  let failEmail = false
+  let challengePushEnabled = true
   let bulk = false
   let finishedAlerts = []
   let notification = { type: 'challenge_request', message: 'Stored challenge' }
@@ -269,13 +272,18 @@ test('webhook rejects unauthorized/invalid events and uses stored content and re
   const route = await loadModule('../app/api/push/webhook/route.ts', {
     'node:crypto': await import('node:crypto'),
     'next/server': { NextResponse: Response },
+    '@/lib/challenge-pin-dispatch': { dispatchChallengePinEmails: async (challengeId, profileId) => {
+      emailDispatch = { challengeId, profileId }
+      if (failEmail) throw new Error('Email unavailable')
+      return { sent: 1 }
+    } },
     '@/lib/firebase-admin': {
       createPushAdminClient: () => ({
-        from: () => ({ select: () => {
+        from: (table) => ({ select: () => {
           const filters = {}
           const query = {
             eq: (field, value) => { filters[field] = value; return query },
-            single: async () => ({ data: notification, error: null }),
+            single: async () => ({ data: table === 'proffiles' ? { settings: { emailChallenges: challengePushEnabled } } : notification, error: null }),
             limit: async () => ({ data: finishedAlerts.filter(row => row.type === filters.type && row.match_id === filters.match_id), error: null }),
           }
           return query
@@ -297,6 +305,18 @@ test('webhook rejects unauthorized/invalid events and uses stored content and re
   assert.equal((await route.POST(request(event))).status, 200)
   assert.equal(delivered.tokens[0], tokenA)
   assert.equal(delivered.data.body, 'Stored challenge')
+  notification = { type: 'challenge_match_ready', challenge_id: 17, user_id: 3, title: 'Ready', message: 'Open details' }
+  assert.equal((await route.POST(request(event))).status, 200)
+  assert.deepEqual(emailDispatch, { challengeId: '17', profileId: '3' })
+  challengePushEnabled = false
+  delivered = undefined
+  assert.equal((await route.POST(request(event))).status, 200)
+  assert.equal(delivered, undefined)
+  challengePushEnabled = true
+  failEmail = true
+  assert.equal((await route.POST(request(event))).status, 502)
+  assert.equal(delivered.data.body, 'Open details')
+  failEmail = false
   notification = { type: 'match_result', message: 'Potvrď výsledok 2:0' }
   assert.equal((await route.POST(request(event))).status, 200)
   assert.equal(delivered.data.title, 'Potvrď výsledok')
