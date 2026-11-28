@@ -25,7 +25,8 @@ final class ScreenPreview {
     private ScheduledExecutorService worker;
     private volatile boolean active;
     private long lastHeartbeat;
-    private static final String ENDPOINT = "https://www.rivapadel.app/api/kiosk-preview";
+    private static final String ENDPOINT = AppPolicy.HOME + "api/kiosk-preview";
+    private static final String HEARTBEAT_ENDPOINT = AppPolicy.HOME + "api/device-heartbeat";
 
     ScreenPreview(Activity activity, WebView web) {
         this.activity = activity;
@@ -89,7 +90,7 @@ final class ScreenPreview {
     private void heartbeat(String cookie) {
         HttpURLConnection connection = null;
         try {
-            connection = (HttpURLConnection) new URL("https://www.rivapadel.app/api/device-heartbeat").openConnection();
+            connection = (HttpURLConnection) new URL(HEARTBEAT_ENDPOINT).openConnection();
             connection.setConnectTimeout(5000);
             connection.setReadTimeout(5000);
             connection.setInstanceFollowRedirects(false);

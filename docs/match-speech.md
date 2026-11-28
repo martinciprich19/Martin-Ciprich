@@ -1,6 +1,6 @@
 # Match announcements
 
-Match announcements use the Slovak ElevenLabs voice (`2bNrEsM0omyhLiEyOwqY`)
+Match announcements use the Slovak ElevenLabs voice Matus (`Y6IUK3gCTk4fxRiN2cGE`)
 or English voice (`wAGzRVkxKEs8La0lmdrE`) through
 `POST /api/match-speech`, with `eleven_flash_v2_5` for Slovak and
 `eleven_multilingual_v2` for English, stability `0.8`, similarity boost `0.75`,
@@ -21,6 +21,12 @@ All accepted announcements end with a period. Slovak points use
 "Bod pre tím jedna." and "Bod pre tím dva." (including game-winning variants)
 to encourage declarative intonation. Other Slovak team-wording variants are
 rejected; reload clients already open during an update.
+After validation, Slovak `gem` and `gemu` are sent to ElevenLabs as
+`gém` and `gému` to try to discourage the English "džem" pronunciation.
+`gemov` is sent unchanged. The displayed and validated text remains unchanged; winner names
+are not rewritten. This phonetic spelling is an experiment and pronunciation
+must be checked by listening to the configured voice. Device fallback speech
+still receives the original text.
 The final point replaces the point/game announcement with the winning team and
 both player names, for example "Zápas vyhral tím jedna. Víťazná dvojica: Martin
 a Peter.". The scoring device waits for a successful save; spectators announce
@@ -50,12 +56,15 @@ With migration 056, a tiebreak-winning point announces the tiebreak and set,
 unless it finishes the match (the existing winning-pair announcement takes
 priority). Tiebreak reset and undo have distinct localized phrases.
 
-Configure `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID` (Slovak) and optionally
+Configure `ELEVENLABS_API_KEY` and optionally `ELEVENLABS_VOICE_ID` (Slovak,
+defaults to Matus, `Y6IUK3gCTk4fxRiN2cGE`) and
 `ELEVENLABS_VOICE_ID_EN` (English, defaults to `wAGzRVkxKEs8La0lmdrE`) in `.env.local` and in
 the production server environment. Optionally override the winner voice with
 `ELEVENLABS_VOICE_ID_WINNER` (defaults to `z2Zs6alQTcDzcMWLuK0e`).
 Restart the development server after changing
-these values. Never prefix the secret key with `NEXT_PUBLIC_`; rotate any key
+these values. An existing deployment environment variable overrides the default;
+set it to the desired voice on the production server and redeploy. Add the
+voice to the ElevenLabs account if the provider requires it. Never prefix the secret key with `NEXT_PUBLIC_`; rotate any key
 that has been shared in a chat or exposed in browser bundles. The voice must be
 available to that ElevenLabs account and the key needs text-to-speech permission.
 

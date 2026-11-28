@@ -73,6 +73,11 @@ class ElevenLabsApiError extends Error {
   }
 }
 
+function slovakPronunciation(text: string): string {
+  return text.replace(/(?<![\p{L}\p{M}])gemu?(?![\p{L}\p{M}])/giu, (word) =>
+    word[0] === 'G' ? `Gé${word.slice(2)}` : `gé${word.slice(2)}`)
+}
+
 async function synthesize(text: string, voice: string, apiKey: string, language: 'sk' | 'en'): Promise<ArrayBuffer> {
   const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voice}`, {
     method: 'POST',
@@ -141,7 +146,7 @@ export async function POST(request: Request) {
     ? process.env.ELEVENLABS_VOICE_ID_WINNER ?? 'z2Zs6alQTcDzcMWLuK0e'
     : language === 'en'
     ? process.env.ELEVENLABS_VOICE_ID_EN ?? 'wAGzRVkxKEs8La0lmdrE'
-    : process.env.ELEVENLABS_VOICE_ID ?? '2bNrEsM0omyhLiEyOwqY'
+    : process.env.ELEVENLABS_VOICE_ID ?? 'Y6IUK3gCTk4fxRiN2cGE'
   if (!apiKey || !/^[a-zA-Z0-9]{20}$/.test(voice)) {
     console.error('ElevenLabs configuration error:', {
       apiKeyConfigured: Boolean(apiKey),
@@ -157,12 +162,18 @@ export async function POST(request: Request) {
       .eq('id', body.matchId).maybeSingle()
     if (error) throw error
     if (!data) return Response.json({ error: 'Zápas nie je dostupný.' }, { status: 404 })
+    let speechText = text
     if (isWinnerAnnouncement) {
       const announcement = getWinnerAnnouncement(data)
       if (!announcement || (text !== announcement.sk && text !== announcement.en
         && !isCombinedWinnerAnnouncement(announcement.sk) && !isCombinedWinnerAnnouncement(announcement.en))) {
         return Response.json({ error: 'Neplatné hlásenie víťaza zápasu.' }, { status: 400 })
       }
+      if (language === 'sk' && text.startsWith(`${announcement.sk} `)) {
+        speechText = announcement.sk + slovakPronunciation(text.slice(announcement.sk.length))
+      }
+    } else if (language === 'sk') {
+      speechText = slovakPronunciation(text)
     }
     const cacheKey = `${language}:${voice}:${text}`
     let audio = audioCache.get(cacheKey)
@@ -175,7 +186,7 @@ export async function POST(request: Request) {
           return Response.json({ error: 'Hlasová služba je vyťažená.' }, { status: 429 })
         }
         synthesisCount++
-        pending = synthesize(text, voice, apiKey, language).then((result) => {
+        pending = synthesize(speechText, voice, apiKey, language).then((result) => {
           if (audioCache.size >= 128) audioCache.clear()
           audioCache.set(cacheKey, result)
           return result

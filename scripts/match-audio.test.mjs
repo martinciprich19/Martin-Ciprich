@@ -387,7 +387,8 @@ test('language selects separate voices and caches without changing Slovak delive
   assert.equal(route.calls[0].url, 'https://api.elevenlabs.io/v1/text-to-speech/wAGzRVkxKEs8La0lmdrE')
   assert.equal((await route.post(text, { language: 'sk' })).status, 200)
   assert.equal(route.calls[1].url, 'https://api.elevenlabs.io/v1/text-to-speech/2bNrEsM0omyhLiEyOwqY')
-  assert.deepEqual(JSON.parse(route.calls[0].options.body).voice_settings, JSON.parse(route.calls[1].options.body).voice_settings)
+  assert.deepEqual(JSON.parse(route.calls[0].options.body).voice_settings, { stability: 0.8, similarity_boost: 0.75, speed: 0.9, style: 0 })
+  assert.deepEqual(JSON.parse(route.calls[1].options.body).voice_settings, { stability: 0.8, similarity_boost: 0.75, speed: 0.9, style: 0 })
   assert.equal(JSON.parse(route.calls[0].options.body).model_id, 'eleven_multilingual_v2')
   assert.equal(JSON.parse(route.calls[0].options.body).language_code, undefined)
   assert.equal(JSON.parse(route.calls[1].options.body).model_id, 'eleven_flash_v2_5')
@@ -401,6 +402,22 @@ test('language selects separate voices and caches without changing Slovak delive
   route.context.process.env.ELEVENLABS_VOICE_ID_EN = 'abcdefghijklmnopqrst'
   assert.equal((await route.post(text, { language: 'en' })).status, 200)
   assert.equal(route.calls.at(-1).url, 'https://api.elevenlabs.io/v1/text-to-speech/abcdefghijklmnopqrst')
+})
+
+test('default Slovak announcer uses Matus, while explicit voice overrides and winner voice remain separate', async () => {
+  const route = await loadRoute()
+  delete route.context.process.env.ELEVENLABS_VOICE_ID
+  assert.equal((await route.post('Podáva Tím 1.', { language: 'sk' })).status, 200)
+  assert.equal(route.calls.at(-1).url, 'https://api.elevenlabs.io/v1/text-to-speech/Y6IUK3gCTk4fxRiN2cGE')
+  assert.equal((await route.post('Team 1 serves.', { language: 'en' })).status, 200)
+  assert.equal(route.calls.at(-1).url, 'https://api.elevenlabs.io/v1/text-to-speech/wAGzRVkxKEs8La0lmdrE')
+  route.context.process.env.ELEVENLABS_VOICE_ID = 'abcdefghijklmnopqrst'
+  assert.equal((await route.post('Podáva Tím 1.', { language: 'sk' })).status, 200)
+  assert.equal(route.calls.at(-1).url, 'https://api.elevenlabs.io/v1/text-to-speech/abcdefghijklmnopqrst')
+  route.setMatch({ team_a_sets: 2 })
+  assert.equal((await route.post('Zápas vyhral tím jedna. Víťazná dvojica: Martin a Peter.', { language: 'sk' })).status, 200)
+  assert.equal(route.calls.at(-1).url, 'https://api.elevenlabs.io/v1/text-to-speech/z2Zs6alQTcDzcMWLuK0e')
+  assert.equal(JSON.parse(route.calls.at(-1).options.body).voice_settings.speed, 0.9)
 })
 
 test('language enforcement remains isolated when Slovak and English use the same voice', async () => {
@@ -526,7 +543,7 @@ test('Slovak point announcements use exact team wording and require a final peri
     for (const suffix of ['', `, gem pre ${team}`]) {
       const text = `Bod pre ${team}${suffix}.`
       assert.equal((await route.post(text)).status, 200)
-      assert.equal(JSON.parse(route.calls.at(-1).options.body).text, text)
+      assert.equal(JSON.parse(route.calls.at(-1).options.body).text, text.replace('gem', 'gém'))
       assert.equal((await route.post(text.slice(0, -1))).status, 400)
       assert.equal((await route.post(`${text.slice(0, -1)}?`)).status, 400)
     }
@@ -564,6 +581,25 @@ test('score announcements accept generated game, advantage, deuce and tiebreak s
   ]) assert.equal((await route.post(text)).status, 400, text)
 })
 
+test('only validated Slovak game words are adjusted for pronunciation, never winner names', async () => {
+  const route = await loadRoute()
+  const samples = [
+    ['Gem tím jedna. Stav gemov: jeden jeden.', 'Gém tím jedna. Stav gemov: jeden jeden.'],
+    ['Skóre gemu bolo vynulované.', 'Skóre gému bolo vynulované.'],
+    ['Gem pre tím dva.', 'Gém pre tím dva.'],
+    ['Game score reset.', 'Game score reset.'],
+  ]
+  for (const [input, expected] of samples) {
+    assert.equal((await route.post(input)).status, 200)
+    assert.equal(JSON.parse(route.calls.at(-1).options.body).text, expected)
+  }
+  route.setMatch({ team_a_sets: 2, team_a_player1_name: 'Gem', team_a_player2_name: 'Peter' })
+  const winner = 'Zápas vyhral tím jedna. Víťazná dvojica: Gem a Peter.'
+  assert.equal((await route.post(`${winner} Gem tím jedna. Stav gemov: šesť dva pre tím jedna.`)).status, 200)
+  assert.equal(JSON.parse(route.calls.at(-1).options.body).text, `${winner} Gém tím jedna. Stav gemov: šesť dva pre tím jedna.`)
+  assert.equal((await route.post('Bod pre tím jedna, gém pre tím jedna.')).status, 400)
+})
+
 test('speech text is trimmed before validation, synthesis and cache lookup', async () => {
   const route = await loadRoute()
   const text = 'Bod pre tím jedna.'
@@ -596,7 +632,7 @@ test('standalone Slovak scores are spoken as words with a final period', async (
   assert.equal(route.calls.length, 6)
   for (const text of ['Gem pre tím jedna.', 'Gem pre tím dva.']) {
     assert.equal((await route.post(text)).status, 200)
-    assert.equal(JSON.parse(route.calls.at(-1).options.body).text, text)
+    assert.equal(JSON.parse(route.calls.at(-1).options.body).text, text.replace('Gem', 'Gém'))
   }
   for (const text of ['45', '45.', 'Pätnásť?', 'Výhoda!', 'Gem pre tím jedna']) {
     assert.equal((await route.post(text)).status, 400)

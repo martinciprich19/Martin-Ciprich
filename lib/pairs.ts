@@ -13,6 +13,7 @@ export type PlayerPair = {
 
 export type PairPlayer = { full_name: string; region: string; elo: number; matches_played: number; matches_won: number }
 export type PairInvitation = { id: string; inviterId: string; inviterName: string; createdAt: string }
+export type FriendPairStatus = 'paired' | 'invited' | 'incoming'
 
 const PAIR_INVITATIONS_SCHEMA_CODES = new Set(['42P01', '42703', '42883', 'PGRST200', 'PGRST202', 'PGRST204', 'PGRST205'])
 const PAIR_INVITATIONS_SCHEMA_MESSAGE = 'Pozvania do dvojice nie sú v databáze nastavené. Spusti migráciu scripts/020_pair_invitations.sql v Supabase.'
@@ -59,6 +60,43 @@ export async function fetchPairs(country?: CountryCode): Promise<PlayerPair[]> {
       country_code: row.country_code,
     }
   })
+}
+
+export async function fetchFriendPairStatuses(profileId: number): Promise<Record<string, FriendPairStatus>> {
+  if (!Number.isSafeInteger(profileId) || profileId <= 0) throw new Error('Neplatné ID hráča.')
+  const client = createClient()
+  const statuses: Record<string, FriendPairStatus> = {}
+  const pageSize = 500
+  for (let start = 0; ; start += pageSize) {
+    const { data, error } = await client.from('pair_invitations')
+      .select('id, inviter_id, invitee_id')
+      .eq('status', 'pending')
+      .or(`inviter_id.eq.${profileId},invitee_id.eq.${profileId}`)
+      .order('id').range(start, start + pageSize - 1)
+    if (error) {
+      if (PAIR_INVITATIONS_SCHEMA_CODES.has(error.code)) throw new Error(PAIR_INVITATIONS_SCHEMA_MESSAGE)
+      throw error
+    }
+    const rows = data ?? []
+    for (const row of rows) {
+      const outgoing = Number(row.inviter_id) === profileId
+      statuses[String(outgoing ? row.invitee_id : row.inviter_id)] = outgoing ? 'invited' : 'incoming'
+    }
+    if (rows.length < pageSize) break
+  }
+  for (let start = 0; ; start += pageSize) {
+    const { data, error } = await client.from('pairs')
+      .select('id, player_1_id, player_2_id')
+      .or(`player_1_id.eq.${profileId},player_2_id.eq.${profileId}`)
+      .order('id').range(start, start + pageSize - 1)
+    if (error) throw error
+    const rows = data ?? []
+    for (const row of rows) {
+      statuses[String(Number(row.player_1_id) === profileId ? row.player_2_id : row.player_1_id)] = 'paired'
+    }
+    if (rows.length < pageSize) break
+  }
+  return statuses
 }
 
 export async function sendPairInvitation(inviteeId: string): Promise<void> {

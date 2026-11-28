@@ -1,13 +1,13 @@
 # RIVA Padel Test for Android
 
 This experimental hybrid app opens the **entire deployed RIVA website**, starting
-at `https://www.rivapadel.app/`. It is not an offline export of the Next.js server.
+at `https://www.rivasmartpadel.com/`. It is not an offline export of the Next.js server.
 Profiles, leagues, rankings, arenas, authentication and matches use the existing
 web pages and backend; nothing is copied into a separate database.
 
 ## Isolation and installation
 
-- App name: **RIVA Padel Test**, version 1.11.
+- App name: **RIVA Padel Test**, version 1.16.
 - Package: `sk.rivapadel.apptest`, distinct from the Chrome-installed PWA,
   standalone kiosk and Fully helper. It installs alongside them.
 - Cookies, login state and storage are private to this app. Log in separately.
@@ -28,7 +28,15 @@ The window, status/navigation bars, inset padding and WebView loading background
 use `#061016`, avoiding a white strip when Xiaomi or another device reserves
 system-bar space. Immersive hiding remains enabled; device-specific rendering
 still requires physical verification. Install as an update without uninstalling
-or clearing app data to retain the existing session and saved device tokens.
+or clearing app data to retain data stored by the Android app.
+Version 1.15 switches from `www.rivapadel.app` to `www.rivasmartpadel.com`.
+WebView cookies and site storage are scoped to a domain: sign in again on the
+new domain and re-enable native notifications there. Court-bound installations
+must be paired again on the new domain; saved match URLs from the old domain are
+not resumed. Do not update during a live match. Check that the new domain's
+deployment, Supabase migrations, authentication redirects and push settings are
+ready before installing. The app displays the deployed website, not unpushed
+local changes, and needs an internet connection.
 The APK is locally debug-signed for private testing, not a Play Store release.
 The build and APK are ignored by Git. No credentials are embedded.
 Return to the previous app at any time; uninstall only **RIVA Padel Test** if desired.
@@ -100,7 +108,7 @@ a local folder outside OneDrive; the signed APK is still copied into `dist`.
    Enter the tablet's eight-character code, select an active court, enter its name,
    select **Tablet – kiosk** and choose **Priradiť zariadenie**. The admin session stays here.
 4. The tablet automatically opens the court's game selection: quick game, PIN or QR.
-   For the TV open `https://www.rivapadel.app/device-pair` in its browser, generate
+   For the TV open `https://www.rivasmartpadel.com/device-pair` in its browser, generate
    a different code and claim it from the same admin panel with **TV – monitor skóre**.
    The TV automatically opens only its assigned court's scoreboard.
 5. Start the selected game and select the match rules. Confirm the native clickers

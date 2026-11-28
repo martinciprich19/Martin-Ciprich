@@ -303,3 +303,6 @@ The bell badge is hidden while the notifications tab is open; new notifications
 are marked as read there as well. If the update fails, an error and retry button
 are shown. Chat messages and pending invitations retain their separate unread or
 pending state and are not accepted or read merely by opening notifications.
+If PostgREST reports the bulk-read function is missing (`PGRST202`), apply
+`scripts/109_repair_notification_read.sql` in the Supabase SQL Editor. It
+restores the function and receipt table and requests a schema-cache reload.

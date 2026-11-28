@@ -49,6 +49,9 @@ test('screen preview API protects admin reads and validates device uploads', asy
 
 test('native screen capture is on demand, foreground only and includes the clicker setup root', async () => {
   const source = await readFile(new URL('../android/riva-app/src/sk/rivapadel/apptest/ScreenPreview.java', import.meta.url), 'utf8')
+  assert.match(source, /ENDPOINT = AppPolicy\.HOME \+ "api\/kiosk-preview"/)
+  assert.match(source, /HEARTBEAT_ENDPOINT = AppPolicy\.HOME \+ "api\/device-heartbeat"/)
+  assert.match(source, /new URL\(HEARTBEAT_ENDPOINT\)/)
   assert.match(source, /optBoolean\("requested"\)/)
   assert.match(source, /!active \|\| !AppPolicy.trusted\(web.getUrl\(\)\)/)
   assert.match(source, /findViewById\(android.R.id.content\)/)

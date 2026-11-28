@@ -75,6 +75,7 @@ import { ChallengePin } from '@/components/challenge-pin'
 import { fetchNotifications, markNotificationRead, type LeagueNotification } from '@/lib/notifications'
 import { fetchUnreadMessagesBySender } from '@/lib/messages'
 import { FriendsChat } from '@/components/friends-chat'
+import { FriendsView } from '@/components/friends-view'
 import { fetchIncomingPairInvitations, respondToPairInvitation, type PairInvitation, type PlayerPair } from '@/lib/pairs'
 import { fetchParticipantMatches, fetchProfileMatches, isAwaitingResponseFrom, isCountedMatch, respondToMatchResult, submitMatchResult, type ProfileMatch } from '@/lib/profile-matches'
 import { ProfileServeStatistics } from '@/components/profile-serve-statistics'
@@ -102,6 +103,7 @@ const navItems = [
   { label: 'Vyzvať dvojicu', href: '#challenges', icon: Swords },
   { label: 'Turnaje', href: '/profile?view=tournaments', icon: Shield },
   { label: 'Arény', href: '#arenas', icon: Users },
+  { label: 'Priatelia', href: '/profile?view=friends', icon: Users },
   { label: 'Správy', href: '#messages', icon: MessageSquare },
   { label: 'Nastavenia', href: '#settings', icon: Settings },
 ]
@@ -114,9 +116,9 @@ const bottomNavItems = [
   { label: 'My profile', short: 'Môj profil', tab: 'profile', href: '/profile?view=profile', icon: UserRound },
 ] as const
 
-type ProfileTab = 'overview' | 'profile' | 'challenges' | 'matches' | 'arenas' | 'messages' | 'settings' | 'leaderboards' | 'opponents' | 'rankings' | 'tournaments' | 'match'
-const tabByLabel: Record<string, ProfileTab> = { 'Prehľad': 'overview', 'Môj profil': 'profile', 'Rebríčky': 'rankings', 'Nájsť hráčov': 'opponents', 'Vyzvať dvojicu': 'challenges', 'Výsledky': 'matches', 'Začať zápas': 'match', 'Turnaje': 'tournaments', 'Arény': 'arenas', 'Správy': 'messages', 'Nastavenia': 'settings' }
-const tabsFromUrl: ProfileTab[] = ['profile', 'challenges', 'matches', 'messages', 'settings', 'opponents', 'arenas', 'rankings', 'tournaments']
+type ProfileTab = 'overview' | 'profile' | 'challenges' | 'matches' | 'arenas' | 'friends' | 'messages' | 'settings' | 'leaderboards' | 'opponents' | 'rankings' | 'tournaments' | 'match'
+const tabByLabel: Record<string, ProfileTab> = { 'Prehľad': 'overview', 'Môj profil': 'profile', 'Rebríčky': 'rankings', 'Nájsť hráčov': 'opponents', 'Vyzvať dvojicu': 'challenges', 'Výsledky': 'matches', 'Začať zápas': 'match', 'Turnaje': 'tournaments', 'Arény': 'arenas', 'Priatelia': 'friends', 'Správy': 'messages', 'Nastavenia': 'settings' }
+const tabsFromUrl: ProfileTab[] = ['profile', 'challenges', 'matches', 'friends', 'messages', 'settings', 'opponents', 'arenas', 'rankings', 'tournaments']
 
 export default function ProfilePage() {
   const router = useRouter()
@@ -239,6 +241,7 @@ export default function ProfilePage() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'messages', filter: `receiver_id=eq.${player.profile_id}` }, refreshRealtimeCommunicationCounts)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'friendships' }, refreshRealtimeCommunicationCounts)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'pair_invitations', filter: `invitee_id=eq.${player.profile_id}` }, refreshRealtimeCommunicationCounts)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pair_invitations', filter: `inviter_id=eq.${player.profile_id}` }, refreshRealtimeCommunicationCounts)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${player.profile_id}` }, refreshRealtimeCommunicationCounts)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'challenges', filter: `challenger_1_id=eq.${player.profile_id}` }, refreshRealtimeCommunicationCounts)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'challenges', filter: `challenger_2_id=eq.${player.profile_id}` }, refreshRealtimeCommunicationCounts)
@@ -266,7 +269,7 @@ export default function ProfilePage() {
   const unreadAlertCount = unreadCommunicationCount + unreadOtherNotificationCount
   const [messagesCategory, setMessagesCategory] = useState<'direct' | 'notifications'>('direct')
   const [communicationAlertsSeen, setCommunicationAlertsSeen] = useState(false)
-  const [notificationReadError, setNotificationReadError] = useState(false)
+  const [notificationReadError, setNotificationReadError] = useState<'missing-function' | 'failed' | null>(null)
   const [markingNotifications, setMarkingNotifications] = useState(false)
   const markingNotificationsRef = useRef(false)
   const attemptedNotificationBatch = useRef('')
@@ -290,7 +293,7 @@ export default function ProfilePage() {
     if (markingNotificationsRef.current || player.profile_id === null) return
     markingNotificationsRef.current = true
     setMarkingNotifications(true)
-    setNotificationReadError(false)
+    setNotificationReadError(null)
     try {
       await mutateNotifications((current) => current?.map((notification) => ({ ...notification, read: true })), { revalidate: false })
       const { error } = await createClient().rpc('mark_notifications_as_read')
@@ -298,7 +301,7 @@ export default function ProfilePage() {
       await mutateNotifications()
     } catch (error) {
       console.error('Notifikácie sa nepodarilo označiť ako prečítané:', error)
-      setNotificationReadError(true)
+      setNotificationReadError(error && typeof error === 'object' && 'code' in error && error.code === 'PGRST202' ? 'missing-function' : 'failed')
       try {
         await mutateNotifications()
       } catch (refreshError) {
@@ -648,7 +651,7 @@ export default function ProfilePage() {
           <header className="profile-toolbar theme-surface sticky top-0 z-10 flex min-h-14 flex-wrap items-center justify-between gap-2 border-b border-app-line/[0.07] bg-app-canvas/85 px-3 py-1 backdrop-blur md:static md:min-h-[76px] md:bg-transparent md:px-8 md:backdrop-blur-none lg:px-10">
             <button className="flex h-11 w-11 items-center justify-center rounded-lg text-app-fg/70 lg:hidden" onClick={() => setMenuOpen(true)} aria-expanded={menuOpen} aria-controls="profile-navigation" aria-label="Otvoriť menu"><Menu size={22} /></button>
             <Link href="/profile" onClick={() => setActiveTab('overview')} className="md:hidden" aria-label="RIVA Padel — Prehľad"><RivaLogo size="sm" /></Link>
-            <div className="hidden text-xs text-app-fg/35 sm:block">RIVA / <span className="text-app-fg/70">{activeTab === 'profile' ? 'MÔJ PROFIL' : activeTab === 'challenges' ? t(showPairsView ? 'DVOJICE' : 'VYZVAŤ DVOJICU') : activeTab === 'matches' ? t('VÝSLEDKY', 'RESULTS') : activeTab === 'arenas' ? 'ARÉNY' : activeTab === 'messages' ? t('SPRÁVY', 'MESSAGES') : activeTab === 'settings' ? 'NASTAVENIA' : activeTab === 'opponents' ? t('NÁJSŤ HRÁČOV') : activeTab === 'rankings' ? t('REBRÍČKY', 'RANKINGS') : activeTab === 'tournaments' ? t('TURNAJE', 'TOURNAMENTS') : 'PREHĽAD'}</span></div>
+            <div className="hidden text-xs text-app-fg/35 sm:block">RIVA / <span className="text-app-fg/70">{activeTab === 'profile' ? 'MÔJ PROFIL' : activeTab === 'challenges' ? t(showPairsView ? 'DVOJICE' : 'VYZVAŤ DVOJICU') : activeTab === 'matches' ? t('VÝSLEDKY', 'RESULTS') : activeTab === 'arenas' ? 'ARÉNY' : activeTab === 'friends' ? t('Priatelia', 'Friends') : activeTab === 'messages' ? t('SPRÁVY', 'MESSAGES') : activeTab === 'settings' ? 'NASTAVENIA' : activeTab === 'opponents' ? t('NÁJSŤ HRÁČOV') : activeTab === 'rankings' ? t('REBRÍČKY', 'RANKINGS') : activeTab === 'tournaments' ? t('TURNAJE', 'TOURNAMENTS') : 'PREHĽAD'}</span></div>
             <div className="ml-auto flex items-center gap-2 md:gap-4">
               <PageReloadButton />
               <InstallAppButton compact />
@@ -664,10 +667,11 @@ export default function ProfilePage() {
 
           <div className="px-4 md:px-8 lg:px-10">
             <PushNotificationSettings visible={activeTab === 'overview' || (activeTab === 'settings' && settingsSection === 'notifications')} pushAllowed={settings.pushAlerts} onEnabled={() => setSettings((current) => ({ ...current, pushAlerts: true }))} />
-            {notificationReadError ? <p role="alert" className="mt-3 text-sm text-app-red-300">{t('Notifikácie sa nepodarilo označiť ako prečítané.', 'Could not mark notifications as read.')} <button type="button" disabled={markingNotifications} onClick={() => void markAllNotificationsRead()} className="font-bold underline">{t('Skúsiť znova', 'Try again')}</button></p> : null}
+            {notificationReadError ? <p role="alert" className="mt-3 text-sm text-app-red-300">{notificationReadError === 'missing-function' ? t('Notifikácie sa nepodarilo označiť ako prečítané. Správca musí spustiť migráciu scripts/109_repair_notification_read.sql v Supabase.', 'Could not mark notifications as read. The administrator must apply scripts/109_repair_notification_read.sql in Supabase.') : t('Notifikácie sa nepodarilo označiť ako prečítané.', 'Could not mark notifications as read.')} <button type="button" disabled={markingNotifications} onClick={() => void markAllNotificationsRead()} className="font-bold underline">{t('Skúsiť znova', 'Try again')}</button></p> : null}
           </div>
           <div key={activeTab} className={bottomNavigationTab === activeTab ? 'profile-bottom-screen-enter' : undefined} onAnimationEnd={(event) => { if (event.target === event.currentTarget) setBottomNavigationTab(null) }}>
           <div className="mx-auto max-w-[1280px] px-4 pb-28 pt-6 md:px-8 md:py-8 lg:px-10 lg:py-10">
+            {activeTab === 'friends' ? <FriendsView myProfileId={player.profile_id} profileError={qrProfileError} onMessage={openConversation} onFindPlayers={() => setActiveTab('opponents')} /> : <>
             {activeTab === 'rankings' ? <RankingsView onMessage={(opponent) => openConversation(opponent)} /> : activeTab === 'tournaments' ? <TournamentsView /> : activeTab === 'opponents' ? <FindPlayersView currentPlayerId={player.profile_id === null ? undefined : String(player.profile_id)} currentPlayerAvatarUrl={avatarUrl} defaultRegion={player.region} onMessage={(opponent) => openConversation(opponent)} /> : activeTab === 'settings' ? <SettingsView language={language} setLanguage={setLanguage} t={t} onSaveEmail={(email) => setPlayer((current) => ({ ...current, email }))} settings={settings} setSettings={setSettings} section={settingsSection} setSection={setSettingsSection} arenas={arenas} toast={settingsToast} setToast={setSettingsToast} deleteModalOpen={deleteModalOpen} setDeleteModalOpen={setDeleteModalOpen} /> : activeTab === 'messages' ?             <MessagesView onOpenResults={() => setActiveTab('matches')} category={messagesCategory} setCategory={setMessagesCategory} notifications={notifications} pairInvitations={incomingPairInvitations} pairInvitationsError={incomingPairInvitationsError} onMarkRead={markRead} myProfileId={player.profile_id} activeFriendId={activeConversationId} setActiveFriendId={setActiveConversationId} onChallenge={(friend) => { setChallengeForm((current) => ({ ...current, opponentId: friend.id, opponentName: friend.name })); setChallengeModalOpen(true); setActiveTab('challenges') }} /> : activeTab === 'arenas' ? <ArenasView arenas={visibleArenas} totalCount={arenas.length} isLoading={arenasLoading} loadError={Boolean(arenasError)} isAdmin={isLeagueAdmin} region={arenaRegion} setRegion={setArenaRegion} search={arenaSearch} setSearch={setArenaSearch} onChallenge={openArenaChallenge} onMatch={openArenaMatch} onSetHome={setHomeArena} onSaved={(saved) => { setArenas((current) => [...current.filter((item) => item.id !== saved.id), saved].sort((a, b) => a.name.localeCompare(b.name))); void mutateArenas() }} onDeleted={(id) => { setArenas((current) => current.filter((item) => item.id !== id)); void mutateArenas() }} /> : activeTab === 'matches' ? <MatchesView matches={matchRecords} setMatches={setMatchRecords} initialArena={matchArena} modalOpen={matchModalOpen} setModalOpen={setMatchModalOpen} onMatchSaved={() => mutateProfileMatches()} onOpenMatch={setDetailMatchId} /> : activeTab === 'challenges' ? showPairsView ? <PairsView initialInviteOpen currentPlayerId={player.profile_id === null ? null : String(player.profile_id)} onBack={() => setShowPairsView(false)} onChallenge={(pair: PlayerPair) => { setChallengeTargetPair({ player1Id: pair.player_1_id, player1Name: pair.player_1.full_name, player2Id: pair.player_2_id, player2Name: pair.player_2.full_name }); setShowPairsView(false) }} /> : <PairChallengeView userId={player.profile_id === null ? '' : String(player.profile_id)} userName={player.username} arenas={arenas} initialArena={challengeForm.arena} onOpenPairs={() => setShowPairsView(true)} initialChallengedPair={challengeTargetPair} onInitialPairApplied={setChallengeTargetPair} /> : activeTab === 'profile' ? <ProfileView player={player} phone={settings.phone} avatarUrl={avatarUrl} avatarInputRef={avatarInputRef} handleAvatarChange={handleAvatarChange} removeAvatar={removeAvatar} matches={matches} profileMatches={profileMatches} profileMatchesLoading={profileMatchesLoading} profileMatchesError={profileMatchesError} matchStats={matchStats} matchModalOpen={matchModalOpen} setMatchModalOpen={setMatchModalOpen} matchForm={matchForm} setMatchForm={setMatchForm} submitMatch={submitMatch} approveMatch={approveMatch} onOpenMatch={setDetailMatchId} /> : <>
             <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
               <div><p className="text-xs font-bold uppercase tracking-[0.22em] text-app-league">{t('Vitaj späť v RIVA Padel', 'Welcome back to RIVA Padel')}</p><h1 className="mt-3 text-2xl font-black tracking-tight md:text-4xl">{t('Ahoj', 'Hi')}, {overviewName}! <span aria-hidden="true">👋</span></h1><div className="mt-3 flex flex-wrap items-center gap-2">{memberSince ? <p className="text-sm text-app-fg/45">{t('Členom od', 'Member since')}: {memberSince}</p> : null}{player.region ? <span className="rounded-full border border-[#ccff00]/25 bg-[#ccff00]/10 px-3 py-1 text-[11px] font-semibold text-app-league">{player.region}</span> : null}{player.level ? <span className="rounded-full border border-app-line/10 bg-app-overlay/[0.05] px-3 py-1 text-[11px] font-semibold text-app-fg/65">{player.level}</span> : null}</div></div>
@@ -729,6 +733,7 @@ export default function ProfilePage() {
                   </ul> : <div className="mt-8 flex min-h-[210px] flex-col items-center justify-center text-center"><div className="flex h-12 w-12 items-center justify-center rounded-full bg-app-overlay/[0.05] text-app-fg/30"><Trophy size={21} /></div><p className="mt-4 text-sm font-semibold text-app-fg/65">Zatiaľ bez zápasov</p><p className="mt-2 text-xs text-app-fg/30">Tvoja história zápasov sa zobrazí tu.</p></div>}
               </section>
             </div>
+            </>}
             </>}
           </div>
           </div>

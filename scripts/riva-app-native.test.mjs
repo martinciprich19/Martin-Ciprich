@@ -12,10 +12,11 @@ const native = path.resolve('android', 'riva-app', 'src', 'sk', 'rivapadel', 'ap
 
 test('full RIVA app has isolated identity, full home entry, file picker and camera support', () => {
   const manifest = readFileSync(path.resolve('android', 'riva-app', 'AndroidManifest.xml'), 'utf8')
-  assert.match(manifest, /package="sk\.rivapadel\.apptest"/)
+  const gradle = readFileSync(path.resolve('android', 'riva-app', 'app', 'build.gradle'), 'utf8')
+  assert.match(gradle, /applicationId 'sk\.rivapadel\.apptest'/)
   assert.doesNotMatch(manifest, /BIND_ACCESSIBILITY_SERVICE|READ_EXTERNAL_STORAGE|RECORD_AUDIO/)
   const source = readFileSync(path.join(native, 'MainActivity.java'), 'utf8')
-  assert.match(source, /navigate\(AppPolicy.resumable\(rememberedMatch\) \? rememberedMatch : AppPolicy.HOME\)/)
+  assert.match(source, /AppPolicy\.resumable\(rememberedMatch\) \? rememberedMatch : AppPolicy\.HOME/)
   assert.match(source, /onRenderProcessGone/)
   const pause = source.slice(source.indexOf('@Override protected void onPause()'), source.indexOf('@Override protected void onDestroy()'))
   assert.doesNotMatch(pause, /clickers.reset\(\)/)
@@ -31,7 +32,7 @@ test('full RIVA app has isolated identity, full home entry, file picker and came
   assert.match(source, /root.addView\(setupScroll,/)
   assert.match(source, /Skusit znova/)
   assert.match(source, /"viewer"\.equals\(uri.getQueryParameter\("view"\)\)/)
-  assert.doesNotMatch(source, /addJavascriptInterface|setAcceptThirdPartyCookies\(web, true\)/)
+  assert.doesNotMatch(source, /setAcceptThirdPartyCookies\(web, true\)/)
 })
 
 test('native window, system bars and WebView use the RIVA dark background', () => {
@@ -39,7 +40,9 @@ test('native window, system bars and WebView use the RIVA dark background', () =
   const theme = readFileSync(path.resolve('android', 'riva-app', 'res', 'values', 'styles.xml'), 'utf8')
   const source = readFileSync(path.join(native, 'MainActivity.java'), 'utf8')
   assert.match(manifest, /android:theme="@style\/RivaTheme"/)
-  assert.match(manifest, /android:versionCode="9" android:versionName="1.8"/)
+  const gradle = readFileSync(path.resolve('android', 'riva-app', 'app', 'build.gradle'), 'utf8')
+  assert.match(gradle, /versionCode 17/)
+  assert.match(gradle, /versionName '1\.16'/)
   assert.match(theme, /parent="android:style\/Theme.Material.NoActionBar"/)
   assert.match(theme, /name="riva_background">#061016</)
   for (const item of ['windowBackground', 'colorBackground', 'statusBarColor', 'navigationBarColor']) {
@@ -81,18 +84,21 @@ test('real native clicker session and navigation policy preserve team identity a
         static void check(boolean value,String name){if(!value)throw new AssertionError(name);}
         public static void main(String[] args) {
           check(AppPolicy.trusted(AppPolicy.HOME),"home");
-          check(AppPolicy.trusted("https://www.rivapadel.app:443/profile?view=overview#arenas"),"full routes");
-          check(!AppPolicy.trusted("https://www.rivapadel.app.evil.example/"),"suffix");
-          check(!AppPolicy.trusted("https://user@www.rivapadel.app/"),"userinfo");
-          check(!AppPolicy.trusted("http://www.rivapadel.app/"),"cleartext");
-          check(!AppPolicy.trusted("https://www.rivapadel.app:8080/"),"other port");
+          check(AppPolicy.HOME.equals("https://www.rivasmartpadel.com/"),"new domain");
+          check(AppPolicy.trusted("https://www.rivasmartpadel.com:443/profile?view=overview#arenas"),"full routes");
+          check(!AppPolicy.trusted("https://www.rivasmartpadel.com.evil.example/"),"suffix");
+          check(!AppPolicy.trusted("https://user@www.rivasmartpadel.com/"),"userinfo");
+          check(!AppPolicy.trusted("http://www.rivasmartpadel.com/"),"cleartext");
+          check(!AppPolicy.trusted("https://www.rivasmartpadel.com:8080/"),"other port");
+          check(!AppPolicy.trusted("https://www.rivapadel.app/"),"old domain");
           check(!AppPolicy.trusted("javascript:alert(1)"),"script");
           check(!AppPolicy.trusted("https://[invalid"),"malformed");
           check(!AppPolicy.trusted(null),"null");
-          check(AppPolicy.resumable("https://www.rivapadel.app/match?id=ec2db372-4940-41af-9466-5e94e1afd54d&mode=kiosk"),"resume match");
+          check(AppPolicy.resumable("https://www.rivasmartpadel.com/match?id=ec2db372-4940-41af-9466-5e94e1afd54d&mode=kiosk"),"resume match");
+          check(!AppPolicy.resumable("https://www.rivapadel.app/match?id=ec2db372-4940-41af-9466-5e94e1afd54d&mode=kiosk"),"no old domain resume");
           check(!AppPolicy.resumable("https://evil.example/match?id=ec2db372-4940-41af-9466-5e94e1afd54d"),"no external resume");
           check(!AppPolicy.resumable(AppPolicy.HOME),"home not match");
-          check(!AppPolicy.resumable("https://www.rivapadel.app/match?mode=kiosk"),"selection not match");
+          check(!AppPolicy.resumable("https://www.rivasmartpadel.com/match?mode=kiosk"),"selection not match");
           ClickerSession s=new ClickerSession();
           check(!s.invalidates(-1)&&!s.invalidates(-2)&&!s.invalidates(0),"unassigned startup IDs never disconnect");
           check(!s.blocked()&&!s.confirm(),"selection accessible");

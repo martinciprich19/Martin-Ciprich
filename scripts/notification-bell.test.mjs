@@ -12,7 +12,7 @@ function harness({ error = null, wait = null, profileId = 1 } = {}) {
   const state = {
     notifications: [{ id: 'one', read: false }, { id: 'two', read: false }],
     serverNotifications: [{ id: 'one', read: false }, { id: 'two', read: false }],
-    calls: 0, error: false, rpcError: error, busy: false, ref: { current: false },
+    calls: 0, error: null, rpcError: error, busy: false, ref: { current: false },
   }
   const mutateNotifications = async (update) => {
     if (update) state.notifications = update(state.notifications)
@@ -42,7 +42,7 @@ test('opening notifications marks the existing entries as read and refreshes the
   assert.equal(state.calls, 1)
   assert.ok(state.notifications.every(item => item.read))
   assert.ok(state.serverNotifications.every(item => item.read))
-  assert.equal(state.error, false)
+  assert.equal(state.error, null)
   assert.equal(state.busy, false)
 })
 
@@ -51,13 +51,23 @@ test('failure restores unread state and exposes an error; retry can succeed', as
   const originalError = console.error
   console.error = () => {}
   try { await save() } finally { console.error = originalError }
-  assert.equal(state.error, true)
+  assert.equal(state.error, 'failed')
   assert.ok(state.notifications.every(item => !item.read))
   assert.equal(state.ref.current, false)
   state.rpcError = null
   await save()
-  assert.equal(state.error, false)
+  assert.equal(state.error, null)
   assert.ok(state.notifications.every(item => item.read))
+})
+
+test('a missing bulk-read function is reported separately for the administrator', async () => {
+  const { state, save } = harness({ error: { code: 'PGRST202', message: 'function not found' } })
+  const originalError = console.error
+  console.error = () => {}
+  try { await save() } finally { console.error = originalError }
+  assert.equal(state.error, 'missing-function')
+  assert.ok(state.notifications.every(item => !item.read))
+  assert.match(source, /scripts\/109_repair_notification_read\.sql/)
 })
 
 test('concurrent opens do not start duplicate updates', async () => {
